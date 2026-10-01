@@ -9,8 +9,8 @@ but for insects.
 - Dorsal view, bilaterally symmetric: the right half is generated and mirrored.
 - Line art only: black strokes on white, no fills (other than white masking),
   no gradients/opacity/filters, minimum stroke 0.5px — suitable for e-ink.
-- Six body plans: beetle, moth (with a butterfly variant), fly, bee/wasp,
-  dragonfly, grasshopper.
+- Twelve body plans: beetle, moth (with a butterfly variant), fly, crane fly,
+  bee, wasp, dragonfly, damselfly, grasshopper, lacewing, cicada, mayfly.
 
 ## Use
 
@@ -24,7 +24,12 @@ string; the `<svg>` has a `600×600` viewBox and scales cleanly.
 
 ## Venation
 
-Wings are drawn from real vein layouts rather than generic radiating lines:
+Wings are drawn from real vein layouts rather than generic radiating lines.
+Longitudinal veins use a shared "sweep" model (fused in the basal stalk,
+running parallel to the costa, then swinging to meet the margin at a set
+angle), vein weight follows anatomy (heavy costa, strong radial veins, light
+cubital/anal veins and crossveins), and most wings carry a marginal fringe.
+
 
 - **Dragonfly** — primary longitudinals (Sc to the nodus, R1 under the costa to
   the tip, then R2–R4 / MA / MP / CuA / CuP fanning to the margin), aligned
@@ -41,7 +46,15 @@ Wings are drawn from real vein layouts rather than generic radiating lines:
   an alula lobe at the base.
 - **Bee** — costal vein to a hatched stigma, marginal cell, three submarginal
   cells, discoidal cells; hindwing with hamuli.
+- **Crane fly** — the Nematoceran plan: forked M, discal cell, narrow stalked wings.
 - **Grasshopper** — tegmina with longitudinals and Voronoi reticulation.
+- **Lacewing** — Sc and R1 hugging the costa with a ladder of costal crossveins,
+  8–11 Rs branches with twigged (forked) ends, two gradate crossvein series.
+- **Cicada** — heavy costa, basal cells closed by a nodal line, apical cells to
+  the margin, ambient vein inside the tip.
+- **Damselfly** — the dragonfly model on petiolate (stalked) wings.
+- **Mayfly** — triangular forewing with 10–14 fanning longitudinals and dense
+  crossveins, vestigial hindwing, three tail filaments.
 
 ## Dev
 

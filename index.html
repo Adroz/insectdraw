@@ -83,7 +83,7 @@ function bb(p) {
 }
 
 // ---------- stroke classes (tokens replaced once final scale is known) ----------
-const SW = { O: 'SW_O', D: 'SW_D', F: 'SW_F' };   // outline 1.5, detail 0.8, fine 0.5
+const SW = { H: 'SW_H', O: 'SW_O', D: 'SW_D', F: 'SW_F' };   // heavy 2.2, outline 1.5, detail 0.8, fine 0.5
 
 // ---------- curves ----------
 // pts = [p0, c1, c2, p1, c3, c4, p2, ...]
@@ -454,10 +454,78 @@ function nearestOutlinePoint(poly, p) {
   return best;
 }
 
+
+// ---------- generic wing model: sweeping veins, costa, fringe ----------
+// A longitudinal vein hugs the span axis (+x) then swings to meet the margin,
+// arriving while travelling in direction approachDeg (0 = along the span,
+// positive = toward the trailing edge). k1/k2 set how long it hugs / how late it turns.
+function sweep(p0, p3, approachDeg, k1, k2, startDeg) {
+  k1 = k1 === undefined ? 0.5 : k1; k2 = k2 === undefined ? 0.35 : k2;
+  const d = vlen(sub(p3, p0));
+  const p1 = add(p0, mul(dirv(startDeg || 0), d * k1));
+  const p2 = sub(p3, mul(dirv(approachDeg), d * k2));
+  return sampleBezier([p0, p1, p2, p3], 18);
+}
+function dot(a, b) { return a[0] * b[0] + a[1] * b[1]; }
+// the outline samples along the leading edge, base -> tip (local coords)
+function leadingEdge(wing, x0, x1) {
+  const poly = wing.localPoly;
+  let tip = 0;
+  for (let i = 1; i < poly.length; i++) if (poly[i][0] > poly[tip][0]) tip = i;
+  return poly.slice(0, tip + 1).filter(p => p[0] >= x0 && p[0] <= x1);
+}
+function costaEls(wing, x0, x1) { const pl = leadingEdge(wing, x0, x1); return pl.length > 1 ? [emitLocalPolyline(wing, pl, SW.H)] : []; }
+// short setae along the costa, leaning toward the tip
+function costalSpines(wing, x0, x1, spacing, len) {
+  const pl = leadingEdge(wing, x0, x1), els = [];
+  let acc = 0;
+  for (let i = 0; i + 1 < pl.length; i++) {
+    const a = pl[i], b = pl[i + 1], seg = vlen(sub(b, a)), d = norm(sub(b, a));
+    while (acc <= seg) {
+      const p = lerpP(a, b, acc / seg);
+      const dir = norm(add([0, -1], mul(d, 0.6)));   // outward (-y) and leaning forward
+      els.push(lineEl(wing.T(p), wing.T(add(p, mul(dir, len))), SW.D));
+      acc += spacing;
+    }
+    acc -= seg;
+  }
+  return els;
+}
+// marginal fringe of fine hairs / scales all round the outline
+function fringe(wing, spacing, len, sw, filter) {
+  const poly = wing.localPoly, els = [];
+  let cx = 0, cy = 0;
+  for (const p of poly) { cx += p[0]; cy += p[1]; }
+  cx /= poly.length; cy /= poly.length;
+  let acc = 0;
+  for (let i = 0; i + 1 < poly.length; i++) {
+    const a = poly[i], b = poly[i + 1], seg = vlen(sub(b, a));
+    if (seg < 1e-6) continue;
+    const n = perp(norm(sub(b, a)));
+    while (acc <= seg) {
+      const p = lerpP(a, b, acc / seg);
+      const out = dot(n, sub(p, [cx, cy])) > 0 ? n : mul(n, -1);
+      if (!filter || filter(p)) els.push(lineEl(wing.T(p), wing.T(add(p, mul(out, len))), sw));
+      acc += spacing;
+    }
+    acc -= seg;
+  }
+  return els;
+}
+// a vein that forks into two short twigs just before the margin (Neuroptera "end-twigging")
+function twigEnd(wing, pl, k) {
+  const end = pl[pl.length - 1], p = plAt(pl, 0.9), t = perp(norm(sub(end, p)));
+  return [lineEl(wing.T(p), wing.T(add(end, mul(t, k))), SW.F), lineEl(wing.T(p), wing.T(sub(end, mul(t, k))), SW.F)];
+}
+// margin point at a given x on the leading (top) or trailing (bottom) edge, inset slightly
+function onTop(wing, x) { return [x, topAt(wing, x, 0.6)]; }
+function onBot(wing, x) { return [x, botAt(wing, x, 0.6)]; }
+function onTip(wing, x) { return [x, (topAt(wing, x) + botAt(wing, x)) / 2]; }
+
 // ============================================================
 //  generateInsect
 // ============================================================
-const TYPES = ['beetle', 'moth', 'fly', 'bee', 'dragonfly', 'grasshopper'];
+const TYPES = ['beetle', 'moth', 'fly', 'bee', 'dragonfly', 'grasshopper', 'cranefly', 'lacewing', 'cicada', 'wasp', 'damselfly', 'mayfly'];
 
 function generateInsectDetailed(seed) {
   seed = seed >>> 0;
@@ -518,6 +586,48 @@ function generateInsectDetailed(seed) {
         abdAnchors: [[0, 0.85], [0.2, 1], [0.55, 0.95], [0.85, 0.6], [0.97, 0.3], [1, 0]],
         antenna: 'filiform', antLen: 95 * jitter(0.2), subSeg: 3, abdSeg: randInt(6, 8) });
       break;
+    case 'cranefly':
+      Object.assign(P, { headW: 24 * jitter(0.12), headH: 22 * jitter(0.12), thoraxW: 42 * jitter(0.12), thoraxLen: 58 * jitter(0.12),
+        abdW: 24 * jitter(0.15), abdLen: 210 * jitter(0.12), legScale: 2.1 * jitter(0.12),
+        thoraxAnchors: [[0, 0.5], [0.35, 1], [0.8, 0.9], [1, 0.55]],
+        abdAnchors: [[0, 0.8], [0.15, 1], [0.6, 0.9], [0.9, 0.75], [0.98, 0.5], [1, 0]],
+        antenna: 'beaded', antLen: 40 * jitter(0.2), abdSeg: 8 });
+      break;
+    case 'lacewing':
+      Object.assign(P, { headW: 30 * jitter(0.12), headH: 26 * jitter(0.12), thoraxW: 40 * jitter(0.12), thoraxLen: 60 * jitter(0.12),
+        abdW: 34 * jitter(0.12), abdLen: 150 * jitter(0.12), legScale: 0.9 * jitter(0.1),
+        thoraxAnchors: [[0, 0.55], [0.3, 1], [0.8, 0.9], [1, 0.55]],
+        abdAnchors: [[0, 0.8], [0.3, 1], [0.7, 0.85], [0.92, 0.5], [1, 0]],
+        antenna: 'filiform', antLen: 110 * jitter(0.15), abdSeg: randInt(6, 8) });
+      break;
+    case 'cicada':
+      Object.assign(P, { headW: 72 * jitter(0.1), headH: 34 * jitter(0.12), thoraxW: 74 * jitter(0.1), thoraxLen: 72 * jitter(0.12),
+        abdW: 70 * jitter(0.12), abdLen: 150 * jitter(0.12), legScale: 0.85 * jitter(0.1),
+        thoraxAnchors: [[0, 0.8], [0.3, 1], [0.8, 0.95], [1, 0.75]],
+        abdAnchors: [[0, 0.95], [0.2, 1], [0.6, 0.8], [0.9, 0.4], [1, 0]],
+        antenna: 'filiform', antLen: 12 * jitter(0.2), abdSeg: randInt(5, 7), subSeg: 2 });
+      break;
+    case 'wasp':
+      Object.assign(P, { headW: 40 * jitter(0.12), headH: 34 * jitter(0.12), thoraxW: 52 * jitter(0.12), thoraxLen: 66 * jitter(0.12),
+        abdW: 48 * jitter(0.12), abdLen: 170 * jitter(0.15), legScale: 1.15 * jitter(0.1), abdOverlap: 1,
+        thoraxAnchors: [[0, 0.55], [0.35, 1], [0.8, 0.9], [1, 0.45]],
+        abdAnchors: [[0, 0.12], [0.22, 0.14], [0.4, 0.75], [0.6, 1], [0.82, 0.7], [0.95, 0.3], [1, 0]],
+        antenna: 'filiform', antLen: 85 * jitter(0.15), abdSeg: randInt(5, 7) });
+      break;
+    case 'damselfly':
+      Object.assign(P, { headW: 58 * jitter(0.1), headH: 22 * jitter(0.12), thoraxW: 36 * jitter(0.12), thoraxLen: 62 * jitter(0.12),
+        abdW: 13 * jitter(0.15), abdLen: 290 * jitter(0.1), legScale: 0.55 * jitter(0.1),
+        thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.6]],
+        abdAnchors: [[0, 0.85], [0.1, 1], [0.5, 0.95], [0.9, 0.9], [0.97, 0.8], [1, 0]],
+        antenna: 'filiform', antLen: 10 * jitter(0.2), abdSeg: 8, wingLen: 230 * jitter(0.08) });
+      break;
+    case 'mayfly':
+      Object.assign(P, { headW: 30 * jitter(0.12), headH: 24 * jitter(0.12), thoraxW: 42 * jitter(0.12), thoraxLen: 56 * jitter(0.12),
+        abdW: 24 * jitter(0.15), abdLen: 170 * jitter(0.12), legScale: 0.8 * jitter(0.1),
+        thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.55]],
+        abdAnchors: [[0, 0.85], [0.15, 1], [0.6, 0.85], [0.9, 0.6], [0.98, 0.4], [1, 0]],
+        antenna: 'filiform', antLen: 10 * jitter(0.2), abdSeg: 8 });
+      break;
   }
   meta.variant = P.variant;
   // organic irregularity on profiles
@@ -535,7 +645,7 @@ function generateInsectDetailed(seed) {
   // ---------- abdomen + details ----------
   L.abdomen.push(pathEl(abdomen.path, SW.O, '#fff'));
   {
-    const n = P.abdSeg, startT = type === 'bee' ? 0.22 : 0.08;
+    const n = P.abdSeg, startT = type === 'bee' ? 0.22 : type === 'wasp' ? 0.3 : 0.08;
     const ys = [];
     for (let i = 0; i <= n; i++) ys.push(abdomen.yAt(startT + (1 - startT) * i / n));
     for (let i = 1; i < n; i++) {
@@ -563,7 +673,9 @@ function generateInsectDetailed(seed) {
         }
       }
     }
-    if (type === 'dragonfly') {
+    if (type === 'wasp' && rng() < 0.6) L.abdomen.push(lineEl([0, abdomen.yBot - 2], [0, abdomen.yBot + randRange(30, 70)], SW.D));   // ovipositor
+    if (type === 'mayfly') L.abdomen.push(pathEl(smoothPath(shaftPoints([0, abdomen.yBot - 2], 90, P.abdLen * 0.8, 0, 6), false), SW.D));   // middle tail filament
+    if (type === 'dragonfly' || type === 'damselfly') {
       L.abdomen.push(lineEl([0, abdomen.yTop + 4], [0, abdomen.yBot - 6], SW.F));
       const tipY = abdomen.yBot;
       L.abdomen.push(lineEl([2, tipY - 4], [5, tipY + 9], SW.D));
@@ -616,7 +728,7 @@ function generateInsectDetailed(seed) {
   const hr = { x: P.headW / 2, y: P.headH / 2 };
   L.thoraxHead.push(pathEl(ellipsePath([0, headCy], hr.x, hr.y, 0), SW.O, '#fff'));
   {
-    const E = { beetle: [0.36, 0.12, 0.24], moth: [0.34, 0.14, 0.27], fly: [0.3, 0.2, 0.4], bee: [0.34, 0.13, 0.33], dragonfly: [0.25, 0.24, 0.42], grasshopper: [0.33, 0.13, 0.28] }[type];
+    const E = { beetle: [0.36, 0.12, 0.24], moth: [0.34, 0.14, 0.27], fly: [0.3, 0.2, 0.4], bee: [0.34, 0.13, 0.33], dragonfly: [0.25, 0.24, 0.42], grasshopper: [0.33, 0.13, 0.28], cranefly: [0.32, 0.14, 0.3], lacewing: [0.34, 0.15, 0.3], cicada: [0.42, 0.08, 0.3], wasp: [0.33, 0.13, 0.33], damselfly: [0.4, 0.1, 0.42], mayfly: [0.3, 0.2, 0.4] }[type];
     for (const s of [-1, 1]) L.thoraxHead.push(...eyeEls([s * P.headW * E[0], headCy - P.headH * 0.03], P.headW * E[1], P.headH * E[2]));
     if (type !== 'beetle' && type !== 'moth') {   // ocelli
       L.thoraxHead.push(circleEl([0, headCy - P.headH * 0.18], 1.3, SW.D));
@@ -633,8 +745,9 @@ function generateInsectDetailed(seed) {
 
   // ---------- antennae ----------
   {
-    const base = [P.headW * (type === 'dragonfly' ? 0.12 : 0.2), headTop + P.headH * (type === 'grasshopper' ? 0.35 : 0.28)];
+    const base = [P.headW * (type === 'dragonfly' || type === 'damselfly' ? 0.12 : 0.2), headTop + P.headH * (type === 'grasshopper' ? 0.35 : 0.28)];
     L.antennae.push(...antennaEls(P.antenna, base, P.antLen));
+    if (type === 'mayfly') L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 72, P.abdLen * 0.85, 14, 8), false), SW.D));   // outer tail filaments
   }
 
   // ---------- legs ----------
@@ -642,7 +755,7 @@ function generateInsectDetailed(seed) {
     const u = P.legScale * (thorax.length / 60);
     const widths = type === 'beetle' ? [[7, 6], [8.5, 6], [6, 3.5], [3.4, 2]] : [[6, 5], [7, 5], [5, 3], [3, 1.8]];
     let specs;
-    if (type === 'dragonfly') {
+    if (type === 'dragonfly' || type === 'damselfly') {
       specs = [
         { t: 0.16, dirs: [-60, -55, -120, -130], lens: [8, 36, 36, 18] },
         { t: 0.3, dirs: [-30, -25, -95, -105], lens: [8, 42, 42, 20] },
@@ -672,6 +785,9 @@ function generateInsectDetailed(seed) {
       if (type === 'bee' && i === 2) { spec.widths[2] = [8, 6]; spec.spines = true; }
       if (type === 'bee' && i === 1) spec.spines = true;
       if (type === 'fly') spec.widths = spec.widths.map(w => [w[0] * 0.8, w[1] * 0.8]);
+      if (type === 'cranefly') spec.widths = spec.widths.map(w => [w[0] * 0.5, w[1] * 0.5]);
+      if (type === 'mayfly' && i === 0) spec.lens = spec.lens.map((l, k) => k === 0 ? l : l * 1.6);
+      if (type === 'wasp' && i === 2) spec.spines = true;
       L.legs.push(...legEls(attach, spec, legMeta));
       legMeta[legMeta.length - 1].hw = hw;
       legMeta[legMeta.length - 1].pair = ['front', 'mid', 'hind'][i];
@@ -735,10 +851,13 @@ function generateInsectDetailed(seed) {
 
     // hindwing
     L.wings.push(pathEl(hind.path, SW.O, '#fff'));
+    L.wings.push(...fringe(hind, 2.2, 1.5, SW.F, p => p[0] > W * 0.2 || p[1] > H * 0.4));
     for (const v of lepVeins(hind, [W * 0.05, H * 0.1], [W * 0.4, H * 0.12], [W * 0.36, H * 0.3], 2, W * 0.42, W * 0.28, W * 0.45)) L.wings.push(emitLocalPolyline(hind, v, SW.D));
     L.wings.push(...scatterDots(hind, randInt(6, 18), 0.7, 1.4, 4));
     // forewing
     L.wings.push(pathEl(fore.path, SW.O, '#fff'));
+    L.wings.push(...costaEls(fore, W * 0.03, W * 0.9));
+    L.wings.push(...fringe(fore, 2.2, 1.5, SW.F, p => p[0] > W * 0.3 || p[1] > H * 0.2));
     const nR = randInt(3, 5);
     const veins = lepVeins(fore, [W * 0.05, H * 0.02], [W * 0.52, -H * 0.26], [W * 0.47, H * 0.06], nR, W * 0.62, W * 0.42, W * 0.62);
     for (const v of veins) L.wings.push(emitLocalPolyline(fore, v, SW.D));
@@ -766,34 +885,50 @@ function generateInsectDetailed(seed) {
     L.wings.push(...scatterDots(fore, randInt(15, 50), 0.7, 1.5, 4));
   }
 
-  if (type === 'fly') {
+  if (type === 'fly' || type === 'cranefly') {
+    // Dipteran wing: long fused stalk, veins hugging the costa then sweeping to the margin.
+    // Nematoceran plan (M forked, as in crane flies) or Muscid (single M1+2 with a bend).
+    const nemato = type === 'cranefly' || rng() < 0.35;
     const by = thorax.yAt(0.42), bx = thorax.hwAt(by) * 0.85;
-    const theta = randRange(30, 45);
-    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(1.1, 1.25);
-    const w = Lw * 0.36;
-    const pts = [[0, 0], [Lw * 0.25, -w * 0.42], [Lw * 0.6, -w * 0.5], [Lw * 0.9, -w * 0.35], [Lw, -w * 0.05], [Lw * 0.85, w * 0.35], [Lw * 0.5, w * 0.5], [Lw * 0.2, w * 0.38], [Lw * 0.06, w * 0.12]];
-    const wing = makeWing([bx, by], theta, pts, 1);
-    // alula + calypter: small lobes at the base of the trailing edge, under the wing
-    L.wings.push(pathEl(smoothPath([[Lw * 0.03, w * 0.12], [Lw * 0.06, w * 0.4], [Lw * 0.17, w * 0.46], [Lw * 0.22, w * 0.36]].map(wing.T), true, 1), SW.D, '#fff'));
+    const theta = type === 'cranefly' ? randRange(50, 62) : randRange(30, 45);
+    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * (type === 'cranefly' ? randRange(0.95, 1.05) : randRange(1.1, 1.25));
+    const ky = type === 'cranefly' ? 0.62 : 1;         // crane-fly wings are narrower
+    const X = f => f * Lw, Y = f => f * Lw * ky;
+    const o = [[0, 0], [0.08, -0.05], [0.18, -0.14], [0.35, -0.27], [0.55, -0.33], [0.78, -0.3], [0.93, -0.17], [1.0, 0.02], [0.93, 0.17], [0.75, 0.3], [0.5, 0.37], [0.3, 0.35], [0.16, 0.22], [0.08, 0.08]]
+      .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+    const wing = makeWing([bx, by], theta, o, 0.9);
     L.wings.push(pathEl(wing.path, SW.O, '#fff'));
-    // Muscid venation: Sc, R1, R2+3 to the costa; R4+5 to the apex; M1+2 with a forward
-    // bend; CuA1 and A1 to the trailing edge; r-m, dm-cu and bm-cu crossveins.
-    const b = [Lw * 0.03, -w * 0.02];
-    const V = {
-      sc: vein([b, [Lw * 0.2, -w * 0.24], [Lw * 0.36, topAt(wing, Lw * 0.36, 0.5)]]),
-      r1: vein([b, [Lw * 0.3, -w * 0.18], [Lw * 0.56, topAt(wing, Lw * 0.56, 0.5)]]),
-      r23: vein([b, [Lw * 0.45, -w * 0.12], [Lw * 0.86, topAt(wing, Lw * 0.86, 0.5)]]),
-      r45: vein([b, [Lw * 0.5, -w * 0.03], [Lw * 0.985, (topAt(wing, Lw * 0.985) + botAt(wing, Lw * 0.985)) / 2]]),
-      m: vein([b, [Lw * 0.4, w * 0.12], [Lw * 0.7, w * 0.12], [Lw * 0.78, w * 0.02 * jitter(0.5)], [Lw * 0.955, botAt(wing, Lw * 0.955, 0.5)]], 12),
-      cu: vein([b, [Lw * 0.3, w * 0.27], [Lw * 0.62, botAt(wing, Lw * 0.62, 0.5)]]),
-      a: vein([b, [Lw * 0.15, w * 0.32], [Lw * 0.3, botAt(wing, Lw * 0.3, 0.5)]]),
-    };
-    for (const k in V) L.wings.push(emitLocalPolyline(wing, V[k], SW.D));
-    const cross = (va, xa, vb, xb) => { const ya = plYAt(va, xa), yb = plYAt(vb, xb); if (ya !== null && yb !== null) L.wings.push(lineEl(wing.T([xa, ya]), wing.T([xb, yb]), SW.D)); };
-    cross(V.r45, Lw * 0.47, V.m, Lw * 0.5);      // r-m
-    cross(V.m, Lw * 0.66, V.cu, Lw * 0.6);       // dm-cu
-    cross(V.m, Lw * 0.3, V.cu, Lw * 0.28);       // bm-cu
-    cross(V.cu, Lw * 0.2, V.a, Lw * 0.22);       // closes the anal cell
+    L.wings.push(...fringe(wing, 2.2, 1.8, SW.F, p => p[0] > X(0.08)));
+    L.wings.push(...costaEls(wing, X(0.02), X(0.97)));
+    L.wings.push(...costalSpines(wing, X(0.2), X(0.75), 3.2, 2.6));
+    const V = [];
+    const put = (pl, sw) => { V.push({ pl, sw }); return pl; };
+    put(sweep([X(0.06), Y(-0.02)], onTop(wing, X(0.5)), -5, 0.55, 0.3, -32), SW.O);              // Sc
+    const rSplit = [X(0.25), Y(-0.14)];
+    put(sweep([X(0.06), Y(-0.01)], rSplit, -25, 0.5, 0.3, -30), SW.O);                            // R stem
+    put(sweep(rSplit, onTop(wing, X(0.66)), -6, 0.55, 0.3, -22), SW.O);                            // R1
+    const rsFork = [X(0.58), Y(-0.09)];
+    const rs = put(sweep(rSplit, rsFork, 4, 0.55, 0.3, -8), SW.O);                                 // Rs
+    put(sweep(rsFork, onTop(wing, X(0.86)), -20, 0.5, 0.3, -6), SW.O);                             // R2+3
+    put(sweep(rsFork, onTip(wing, X(0.985)), 5, 0.5, 0.3, 2), SW.O);                               // R4+5
+    const mFork = [X(0.6), Y(0.06)];
+    let m;
+    if (nemato) {
+      m = put(sweep([X(0.06), Y(0.0)], mFork, 8, 0.55, 0.3, -12), SW.D);                            // M stem
+      put(sweep(mFork, onBot(wing, X(0.95)), 25, 0.5, 0.3, 6), SW.D);                              // M1
+      put(sweep(mFork, onBot(wing, X(0.86)), 45, 0.5, 0.3, 12), SW.D);                             // M2
+    } else {
+      m = put(vein([[X(0.06), Y(0)], [X(0.3), Y(-0.02)], [X(0.5), Y(0.05)], mFork, [X(0.72), Y(0.08)], [X(0.8), Y(0.01)], onBot(wing, X(0.955))], 10), SW.D);   // M1+2, bent forward
+    }
+    const cu1 = put(sweep([X(0.06), Y(0.01)], onBot(wing, X(0.66)), 55, 0.5, 0.35, -2), SW.D);     // CuA1 (M3+4)
+    const cu2 = put(sweep([X(0.06), Y(0.02)], onBot(wing, X(0.34)), 65, 0.45, 0.35, 12), SW.D);    // CuA2
+    put(sweep([X(0.06), Y(0.03)], onBot(wing, X(0.2)), 75, 0.4, 0.35, 28), SW.F);                   // A1
+    for (const v of V) L.wings.push(emitLocalPolyline(wing, v.pl, v.sw));
+    const cross = (va, xa, vb, xb, sw) => { const ya = plYAt(va, xa), yb = plYAt(vb, xb); if (ya !== null && yb !== null) L.wings.push(lineEl(wing.T([xa, ya]), wing.T([xb, yb]), sw)); };
+    L.wings.push(lineEl(wing.T(onTop(wing, X(0.14))), wing.T([X(0.14), plYAt(V[0].pl, X(0.14)) || Y(-0.04)]), SW.D));   // h
+    cross(rs, X(0.45), m, X(0.47), SW.D);                                                       // r-m
+    cross(m, X(0.5), cu1, X(0.5), SW.D);                                                        // m-cu
+    cross(cu1, X(0.32), cu2, X(0.3), SW.D);                                                     // bm-cu
     // halteres
     const hy = thorax.yAt(0.8), hx = thorax.hwAt(hy) * 0.8;
     const hd = dirv(theta + 20);
@@ -801,11 +936,128 @@ function generateInsectDetailed(seed) {
     L.wings.push(circleEl(add([hx, hy], mul(hd, 13)), 2.4, SW.D, '#fff'));
   }
 
-  if (type === 'bee') {
+  if (type === 'lacewing') {
+    // Neuroptera: costal crossvein ladder, many parallel Rs branches, two gradate series, twigged margins
+    const theta = randRange(36, 46);
+    const by0 = thorax.yAt(0.35);
+    const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.0, 1.12);
+    const defs = [{ L: Lw * 0.9, k: 0.9, th: theta + 16, t: 0.65 }, { L: Lw, k: 1, th: theta, t: 0.35 }];
+    for (const d of defs) {
+      const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * 0.85;
+      const X = f => f * d.L, Y = f => f * d.L * 0.19 * d.k;    // half-width 0.19 L
+      const o = [[0, 0], [0.08, -0.45], [0.3, -0.8], [0.6, -0.96], [0.85, -0.8], [0.97, -0.4], [1, 0.04], [0.9, 0.5], [0.7, 0.84], [0.45, 1], [0.2, 0.8], [0.06, 0.36]]
+        .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+      const wing = makeWing([bx, by], d.th, o, 0.9);
+      L.wings.push(pathEl(wing.path, SW.O, '#fff'));
+      L.wings.push(...fringe(wing, 2.4, 1.6, SW.F, p => p[0] > X(0.06)));
+      L.wings.push(...costaEls(wing, X(0.02), X(0.96)));
+      // Sc and R1 run parallel just inside the costa; costal crossveins ladder between C and Sc
+      const edge = leadingEdge(wing, X(0.06), X(0.93));
+      const sc = edge.map(p => [p[0], p[1] + 4.5]).concat([onTop(wing, X(0.95))]);
+      const r1 = edge.filter(p => p[0] < X(0.9)).map(p => [p[0], p[1] + 9]).concat([onTop(wing, X(0.98))]);
+      L.wings.push(emitLocalPolyline(wing, sc, SW.O), emitLocalPolyline(wing, r1, SW.D));
+      for (let x = X(0.08); x < X(0.9); x += X(0.028)) { const ys = plYAt(sc, x); if (ys !== null) L.wings.push(lineEl(wing.T(onTop(wing, x)), wing.T([x, ys]), SW.F)); }
+      // Rs runs below R1; its branches peel off in turn and sweep to the margin, trailing edge first, apex last
+      const rs = sweep([X(0.05), Y(0.0)], [X(0.85), Y(-0.45)], -8, 0.55, 0.3, -10);
+      L.wings.push(emitLocalPolyline(wing, rs, SW.D));
+      const nB = randInt(8, 11);
+      const cands = wing.localPoly.filter(p => p[0] > X(0.5) && p[1] > Y(-0.9))
+        .map(p => ({ p, a: Math.atan2(p[1] - Y(0.2), p[0] - X(0.3)) })).sort((a, b) => b.a - a.a);   // trailing edge -> apex
+      const branches = [];
+      for (let i = 0; i < nB && cands.length; i++) {
+        const sx = X(0.15 + 0.62 * i / nB), sy = plYAt(rs, sx);
+        if (sy === null) continue;
+        const target = cands[Math.floor((i + 0.5) / nB * (cands.length - 1))].p;
+        const pl = sweep([sx, sy], target, lerp(72, 12, i / (nB - 1)), 0.5, 0.3, -6);
+        branches.push(pl);
+        L.wings.push(emitLocalPolyline(wing, pl, SW.D), ...twigEnd(wing, pl, 2.5));
+      }
+      for (const g of [0.5, 0.74]) for (let i = 0; i + 1 < branches.length; i++) {
+        L.wings.push(lineEl(wing.T(plAt(branches[i], g + i * 0.015)), wing.T(plAt(branches[i + 1], g + (i + 1) * 0.015)), SW.F));
+      }
+      const m = sweep([X(0.05), Y(0.05)], onBot(wing, X(0.4)), 60, 0.4, 0.35), cu = sweep([X(0.05), Y(0.1)], onBot(wing, X(0.25)), 70, 0.4, 0.35);
+      L.wings.push(emitLocalPolyline(wing, m, SW.D), emitLocalPolyline(wing, cu, SW.F), ...twigEnd(wing, m, 2), ...twigEnd(wing, cu, 2));
+      for (let x = X(0.1); x < X(0.22); x += X(0.05)) { const ya = plYAt(m, x), yb = plYAt(cu, x); if (ya !== null && yb !== null) L.wings.push(lineEl(wing.T([x, ya]), wing.T([x, yb]), SW.F)); }
+    }
+  }
+
+  if (type === 'cicada') {
+    // Hemiptera: heavy costa, basal cells closed by a nodal line of crossveins, 8 apical cells, ambient vein inside the margin
+    const theta = randRange(32, 42);
+    const by0 = thorax.yAt(0.4);
+    const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.15, 1.3);
+    const defs = [{ L: Lw * 0.55, k: 1.3, th: theta + 18, t: 0.68, hind: true }, { L: Lw, k: 1, th: theta, t: 0.4, hind: false }];
+    for (const d of defs) {
+      const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * 0.85;
+      const X = f => f * d.L, Y = f => f * d.L * 0.165 * d.k;    // half-width 0.165 L
+      const o = [[0, 0], [0.06, -0.5], [0.3, -0.85], [0.6, -1], [0.85, -0.85], [0.97, -0.45], [1, 0.0], [0.94, 0.45], [0.75, 0.85], [0.45, 1], [0.2, 0.85], [0.06, 0.36]]
+        .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+      const wing = makeWing([bx, by], d.th, o, 0.9);
+      L.wings.push(pathEl(wing.path, SW.O, '#fff'));
+      L.wings.push(...costaEls(wing, X(0.02), X(0.97)));
+      // ambient vein: a line just inside the margin from the apex round the trailing edge
+      const poly = wing.localPoly;
+      let cx = 0, cy = 0; for (const p of poly) { cx += p[0]; cy += p[1]; } cx /= poly.length; cy /= poly.length;
+      const amb = poly.filter(p => p[0] > X(0.45) || (p[1] > 0 && p[0] > X(0.2))).map(p => add(p, mul(norm(sub([cx, cy], p)), 3)));
+      let tipI = 0; for (let i = 1; i < poly.length; i++) if (poly[i][0] > poly[tipI][0]) tipI = i;
+      const ambPl = poly.slice(tipI - Math.floor(poly.length * 0.08), tipI + Math.floor(poly.length * 0.42)).map(p => add(p, mul(norm(sub([cx, cy], p)), 3)));
+      if (ambPl.length > 2) L.wings.push(emitLocalPolyline(wing, ambPl, SW.D));
+      // basal longitudinals to the nodal line, then apical veins to the margin
+      const nA = d.hind ? 5 : 8;
+      const nodal = [];
+      for (let i = 0; i < nA; i++) nodal.push([X(0.6 - 0.22 * i / (nA - 1)), Y(lerp(-0.72, 0.75, i / (nA - 1)))]);
+      const basal = [sweep([X(0.04), Y(-0.08)], nodal[0], -5, 0.6, 0.3), sweep([X(0.04), Y(0.0)], nodal[Math.floor(nA * 0.4)], 10, 0.6, 0.3), sweep([X(0.04), Y(0.08)], nodal[nA - 2], 30, 0.5, 0.3)];
+      for (const b of basal) L.wings.push(emitLocalPolyline(wing, b, SW.O));
+      L.wings.push(emitLocalPolyline(wing, nodal, SW.D));
+      const tg = marginTargets(poly, [X(0.5), 0], nA + 2, X(0.62));
+      for (let i = 0; i < nA && i + 1 < tg.length; i++) {
+        const pl = sweep(nodal[i], tg[i + 1], lerp(-10, 65, i / (nA - 1)), 0.4, 0.35);
+        L.wings.push(emitLocalPolyline(wing, pl, SW.D));
+      }
+      L.wings.push(lineEl(wing.T([X(0.3), plYAt(basal[0], X(0.3)) || 0]), wing.T([X(0.3), plYAt(basal[1], X(0.3)) || 0]), SW.D));
+      L.wings.push(lineEl(wing.T([X(0.25), plYAt(basal[1], X(0.25)) || 0]), wing.T([X(0.25), plYAt(basal[2], X(0.25)) || 0]), SW.D));
+      L.wings.push(emitLocalPolyline(wing, sweep([X(0.04), Y(0.14)], onBot(wing, X(0.3)), 70, 0.4, 0.35), SW.D));
+    }
+  }
+
+  if (type === 'mayfly') {
+    // Ephemeroptera: triangular forewing with many fanning longitudinals and dense crossveins; tiny hindwing
+    const by = thorax.yAt(0.45), bx = thorax.hwAt(by) * 0.8;
+    const Lw = P.abdLen * randRange(0.9, 1.05);
+    const defs = [{ L: Lw * 0.3, th: randRange(14, 24), t: 0.78, hind: true }, { L: Lw, th: randRange(-14, -2), t: 0.45, hind: false }];
+    for (const d of defs) {
+      const byy = thorax.yAt(d.t), bxx = thorax.hwAt(byy) * 0.8;
+      const X = f => f * d.L, Y = f => f * d.L * 0.8;
+      const o = d.hind
+        ? [[0, 0], [0.1, -0.3], [0.5, -0.45], [0.9, -0.25], [1, 0.05], [0.8, 0.35], [0.4, 0.45], [0.1, 0.3]].map(p => [X(p[0]), Y(p[1])])
+        : [[0, 0.01], [0.04, -0.12], [0.3, -0.3], [0.6, -0.36], [0.85, -0.3], [0.97, -0.15], [1, 0], [0.9, 0.15], [0.7, 0.3], [0.45, 0.42], [0.2, 0.45], [0.05, 0.3]].map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+      const wing = makeWing([bxx, byy], d.th, o, 0.9);
+      L.wings.push(pathEl(wing.path, SW.O, '#fff'));
+      L.wings.push(...costaEls(wing, X(0.02), X(0.97)));
+      const nV = d.hind ? 3 : randInt(10, 14);
+      const tg = marginTargets(wing.localPoly, [X(0.1), 0], nV + 2, X(d.hind ? 0.5 : 0.3));
+      const veins = [];
+      const yr = wing.yRange(X(0.06)) || [-2, 2];
+      for (let i = 0; i < nV && i + 1 < tg.length; i++) {
+        const pl = sweep([X(0.04), lerp(yr[0] + 1, yr[1] - 1, i / (nV - 1))], tg[i + 1], lerp(-5, 80, i / (nV - 1)), 0.35, 0.3);
+        veins.push(pl);
+        L.wings.push(emitLocalPolyline(wing, pl, i % 2 === 0 ? SW.D : SW.F));
+      }
+      if (!d.hind) for (let i = 0; i + 1 < veins.length; i++) {
+        const xEnd = Math.min(veins[i][veins[i].length - 1][0], veins[i + 1][veins[i + 1].length - 1][0]);
+        for (let x = X(0.12) + (i % 2) * 3; x < xEnd - 2; x += 6 + randRange(-1.5, 1.5)) {
+          const ya = plYAt(veins[i], x), yb = plYAt(veins[i + 1], x);
+          if (ya !== null && yb !== null && Math.abs(yb - ya) > 2) L.wings.push(lineEl(wing.T([x, ya]), wing.T([x, yb]), SW.F));
+        }
+      }
+    }
+  }
+
+  if (type === 'bee' || type === 'wasp') {
     const theta = randRange(38, 50);
     const by = thorax.yAt(0.4), bx = thorax.hwAt(by) * 0.85;
     const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(0.92, 1.0);
-    const w = Lw * 0.3;
+    const w = Lw * (type === 'wasp' ? 0.26 : 0.3);
     const fPts = [[0, 0], [Lw * 0.3, -w * 0.35], [Lw * 0.7, -w * 0.45], [Lw * 0.95, -w * 0.25], [Lw, w * 0.05], [Lw * 0.8, w * 0.4], [Lw * 0.45, w * 0.5], [Lw * 0.12, w * 0.25]];
     const fore = makeWing([bx, by], theta, fPts, 1);
     const hy = thorax.yAt(0.62), hx = thorax.hwAt(hy) * 0.85;
@@ -826,6 +1078,7 @@ function generateInsectDetailed(seed) {
     }
     // forewing: costal vein to the stigma, marginal cell, three submarginal cells, discoidal cells
     L.wings.push(pathEl(fore.path, SW.O, '#fff'));
+    L.wings.push(...costaEls(fore, Lw * 0.02, Lw * 0.5));
     {
       const b1 = [Lw * 0.03, -w * 0.05], b2 = [Lw * 0.03, w * 0.02], b3 = [Lw * 0.03, w * 0.08];
       const sc = vein([b1, [Lw * 0.25, -w * 0.3], [Lw * 0.47, topAt(fore, Lw * 0.47, 0.5)]]);
@@ -844,25 +1097,27 @@ function generateInsectDetailed(seed) {
     }
   }
 
-  if (type === 'dragonfly') {
-    const Lw = P.wingLen;
-    const nodusX = Lw * randRange(0.42, 0.5);
-    const wingDefs = [
-      { t: 0.5, theta: randRange(-10, -3), w: Lw * 0.19, baseW: 0.14, hind: false },
-      { t: 0.8, theta: randRange(6, 14), w: Lw * 0.24, baseW: 0.3, hind: true },
-    ];
+  if (type === 'dragonfly' || type === 'damselfly') {
+    const Lw = P.wingLen, dam = type === 'damselfly';
+    const nodusX = Lw * (dam ? randRange(0.38, 0.45) : randRange(0.42, 0.5));
+    const wingDefs = dam
+      ? [{ t: 0.5, theta: randRange(-12, -4), w: Lw * 0.16, baseW: 0.05, hind: false }, { t: 0.78, theta: randRange(4, 12), w: Lw * 0.16, baseW: 0.05, hind: true }]
+      : [{ t: 0.5, theta: randRange(-10, -3), w: Lw * 0.19, baseW: 0.14, hind: false }, { t: 0.8, theta: randRange(6, 14), w: Lw * 0.24, baseW: 0.3, hind: true }];
     for (const wd of wingDefs) {
       const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * 0.6;
       const w = wd.w;
       // costa with a small notch at the nodus
-      const pts = [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], [Lw * 0.9, -w * 0.38], [Lw, -w * 0.05],
+      const pts = dam   // damselfly wings are petiolate: a long narrow stalk
+        ? [[0, -w * 0.05], [Lw * 0.18, -w * 0.36], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.48], [Lw * 0.9, -w * 0.38], [Lw, -w * 0.05], [Lw * 0.92, w * 0.33], [Lw * 0.65, w * 0.5], [Lw * 0.35, w * 0.4], [Lw * 0.18, w * 0.12], [0, w * 0.05]]
+        : [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], [Lw * 0.9, -w * 0.38], [Lw, -w * 0.05],
         [Lw * 0.92, w * 0.33], [Lw * 0.6, w * 0.5], [Lw * 0.25, w * (wd.hind ? 0.55 : 0.5)], [Lw * 0.06, w * (wd.hind ? 0.45 : 0.3)], [0, w * wd.baseW]];
       const wing = makeWing([bx, by], wd.theta, pts, 0.8);
       const poly = wing.localPoly;
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
+      L.wings.push(...costaEls(wing, Lw * (dam ? 0.15 : 0.02), Lw * 0.97));
       // primary longitudinal veins, all fused at the base. Sc ends at the nodus; R1 runs
       // under the costa to the tip; the rest (R2-R4, MA, MP, CuA, CuP) fan to the margin.
-      const x0 = Lw * 0.03, yr0 = wing.yRange(Lw * 0.045) || [-w * 0.3, w * 0.1];
+      const x0 = Lw * (dam ? 0.12 : 0.03), yr0 = wing.yRange(x0 + Lw * 0.015) || [-w * 0.3, w * 0.1];
       const nV = randInt(5, 7);
       const tipTargets = marginTargets(poly, [Lw * 0.05, 0], nV + 1, Lw * 0.55);
       const scTarget = nearestOutlinePoint(poly, [nodusX, topAt(wing, nodusX)]);
@@ -879,7 +1134,7 @@ function generateInsectDetailed(seed) {
       for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, SW.D));
       // antenodal crossveins (C-Sc and Sc-R1, aligned), postnodals (C-R1), pterostigma
       const stepA = Lw * 0.035;
-      for (let x = Lw * 0.09; x < nodusX - 2; x += stepA) {
+      for (let x = Lw * (dam ? 0.2 : 0.09); x < nodusX - 2; x += stepA) {
         const t = topAt(wing, x, 0.3), ys = plYAt(veins[0], x), yr = plYAt(veins[1], x);
         if (ys !== null) L.wings.push(lineEl(wing.T([x, t]), wing.T([x, ys]), SW.F));
         if (ys !== null && yr !== null) L.wings.push(lineEl(wing.T([x, ys]), wing.T([x, yr]), SW.F));
@@ -988,7 +1243,7 @@ function generateInsectDetailed(seed) {
     '<g transform="translate(' + fmt(tx) + ' ' + fmt(ty) + ') scale(' + (Math.round(s * 1000) / 1000) + ')" stroke="#000" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
     order.join('') + '</g></svg>';
   const sw = v => String(Math.round(v / s * 1000) / 1000);
-  svg = svg.replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
+  svg = svg.replace(/SW_H/g, sw(2.2)).replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
   return { svg, meta };
 }
 
@@ -1004,7 +1259,7 @@ if (typeof module !== 'undefined' && module.exports) {
   const seedInput = document.getElementById('seed');
   const stage = document.getElementById('stage');
   const info = document.getElementById('info');
-  const NAMES = { beetle: 'Coleoptera', moth: 'Lepidoptera', fly: 'Diptera', bee: 'Hymenoptera', dragonfly: 'Odonata', grasshopper: 'Orthoptera' };
+  const NAMES = { beetle: 'Coleoptera', moth: 'Lepidoptera', fly: 'Diptera', bee: 'Hymenoptera', dragonfly: 'Odonata', grasshopper: 'Orthoptera', cranefly: 'Diptera (Tipulidae)', lacewing: 'Neuroptera', cicada: 'Hemiptera', wasp: 'Hymenoptera', damselfly: 'Odonata (Zygoptera)', mayfly: 'Ephemeroptera' };
 
   function render(seed) {
     seed = Number(seed) >>> 0;
