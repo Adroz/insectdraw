@@ -572,7 +572,7 @@ function generateInsectDetailed(seed) {
       specs = [
         { t: 0.16, dirs: [-60, -55, -120, -130], lens: [8, 36, 36, 18] },
         { t: 0.3, dirs: [-30, -25, -95, -105], lens: [8, 42, 42, 20] },
-        { t: 0.46, dirs: [5, 10, -55, -70], lens: [8, 48, 48, 22] },
+        { t: 0.44, dirs: [-12, -8, -75, -90], lens: [8, 48, 48, 22] },
       ];
     } else {
       specs = [
@@ -586,7 +586,7 @@ function generateInsectDetailed(seed) {
     for (let i = specs.length - 1; i >= 0; i--) {     // hind first so front overlaps
       const s = specs[i];
       const y = thorax.yAt(s.t), hw = thorax.hwAt(y);
-      const attach = [hw - 3, y];
+      const attach = [hw - 5, y];   // coxa starts under the thorax edge
       const dirJ = randRange(-6, 6);
       const spec = {
         dirs: s.dirs.map(d => d + dirJ),
@@ -843,9 +843,8 @@ function generateInsectDetailed(seed) {
   // ---------- assemble ----------
   const mirrored = k => '<g>' + L[k].join('') + '</g><g transform="scale(-1,1)">' + L[k].join('') + '</g>';
   const single = k => '<g>' + L[k].join('') + '</g>';
-  const order = type === 'moth'
-    ? [mirrored('legs'), mirrored('wings'), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('antennae')]
-    : [mirrored('wings'), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('legs'), mirrored('antennae')];
+  // legs sprout from under the body; wings sit over the legs; body masks both
+  const order = [mirrored('legs'), mirrored('wings'), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('antennae')];
 
   // symmetric bbox (right half generated, left mirrored)
   const halfW = Math.max(Math.abs(bbox.minX), Math.abs(bbox.maxX));
