@@ -12,8 +12,8 @@ but for insects.
 - Twelve body plans: beetle, moth (with a butterfly variant), fly, crane fly,
   bee, wasp, dragonfly, damselfly, grasshopper, lacewing, cicada, mayfly.
 - Deterministic names: each seed also gets a Latin-style binomial (genus and
-  gender-agreed epithet built from order-appropriate Greek/Latin roots, usually
-  with an authority like "(Thorne, 1874)") and an English common name, drawn
+  gender-agreed epithet built from order-appropriate Greek/Latin roots) and an
+  English common name, drawn
   from a separate PRNG stream so the drawing is unaffected. They are rendered
   as a Victorian plate caption below the insect and exposed as `meta.name`
   / `insectName(seed, type, variant)`.
