@@ -4,6 +4,8 @@ Procedurally generated insect plates in the style of Victorian natural-history
 specimen illustrations. Same spirit as [fishdraw](https://github.com/LingDong-/fishdraw),
 but for insects.
 
+**Live:** https://adroz.github.io/insectdraw/ — `#<seed>` in the URL picks a plate; no hash shows today's.
+
 - Single self-contained `index.html` — no dependencies, no build step.
 - Seeded PRNG (mulberry32): the same seed always draws the same insect.
 - Dorsal view, bilaterally symmetric: the right half is generated and mirrored.
