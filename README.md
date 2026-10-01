@@ -62,6 +62,22 @@ cubital/anal veins and crossveins), and most wings carry a marginal fringe.
 - **Mayfly** — triangular forewing with 10–14 fanning longitudinals and dense
   crossveins, vestigial hindwing, three tail filaments.
 
+## Legs, eyes, antennae
+
+Drawn from the morphology notes in `docs/research-legs-eyes-antennae.md`:
+six-segment legs (coxa, trochanter, femur, tibia, 3–5 tarsomeres, pretarsus
+with paired claws and an arolium — paired pulvilli on flies), apical tibial
+spurs, spine rows on the correct edge (saltatorial grasshopper tibia, odonate
+prey basket, cicada fore femora), a chevron muscle pattern on the grasshopper
+femur, a corbicula and flat basitarsus on the bee hind leg, and engraver's
+hatching on the far side of each femur and tibia. Compound eyes are a
+hexagonal ommatidia lattice clipped to an order-specific outline (holoptic
+fly, dorsally meeting dragonfly, dumbbell damselfly, kidney bee, notched
+beetle) with a white highlight. Antennae follow the order: filiform,
+moniliform, serrate, lamellate, clubbed/hooked, bipectinate/pectinate,
+geniculate (scape, pedicel, flagellum), aristate and setaceous, each rising
+from a drawn antennal socket.
+
 ## Dev
 
 ```

@@ -168,6 +168,7 @@ function plYAt(pl, x) {           // polyline monotonic in x
 function pathEl(d, sw, fill) { return '<path d="' + d + '" fill="' + (fill || 'none') + '" stroke-width="' + sw + '"/>'; }
 function lineEl(a, b, sw) { bb(a); bb(b); return '<line x1="' + fmt(a[0]) + '" y1="' + fmt(a[1]) + '" x2="' + fmt(b[0]) + '" y2="' + fmt(b[1]) + '" stroke-width="' + sw + '"/>'; }
 function polylineEl(pts, sw) { pts.forEach(bb); return '<polyline points="' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' ') + '" fill="none" stroke-width="' + sw + '"/>'; }
+function polygonEl(pts, sw, fill) { pts.forEach(bb); return '<path d="M' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' L') + ' Z" fill="' + (fill || 'none') + '" stroke-width="' + sw + '"/>'; }
 function circleEl(c, r, sw, fill) { bb([c[0] - r, c[1] - r]); bb([c[0] + r, c[1] + r]); return '<circle cx="' + fmt(c[0]) + '" cy="' + fmt(c[1]) + '" r="' + fmt(r) + '" fill="' + (fill || 'none') + '" stroke-width="' + sw + '"/>'; }
 function bowLine(y, hw, bow, sw) {
   return pathEl(cubicBezierPath([[-hw, y], [-hw * 0.35, y + bow], [hw * 0.35, y + bow], [hw, y]], false), sw);
@@ -202,31 +203,151 @@ function halfShield(pts) {
 }
 
 // ---------- limb segment: tapered, bowed, rounded ends, white fill ----------
-function limbSegment(A, B, w1, w2, bow) {
+// Geometry is kept so hatching, spines and muscle patterns can be laid on the
+// segment analytically (they are then masked by whatever is drawn next).
+function limbGeom(A, B, w1, w2, bow) {
   const d = norm(sub(B, A)), n = perp(d), L = vlen(sub(B, A));
-  const a1 = add(A, mul(n, w1 / 2)), a2 = sub(A, mul(n, w1 / 2));
-  const b1 = add(B, mul(n, w2 / 2)), b2 = sub(B, mul(n, w2 / 2));
   const k = L * 0.35, bv = mul(n, bow);
+  const edge = side => {
+    const a = add(A, mul(n, side * w1 / 2)), b = add(B, mul(n, side * w2 / 2));
+    return [a, add(add(a, mul(d, k)), bv), add(sub(b, mul(d, k)), bv), b];
+  };
+  return { A, B, d, n, L, w1, w2, bow, e1: edge(1), e2: edge(-1), wAt: s => lerp(w1, w2, s) };
+}
+function bez3(c, s) {
+  const u = 1 - s;
+  return [u * u * u * c[0][0] + 3 * u * u * s * c[1][0] + 3 * u * s * s * c[2][0] + s * s * s * c[3][0],
+          u * u * u * c[0][1] + 3 * u * u * s * c[1][1] + 3 * u * s * s * c[2][1] + s * s * s * c[3][1]];
+}
+function limbPath(g) {
+  const { e1, e2, d, w1, w2 } = g;
   const pts = [
-    a1,
-    add(add(a1, mul(d, k)), bv), add(sub(b1, mul(d, k)), bv), b1,
-    add(b1, mul(d, w2 * 0.55)), add(b2, mul(d, w2 * 0.55)), b2,
-    add(sub(b2, mul(d, k)), bv), add(add(a2, mul(d, k)), bv), a2,
-    sub(a2, mul(d, w1 * 0.55)), sub(a1, mul(d, w1 * 0.55)), a1,
+    e1[0], e1[1], e1[2], e1[3],
+    add(e1[3], mul(d, w2 * 0.55)), add(e2[3], mul(d, w2 * 0.55)), e2[3],
+    e2[2], e2[1], e2[0],
+    sub(e2[0], mul(d, w1 * 0.55)), sub(e1[0], mul(d, w1 * 0.55)), e1[0],
   ];
-  return pathEl(cubicBezierPath(pts, true), SW.O, '#fff');
+  return cubicBezierPath(pts, true);
+}
+function limbSegment(A, B, w1, w2, bow) { return pathEl(limbPath(limbGeom(A, B, w1, w2, bow)), SW.O, '#fff'); }
+// engraver's shading: short fine lines across the segment from the shaded edge
+// inward, so the cylinder reads as round. side = +1 (e1) or -1 (e2).
+function limbShade(g, side, spacing) {
+  const els = [], edge = side > 0 ? g.e1 : g.e2;
+  if (g.L < spacing * 3) return els;
+  const s0 = Math.min(0.14, 3 / g.L), s1 = 1 - Math.min(0.14, 3 / g.L);
+  let i = 0;
+  for (let s = s0; s <= s1; s += spacing / g.L, i++) {
+    const w = g.wAt(s);
+    if (w < 3) continue;
+    const base = bez3(edge, s);
+    const fr = (i % 2 === 0 ? 0.58 : 0.4) * (0.75 + 0.25 * Math.sin(Math.PI * s));
+    const dir = norm(add(mul(g.n, -side), mul(g.d, 0.3)));
+    els.push(lineEl(add(base, mul(dir, 0.5)), add(base, mul(dir, w * fr)), SW.F));
+  }
+  return els;
+}
+// fixed spines in a row along one edge, leaning distad
+function limbSpines(g, side, spacing, len, s0, s1, sw) {
+  const els = [], edge = side > 0 ? g.e1 : g.e2;
+  for (let s = s0; s <= s1; s += spacing / g.L) {
+    const b = bez3(edge, s);
+    const tip = add(b, add(mul(g.n, side * len), mul(g.d, len * 0.75)));
+    const root = add(b, mul(g.d, -len * 0.25));
+    els.push(pathEl(cubicBezierPath([root, lerpP(root, tip, 0.5), lerpP(b, tip, 0.5), tip], false), sw || SW.D));
+    els.push(lineEl(tip, add(b, mul(g.d, len * 0.35)), sw || SW.D));
+  }
+  return els;
+}
+// chevron (herringbone) muscle pattern on a saltatorial femur
+function femurHerringbone(g, side) {
+  const els = [], step = Math.max(3.2, g.L / 22);
+  const mid = s => lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.5 - side * 0.08);
+  const sm = 0.1, sM = 0.9;
+  els.push(pathEl(cubicBezierPath([mid(sm), mid(0.35), mid(0.65), mid(sM)], false), SW.D));
+  for (let s = sm + 0.05; s < sM; s += step / g.L) {
+    const m = mid(s), w = g.wAt(s), ds = (step * 1.1) / g.L;
+    const a1 = bez3(g.e1, s - ds), a2 = bez3(g.e2, s - ds);
+    els.push(lineEl(m, lerpP(m, a1, 0.82), SW.F));
+    els.push(lineEl(m, lerpP(m, a2, 0.82), SW.F));
+  }
+  return els;
+}
+// tarsus: n tarsomeres (basitarsus longest) curling by `curl` deg each, then the pretarsus
+function tarsusEls(p, dir0, total, w0, n, curl, opts) {
+  const els = [];
+  const fr = { 3: [0.45, 0.3, 0.25], 4: [0.36, 0.24, 0.21, 0.19], 5: [0.34, 0.2, 0.17, 0.15, 0.14] }[n];
+  let a = dir0, w = w0;
+  const dw = w0 * 0.12;
+  if (opts && opts.basitarsus) {   // bee: broad flat basitarsus with pollen-comb rows
+    const q = add(p, mul(dirv(a), total * 0.42));
+    const g = limbGeom(p, q, opts.basitarsus[0], opts.basitarsus[1], 0);
+    els.push(pathEl(limbPath(g), SW.O, '#fff'));
+    for (let s = 0.2; s < 0.95; s += 0.17) els.push(lineEl(lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.12), lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.88), SW.F));
+    p = q; a += curl; w = opts.basitarsus[1] * 0.6;
+    for (let k = 1; k < n; k++) {
+      const q2 = add(p, mul(dirv(a), total * fr[k] * 0.9));
+      els.push(limbSegment(p, q2, w, w - dw, 0));
+      p = q2; a += curl; w -= dw;
+    }
+  } else {
+    for (let k = 0; k < n; k++) {
+      const q = add(p, mul(dirv(a), total * fr[k]));
+      els.push(limbSegment(p, q, w, w - dw, 0));
+      p = q; a += curl; w -= dw;
+    }
+  }
+  // pretarsus: two curved claws, and an arolium pad (flies: paired pulvilli)
+  const d = dirv(a), n_ = perp(d), cl = Math.max(3, w0 * 1.3);
+  for (const s of [-1, 1]) {
+    const tip = add(p, add(mul(d, cl * 0.8), mul(n_, s * cl * 0.7)));
+    els.push(pathEl(cubicBezierPath([p, add(p, mul(d, cl * 0.6)), add(tip, mul(n_, -s * cl * 0.15)), tip], false), SW.D));
+  }
+  if (opts && opts.pulvilli) {
+    for (const s of [-1, 1]) els.push(pathEl(ellipsePath(add(p, add(mul(d, cl * 0.45), mul(n_, s * cl * 0.38))), cl * 0.32, cl * 0.2, Math.atan2(d[1], d[0]) / D2R + s * 30), SW.F, '#fff'));
+    els.push(lineEl(p, add(p, mul(d, cl * 0.9)), SW.F));   // empodium bristle
+  } else {
+    els.push(pathEl(cubicBezierPath([add(p, mul(n_, -cl * 0.22)), add(p, add(mul(d, cl * 0.55), mul(n_, -cl * 0.25))), add(p, add(mul(d, cl * 0.55), mul(n_, cl * 0.25))), add(p, mul(n_, cl * 0.22))], false), SW.F));
+  }
+  return { els, tip: p };
 }
 
-// ---------- eyes ----------
-function eyeEls(c, rx, ry) {
-  const els = [pathEl(ellipsePath(c, rx, ry, 0), SW.D, '#fff')];
-  const step = 2.4 / ((rx + ry) / 2);
-  for (const ang of [50 * D2R, -50 * D2R]) {
-    const t = [Math.cos(ang), Math.sin(ang)], n = [-Math.sin(ang), Math.cos(ang)];
-    for (let d = -1 + step * 0.6; d < 1; d += step) {
-      const h = Math.sqrt(1 - d * d) * 0.93;
-      const p1 = add(mul(n, d), mul(t, -h)), p2 = add(mul(n, d), mul(t, h));
-      els.push(lineEl([c[0] + rx * p1[0], c[1] + ry * p1[1]], [c[0] + rx * p2[0], c[1] + ry * p2[1]], SW.F));
+// ---------- eyes: hexagonal ommatidia lattice clipped to the eye outline ----------
+// opts: { rot, dent: [angleDeg, depth], highlight: [dx, dy] (fractions of rx/ry), pitch }
+function eyeEls(c, rx, ry, opts) {
+  opts = opts || {};
+  const rot_ = (opts.rot || 0) * D2R;
+  const T = p => add(c, rot(p, rot_));
+  // outline: ellipse, optionally dented (kidney / notch) at one angle
+  const N = 36, pts = [];
+  for (let i = 0; i < N; i++) {
+    const a = i / N * Math.PI * 2;
+    let r = 1;
+    if (opts.dent) {
+      const da = Math.atan2(Math.sin(a - opts.dent[0] * D2R), Math.cos(a - opts.dent[0] * D2R));
+      const k = Math.max(0, 1 - Math.abs(da) / (opts.dent[2] || 0.9));
+      r -= opts.dent[1] * k * k;
+    }
+    pts.push([Math.cos(a) * rx * r, Math.sin(a) * ry * r]);
+  }
+  const poly = sampleSmooth(pts, true, 1, 3);
+  const els = [pathEl(smoothPath(pts.map(T), true, 1), SW.O, '#fff')];
+  const hl = opts.highlight || [-0.42, -0.42];
+  const hlR = opts.highlightR || 0.36;
+  const pitch = opts.pitch || Math.max(1.9, Math.min(3.2, (rx + ry) / 7.5));
+  const R = pitch / Math.sqrt(3) * 0.82;   // hex circumradius, shrunk so the cells separate
+  const inset = Math.min(0.88, 1 - pitch * 0.55 / Math.min(rx, ry));
+  const hex = [];
+  for (let k = 0; k < 6; k++) hex.push([R * Math.cos((k * 60 + 30) * D2R), R * Math.sin((k * 60 + 30) * D2R)]);
+  const rowH = pitch * 0.866;
+  let row = 0;
+  for (let y = -ry; y <= ry; y += rowH, row++) {
+    for (let x = -rx + (row % 2) * pitch / 2; x <= rx; x += pitch) {
+      const q = [x, y];
+      if (!pointInPoly([x / inset, y / inset], poly)) continue;
+      const hx = (x - hl[0] * rx) / (hlR * rx), hy = (y - hl[1] * ry) / (hlR * ry);
+      if (hx * hx + hy * hy < 1) continue;
+      els.push(polygonEl(hex.map(h => T(add(q, h))), SW.F));
     }
   }
   return els;
@@ -238,95 +359,252 @@ function shaftPoints(base, dirDeg, length, curveDeg, n) {
   for (let i = 0; i <= n; i++) { pts.push(p); p = add(p, mul(dirv(a), length / n)); a += curveDeg / n; }
   return pts;
 }
-function antennaEls(kind, base, len) {
+// evenly spaced points along a polyline by arc length (n+1 points incl. ends)
+function alongPl(pl, n) {
+  const cum = [0];
+  for (let i = 1; i < pl.length; i++) cum.push(cum[i - 1] + vlen(sub(pl[i], pl[i - 1])));
+  const total = cum[cum.length - 1], out = [];
+  let j = 0;
+  for (let k = 0; k <= n; k++) {
+    const t = total * k / n;
+    while (j + 1 < cum.length - 1 && cum[j + 1] < t) j++;
+    const seg = cum[j + 1] - cum[j] || 1;
+    out.push(lerpP(pl[j], pl[j + 1], (t - cum[j]) / seg));
+  }
+  return out;
+}
+function socketEl(base, r) { return circleEl(base, r, SW.D, '#fff'); }
+function antennaEls(kind, base, len, headW) {
   const els = [];
-  if (kind === 'filiform' || kind === 'beaded') {
-    const pts = shaftPoints(base, randRange(-65, -45), len, randRange(-45, -5), 14);
-    els.push(pathEl(smoothPath(pts, false), SW.D));
-    if (kind === 'beaded') {
-      const pl = sampleSmooth(pts, false, 1, 6);
-      for (let i = 4; i < pl.length - 1; i += 3) {
-        const d = norm(sub(pl[i + 1], pl[i - 1])), n = perp(d);
-        els.push(lineEl(add(pl[i], mul(n, 1.6)), sub(pl[i], mul(n, 1.6)), SW.F));
-      }
-    }
-  } else if (kind === 'clubbed') {
-    const pts = shaftPoints(base, randRange(-70, -50), len, randRange(-35, -10), 14);
-    els.push(pathEl(smoothPath(pts, false), SW.D));
-    const tip = pts[pts.length - 1], d = norm(sub(tip, pts[pts.length - 2]));
-    const ang = Math.atan2(d[1], d[0]) / D2R;
-    els.push(pathEl(ellipsePath(add(tip, mul(d, 3)), 5.5, 2.6, ang), SW.D, '#fff'));
-  } else if (kind === 'feathered') {
-    const pts = shaftPoints(base, randRange(-80, -55), len, randRange(-30, -5), 14);
-    els.push(pathEl(smoothPath(pts, false), SW.D));
+  const sr = Math.max(1.1, headW * 0.035);
+  const tdir = (pl, i) => norm(sub(pl[Math.min(i + 1, pl.length - 1)], pl[Math.max(i - 1, 0)]));
+  if (kind === 'filiform') {
+    // thread-like, many short equal segments shown as fine cross-ticks; tapering slightly
+    const nSeg = randInt(18, 30);
+    const pts = shaftPoints(base, randRange(-68, -48), len, randRange(-50, -8), 14);
     const pl = sampleSmooth(pts, false, 1, 8);
-    const maxB = len * randRange(0.16, 0.24), bothSides = rng() < 0.5;
-    let side = 1;
-    for (let i = 2; i < pl.length - 1; i += 2) {
-      const u = i / pl.length;
-      const d = norm(sub(pl[i + 1], pl[i - 1])), n = perp(d);
-      const bl = maxB * Math.pow(1 - u, 0.6) * Math.min(1, u * 6 + 0.15);
-      const dir = norm(add(mul(n, side), mul(d, 0.45)));   // swept toward the tip
-      els.push(lineEl(pl[i], add(pl[i], mul(dir, bl)), SW.F));
-      if (bothSides) { const dir2 = norm(add(mul(n, -side), mul(d, 0.45))); els.push(lineEl(pl[i], add(pl[i], mul(dir2, bl * 0.9)), SW.F)); }
-      side = -side;
+    const w0 = Math.max(1.6, headW * 0.06);
+    const L_ = [], R_ = [];
+    for (let i = 0; i < pl.length; i++) {
+      const u = i / (pl.length - 1), w = lerp(w0, w0 * 0.45, u), n = perp(tdir(pl, i));
+      L_.push(add(pl[i], mul(n, w / 2))); R_.push(sub(pl[i], mul(n, w / 2)));
     }
-  } else if (kind === 'elbowed') {
-    const d0 = randRange(-45, -25), L1 = len * 0.42;
-    const elbow = add(base, mul(dirv(d0), L1));
-    els.push(limbSegment(base, elbow, 3, 2.6, 0));
-    const d1 = d0 - randRange(65, 85);
-    const pts = shaftPoints(elbow, d1, len * 0.58, randRange(-25, 5), 10);
-    const pl = sampleSmooth(pts, false, 1, 5);
-    // flagellum as a thin tapered (clubbed) outline following the curve
+    els.push(pathEl(smoothPath(L_.concat(R_.reverse()), true, 0.8), SW.D, '#fff'));
+    const js = alongPl(pl, nSeg);
+    for (let k = 1; k < nSeg; k++) {
+      const u = k / nSeg, w = lerp(w0, w0 * 0.45, u), n = perp(norm(sub(js[k + 1], js[k - 1])));
+      els.push(lineEl(add(js[k], mul(n, w / 2)), sub(js[k], mul(n, w / 2)), SW.F));
+    }
+  } else if (kind === 'moniliform') {
+    // string of beads, shrinking toward the tip
+    const nSeg = randInt(11, 14);
+    const pts = shaftPoints(base, randRange(-65, -45), len, randRange(-45, -5), 14);
+    const pl = sampleSmooth(pts, false, 1, 8);
+    const js = alongPl(pl, nSeg);
+    const r0 = Math.max(1.3, len / nSeg * 0.42);
+    els.push(pathEl(smoothPath(pts, false), SW.D));
+    for (let k = 0; k < nSeg; k++) {
+      const c = lerpP(js[k], js[k + 1], 0.5), r = lerp(r0, r0 * 0.6, k / nSeg);
+      const d = norm(sub(js[k + 1], js[k]));
+      els.push(pathEl(ellipsePath(c, r * 1.15, r, Math.atan2(d[1], d[0]) / D2R), SW.D, '#fff'));
+    }
+  } else if (kind === 'serrate') {
+    // saw-toothed: each segment a wedge, teeth on the inner (anterior) side
+    const nSeg = 11;
+    const pts = shaftPoints(base, randRange(-65, -45), len, randRange(-40, -5), 14);
+    const pl = sampleSmooth(pts, false, 1, 8);
+    const js = alongPl(pl, nSeg);
+    const w = Math.max(2, len / nSeg * 0.5);
+    for (let k = 0; k < nSeg; k++) {
+      const a = js[k], b = js[k + 1], d = norm(sub(b, a)), n = perp(d);
+      const tooth = k < 2 ? 0.3 : 1;
+      void d;
+      els.push(polygonEl([sub(a, mul(n, w * 0.3)), sub(b, mul(n, w * 0.3)), add(b, mul(n, w * 0.25 * tooth)), add(a, mul(n, w * tooth))], SW.D, '#fff'));
+    }
+  } else if (kind === 'clubbed' || kind === 'hooked') {
+    const pts = shaftPoints(base, randRange(-72, -52), len, randRange(-32, -8), 14);
+    const pl = sampleSmooth(pts, false, 1, 6);
+    const w0 = Math.max(1.3, headW * 0.045);
     const left = [], right = [];
     for (let i = 0; i < pl.length; i++) {
-      const u = i / (pl.length - 1), w = lerp(2.4, 4.2, u) * (u > 0.92 ? (1 - u) / 0.08 * 0.6 + 0.4 : 1);
-      const d = norm(sub(pl[Math.min(i + 1, pl.length - 1)], pl[Math.max(i - 1, 0)])), n = perp(d);
+      const u = i / (pl.length - 1), w = lerp(w0, w0 * 0.8, u), n = perp(tdir(pl, i));
       left.push(add(pl[i], mul(n, w / 2))); right.push(sub(pl[i], mul(n, w / 2)));
     }
     els.push(pathEl(smoothPath(left.concat(right.reverse()), true, 0.8), SW.D, '#fff'));
-    for (let i = 2; i < pl.length - 1; i += 2) {
-      const d = norm(sub(pl[i + 1], pl[i - 1])), n = perp(d), w = lerp(2.4, 4.2, i / pl.length);
-      els.push(lineEl(add(pl[i], mul(n, w / 2)), sub(pl[i], mul(n, w / 2)), SW.F));
+    const js = alongPl(pl, 22);
+    for (let k = 2; k < 22; k += 2) { const n = perp(norm(sub(js[k + 1], js[k - 1]))); els.push(lineEl(add(js[k], mul(n, w0 * 0.45)), sub(js[k], mul(n, w0 * 0.45)), SW.F)); }
+    const tip = pl[pl.length - 1], d = tdir(pl, pl.length - 1);
+    const cl = len * randRange(0.17, 0.22), cw = Math.max(3, headW * 0.11);
+    if (kind === 'clubbed') {
+      // teardrop club: narrow where it joins the shaft, rounded at the tip
+      const n = perp(d);
+      const p0 = sub(tip, mul(d, cl * 0.1)), pe = add(tip, mul(d, cl));
+      els.push(pathEl(cubicBezierPath([
+        add(p0, mul(n, w0 * 0.4)), add(add(p0, mul(d, cl * 0.45)), mul(n, cw * 0.55)), add(add(pe, mul(d, -cl * 0.1)), mul(n, cw * 0.5)), pe,
+        add(add(pe, mul(d, -cl * 0.1)), mul(n, -cw * 0.5)), add(add(p0, mul(d, cl * 0.45)), mul(n, -cw * 0.55)), add(p0, mul(n, -w0 * 0.4)),
+        add(p0, mul(n, -w0 * 0.4)), add(p0, mul(n, w0 * 0.4)), add(p0, mul(n, w0 * 0.4))], true), SW.D, '#fff'));
+      for (let k = 1; k <= 4; k++) { const s = k / 5, q = add(p0, mul(d, cl * s)), hw = cw * 0.5 * Math.sin(Math.PI * Math.min(1, s * 1.1)) * 0.9; els.push(lineEl(add(q, mul(n, hw)), sub(q, mul(n, hw)), SW.F)); }
+    } else {
+      // skipper: the club bends back on itself into a pointed hook (apiculus)
+      const bend = randRange(70, 100) * (rng() < 0.5 ? 1 : -1);
+      const dh = rot(d, bend * D2R * 0.5), d2 = rot(d, bend * D2R);
+      const n = perp(d);
+      const c1 = add(tip, mul(d, cl * 0.5)), c2 = add(c1, mul(dh, cl * 0.45)), c3 = add(c2, mul(d2, cl * 0.6));
+      const axis = sampleSmooth([tip, c1, c2, c3], false, 1, 8);
+      const Lp = [], Rp = [];
+      for (let i = 0; i < axis.length; i++) {
+        const u = i / (axis.length - 1), w = cw * (u < 0.55 ? lerp(0.45, 1, u / 0.55) : lerp(1, 0.08, (u - 0.55) / 0.45));
+        const nn = perp(tdir(axis, i));
+        Lp.push(add(axis[i], mul(nn, w / 2))); Rp.push(sub(axis[i], mul(nn, w / 2)));
+      }
+      els.push(pathEl(smoothPath(Lp.concat(Rp.reverse()), true, 0.8), SW.D, '#fff'));
+      for (let i = 2; i < axis.length - 3; i += 2) { const nn = perp(tdir(axis, i)); const w = cw * 0.4; els.push(lineEl(add(axis[i], mul(nn, w)), sub(axis[i], mul(nn, w)), SW.F)); }
+      void n;
     }
+  } else if (kind === 'bipectinate' || kind === 'pectinate') {
+    // male moth: a slender shaft with a comb of rami each side, longest in the middle, tapering to the tip
+    const pts = shaftPoints(base, randRange(-82, -56), len, randRange(-32, -4), 14);
+    const pl = sampleSmooth(pts, false, 1, 8);
+    const w0 = Math.max(1.4, headW * 0.05);
+    const L_ = [], R_ = [];
+    for (let i = 0; i < pl.length; i++) { const w = lerp(w0, w0 * 0.4, i / (pl.length - 1)), n = perp(tdir(pl, i)); L_.push(add(pl[i], mul(n, w / 2))); R_.push(sub(pl[i], mul(n, w / 2))); }
+    els.push(pathEl(smoothPath(L_.concat(R_.reverse()), true, 0.8), SW.D, '#fff'));
+    const nR = randInt(26, 40), maxB = len * randRange(0.2, 0.3), both = kind === 'bipectinate';
+    const js = alongPl(pl, nR);
+    const sweepK = randRange(0.3, 0.55);
+    for (let k = 2; k < nR; k++) {
+      const u = k / nR, d = norm(sub(js[k + 1], js[k - 1])), n = perp(d);
+      const bl = maxB * Math.pow(Math.sin(Math.PI * Math.pow(u, 0.75)), 0.8) * (u > 0.93 ? (1 - u) / 0.07 : 1);
+      if (bl < 1) continue;
+      for (const side of both ? [1, -1] : [1]) {
+        const dir = norm(add(mul(n, side), mul(d, sweepK)));
+        const end = add(js[k], mul(dir, bl)), mid = add(js[k], add(mul(dir, bl * 0.5), mul(d, bl * 0.08)));
+        els.push(pathEl(cubicBezierPath([js[k], lerpP(js[k], mid, 0.6), lerpP(mid, end, 0.4), end], false), SW.F));
+      }
+    }
+  } else if (kind === 'geniculate') {
+    // scape long, pedicel short, elbow, flagellum of 10-11 beads (bee 12 / wasp 13 segments)
+    const nF = randInt(10, 11);
+    const d0 = randRange(-50, -28), L1 = len * randRange(0.3, 0.36), sw = Math.max(2.2, headW * 0.07);
+    const elbow = add(base, mul(dirv(d0), L1));
+    els.push(limbSegment(base, elbow, sw, sw * 0.85, 0));
+    const d1 = d0 - randRange(60, 95);
+    const ped = add(elbow, mul(dirv(d1), sw * 0.9));
+    els.push(limbSegment(elbow, ped, sw * 0.8, sw * 0.75, 0));
+    const pts = shaftPoints(ped, d1, len - L1 - sw * 0.9, randRange(-30, 10), 10);
+    const pl = sampleSmooth(pts, false, 1, 5);
+    const js = alongPl(pl, nF);
+    let w = sw * 0.78;
+    for (let k = 0; k < nF; k++) {
+      const w2 = k === nF - 1 ? w * 0.55 : w * 0.97;
+      els.push(limbSegment(js[k], js[k + 1], w, w2, 0));
+      w = w2;
+    }
+  } else if (kind === 'lamellate') {
+    // scarab: short beaded stalk, then a fan of three flattened plates
+    const nS = randInt(6, 8);
+    const pts = shaftPoints(base, randRange(-60, -40), len * 0.62, randRange(-30, 0), 8);
+    const pl = sampleSmooth(pts, false, 1, 6);
+    const js = alongPl(pl, nS);
+    const r0 = Math.max(1.6, headW * 0.05);
+    for (let k = 0; k < nS; k++) els.push(limbSegment(js[k], js[k + 1], r0 * 2 * (k === 0 ? 1.1 : 0.9), r0 * 1.8, 0));
+    const tip = js[nS], d = norm(sub(js[nS], js[nS - 1]));
+    const pLen = len * 0.38, pW = Math.max(2.4, headW * 0.07);
+    const spread = randRange(14, 30);
+    for (const a of [spread, 0, -spread]) {
+      const dd = rot(d, a * D2R), c = add(tip, mul(dd, pLen * 0.5));
+      els.push(pathEl(ellipsePath(c, pLen * 0.5, pW * 0.5, Math.atan2(dd[1], dd[0]) / D2R), SW.D, '#fff'));
+    }
+  } else if (kind === 'aristate') {
+    // house fly: three short segments; the swollen postpedicel carries a bristle arista
+    const d0 = randRange(-100, -80), s1 = Math.max(1.6, headW * 0.04);
+    const p1 = add(base, mul(dirv(d0), s1 * 1.2));
+    els.push(limbSegment(base, p1, s1 * 1.5, s1 * 1.5, 0));                         // scape
+    const p2 = add(p1, mul(dirv(d0 + 8), s1 * 1.6));
+    els.push(limbSegment(p1, p2, s1 * 1.7, s1 * 1.8, 0));                           // pedicel
+    const pd = dirv(d0 + 15), pL = len * 0.55, pc = add(p2, mul(pd, pL * 0.5));
+    els.push(pathEl(ellipsePath(pc, pL * 0.5, Math.max(1.8, headW * 0.06), Math.atan2(pd[1], pd[0]) / D2R), SW.O, '#fff'));   // postpedicel
+    const ar0 = add(p2, mul(pd, pL * 0.25)), ad = dirv(d0 + randRange(-10, 10) - 25);
+    const ar = shaftPoints(ar0, Math.atan2(ad[1], ad[0]) / D2R, len * randRange(0.9, 1.2), randRange(-15, 15), 6);
+    els.push(pathEl(smoothPath(ar, false), SW.D));                                  // arista
+    const apl = sampleSmooth(ar, false, 1, 4);
+    for (let i = 2; i < apl.length - 2; i += 2) { const n = perp(tdir(apl, i)); els.push(lineEl(apl[i], add(apl[i], mul(n, 1.6)), SW.F)); els.push(lineEl(apl[i], sub(apl[i], mul(n, 1.4)), SW.F)); }
+  } else {   // setaceous: a short bristle of a few tapering segments
+    const pts = shaftPoints(base, randRange(-85, -55), len, randRange(-30, 20), 6);
+    const pl = sampleSmooth(pts, false, 1, 4);
+    const nSeg = randInt(4, 6), js = alongPl(pl, nSeg);
+    let w = Math.max(1.6, headW * 0.04);
+    for (let k = 0; k < nSeg; k++) { const w2 = w * 0.72; els.push(limbSegment(js[k], js[k + 1], w, w2, 0)); w = w2; }
   }
+  els.unshift(socketEl(base, sr));
   return els;
 }
 
 // ---------- legs (right side) ----------
+// spec: { dirs:[coxa, femur, tibia, tarsus], lens, widths:[[w1,w2]x4], curl, tarsomeres,
+//         bowSign, spines: {femur, tibia, side:'outer'|'inner', double}, spurs, herringbone,
+//         corbicula, basitarsus, pulvilli, femurTeeth, shade }
 function legEls(attach, spec, meta) {
   const els = []; let p = attach;
   const dirs = spec.dirs, lens = spec.lens, ws = spec.widths;
-  for (let k = 0; k < 3; k++) {                       // coxa, femur, tibia
+  const shadeSide = g => (Math.abs(bez3(g.e1, 0.5)[0]) > Math.abs(bez3(g.e2, 0.5)[0]) ? 1 : -1);   // edge away from the body axis
+  // coxa
+  const cx = add(p, mul(dirv(dirs[0]), lens[0] * 0.8));
+  els.push(limbSegment(p, cx, ws[0][0], ws[0][1], 0));
+  p = cx;
+  // trochanter: a short wedge that sets the bend between coxa and femur
+  const trDir = lerp(dirs[0], dirs[1], 0.5);
+  const tr = add(p, mul(dirv(trDir), lens[0] * 0.5));
+  els.push(limbSegment(p, tr, ws[0][1] * 0.95, ws[1][0] * 0.85, 0));
+  p = tr;
+  const geoms = [];
+  for (let k = 1; k < 3; k++) {                       // femur, tibia
     const q = add(p, mul(dirv(dirs[k]), lens[k]));
-    const bow = k === 0 ? 0 : lens[k] * 0.07 * (spec.bowSign || 1);
-    els.push(limbSegment(p, q, ws[k][0], ws[k][1], bow));
-    if (k === 2 && spec.spines) {
-      const d = dirv(dirs[k]), n = perp(d);
-      const outer = Math.abs(add(p, mul(n, 5))[0]) > Math.abs(sub(p, mul(n, 5))[0]) ? 1 : -1;
-      const kk = lens[k] * 0.35, bowV = mul(n, bow);
-      const e0 = add(p, mul(n, outer * ws[k][0] / 2)), e3 = add(q, mul(n, outer * ws[k][1] / 2));
-      const e1 = add(add(e0, mul(d, kk)), bowV), e2 = add(sub(e3, mul(d, kk)), bowV);
-      for (let s = 0.25; s < 0.95; s += 7 / lens[k]) {
-        const u = 1 - s;
-        const base = [u * u * u * e0[0] + 3 * u * u * s * e1[0] + 3 * u * s * s * e2[0] + s * s * s * e3[0],
-                      u * u * u * e0[1] + 3 * u * u * s * e1[1] + 3 * u * s * s * e2[1] + s * s * s * e3[1]];
-        els.push(lineEl(base, add(base, add(mul(n, outer * 3.5), mul(d, 2.5))), SW.D));
+    const bow = lens[k] * 0.07 * (spec.bowSign || 1);
+    const g = limbGeom(p, q, ws[k][0], ws[k][1], bow);
+    geoms.push(g);
+    els.push(pathEl(limbPath(g), SW.O, '#fff'));
+    const outer = shadeSide(g);
+    if (k === 1 && spec.herringbone) els.push(...femurHerringbone(g, outer));
+    else if (spec.shade !== false) els.push(...limbShade(g, outer, spec.shadeSpacing || 1.9));
+    if (k === 1 && spec.femurTeeth) els.push(...limbSpines(g, -outer, lens[1] / spec.femurTeeth, ws[1][0] * 0.4, 0.42, 0.9, SW.D));
+    if (spec.spines) {
+      const sp = spec.spines, side = sp.side === 'inner' ? -outer : outer;
+      const sl = Math.max(2.2, ws[k][0] * (sp.len || 0.6));
+      if ((k === 1 && sp.femur) || (k === 2 && sp.tibia)) {
+        els.push(...limbSpines(g, side, sp.spacing || 6, sl, 0.2, 0.92, sp.sw));
+        if (k === 2 && sp.double) {   // second row on the opposite edge, shorter
+          els.push(...limbSpines(g, -side, (sp.spacing || 6) * 1.1, sl * 0.6, 0.3, 0.9, SW.F));
+        }
       }
     }
+    if (k === 2 && spec.corbicula) {   // bee hind tibia: fringe of long hairs round the pollen basket
+      const side = outer;
+      for (let s = 0.25; s <= 0.95; s += 0.07) {
+        const b = bez3(side > 0 ? g.e1 : g.e2, s);
+        const dir = norm(add(mul(g.n, side), mul(g.d, 0.5 + (s - 0.6))));
+        els.push(pathEl(cubicBezierPath([b, add(b, mul(dir, 2.5)), add(b, mul(dir, 4.5)), add(b, add(mul(dir, 6.5), mul(g.d, 1.2)))], false), SW.F));
+      }
+      for (let s = 0.35; s <= 0.9; s += 0.11) { const a = lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.3), b = lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.85); els.push(lineEl(a, b, SW.F)); }
+    }
     p = q;
+    if (k === 2 && spec.spurs) {   // movable apical spurs on the tibia, inner side
+      const inner = -outer, d = g.d, n = g.n;
+      const sl = Math.max(3, ws[2][1] * (spec.spurLen || 1.3));
+      for (let j = 0; j < spec.spurs; j++) {
+        const root = add(sub(q, mul(d, ws[2][1] * 0.25)), mul(n, inner * ws[2][1] * (0.35 - j * 0.25)));
+        const dir = norm(add(mul(d, 1), mul(n, inner * (0.9 + j * 0.5))));
+        els.push(lineEl(root, add(root, mul(dir, sl * (1 - j * 0.25))), SW.D));
+      }
+      if (spec.spursOuter) {
+        const root = add(sub(q, mul(d, ws[2][1] * 0.25)), mul(n, outer * ws[2][1] * 0.3));
+        els.push(lineEl(root, add(root, mul(norm(add(mul(d, 1), mul(n, outer * 0.8))), sl * 0.7)), SW.D));
+      }
+    }
   }
-  // tarsus: 4 tarsomeres curling, then claws
-  let a = dirs[3]; const tl = lens[3];
-  const fr = [0.3, 0.27, 0.23, 0.2];
-  for (let k = 0; k < 4; k++) {
-    const q = add(p, mul(dirv(a), tl * fr[k]));
-    els.push(limbSegment(p, q, ws[3][0] - k * 0.35, ws[3][0] - (k + 1) * 0.35, 0));
-    p = q; a += spec.curl;
-  }
-  for (const s of [-28, 28]) els.push(lineEl(p, add(p, mul(dirv(a + s), 4)), SW.D));
-  if (meta) meta.push({ x: attach[0], y: attach[1], tip: p });
+  const tr_ = tarsusEls(p, dirs[3], lens[3], ws[3][0], spec.tarsomeres || 5, spec.curl, { pulvilli: spec.pulvilli, basitarsus: spec.basitarsus });
+  els.push(...tr_.els);
+  if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip });
   return els;
 }
 
@@ -658,7 +936,7 @@ function generateInsectDetailed(seed) {
         abdW: 100 * jitter(0.12), abdLen: 175 * jitter(0.15), legScale: 1.0 * jitter(0.1),
         thoraxAnchors: [[0, 0.55], [0.35, 0.95], [0.75, 1], [1, 0.88]],
         abdAnchors: [[0, 0.8], [0.3, 1], [0.7, 0.9], [0.92, 0.5], [1, 0]],
-        antenna: pick(['feathered', 'beaded', 'beaded']), antLen: 70 * jitter(0.2), subSeg: 1 });
+        antenna: pick(['moniliform', 'moniliform', 'serrate', 'lamellate', 'filiform', 'clubbed']), antLen: 62 * jitter(0.2), subSeg: 1 });
       break;
     case 'moth':
       P.variant = rng() < 0.4 ? 'butterfly' : 'moth';
@@ -666,7 +944,7 @@ function generateInsectDetailed(seed) {
         abdW: (P.variant === 'moth' ? 44 : 30) * jitter(0.12), abdLen: (P.variant === 'moth' ? 140 : 150) * jitter(0.12), legScale: 0.8 * jitter(0.1),
         thoraxAnchors: [[0, 0.5], [0.3, 1], [0.8, 0.9], [1, 0.55]],
         abdAnchors: P.variant === 'moth' ? [[0, 0.75], [0.3, 1], [0.65, 0.9], [0.9, 0.55], [1, 0]] : [[0, 0.8], [0.3, 1], [0.7, 0.85], [0.95, 0.4], [1, 0]],
-        antenna: P.variant === 'moth' ? 'feathered' : 'clubbed', antLen: (P.variant === 'moth' ? 70 : 90) * jitter(0.15),
+        antenna: P.variant === 'moth' ? pick(['bipectinate', 'bipectinate', 'pectinate', 'filiform']) : (rng() < 0.3 ? 'hooked' : 'clubbed'), antLen: (P.variant === 'moth' ? 62 : 85) * jitter(0.15),
         wingSpan: (P.variant === 'moth' ? 165 : 180) * jitter(0.1) });
       break;
     case 'fly':
@@ -674,21 +952,21 @@ function generateInsectDetailed(seed) {
         abdW: 54 * jitter(0.15), abdLen: 110 * jitter(0.15), legScale: 0.95 * jitter(0.1),
         thoraxAnchors: [[0, 0.6], [0.3, 1], [0.75, 0.95], [1, 0.6]],
         abdAnchors: [[0, 0.75], [0.25, 1], [0.6, 0.9], [0.85, 0.55], [1, 0]],
-        antenna: 'filiform', antLen: 22 * jitter(0.2) });
+        antenna: 'aristate', antLen: 14 * jitter(0.2) });
       break;
     case 'bee':
       Object.assign(P, { headW: 42 * jitter(0.12), headH: 34 * jitter(0.12), thoraxW: 60 * jitter(0.12), thoraxLen: 64 * jitter(0.12),
         abdW: 58 * jitter(0.12), abdLen: 150 * jitter(0.15), legScale: 1.0 * jitter(0.1), abdOverlap: 1,
         thoraxAnchors: [[0, 0.55], [0.35, 1], [0.8, 0.9], [1, 0.5]],
         abdAnchors: [[0, 0.22], [0.1, 0.35], [0.3, 0.95], [0.55, 1], [0.8, 0.7], [0.95, 0.3], [1, 0]],
-        antenna: 'elbowed', antLen: 60 * jitter(0.15), abdSeg: randInt(5, 7) });
+        antenna: 'geniculate', antLen: 58 * jitter(0.15), abdSeg: randInt(5, 7) });
       break;
     case 'dragonfly':
       Object.assign(P, { headW: 50 * jitter(0.12), headH: 28 * jitter(0.12), thoraxW: 46 * jitter(0.12), thoraxLen: 72 * jitter(0.12),
         abdW: 22 * jitter(0.15), abdLen: 250 * jitter(0.12), legScale: 0.62 * jitter(0.1),
         thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.6]],
         abdAnchors: [[0, 0.85], [0.1, 1], [0.5, 0.9], [0.85, 0.85], [0.97, 0.7], [1, 0]],
-        antenna: 'filiform', antLen: 12 * jitter(0.2), abdSeg: 8, wingLen: 235 * jitter(0.08) });
+        antenna: 'setaceous', antLen: 9 * jitter(0.2), abdSeg: 8, wingLen: 235 * jitter(0.08) });
       break;
     case 'grasshopper':
       Object.assign(P, { headW: 38 * jitter(0.12), headH: 42 * jitter(0.12), thoraxW: 50 * jitter(0.12), thoraxLen: 66 * jitter(0.12),
@@ -702,7 +980,7 @@ function generateInsectDetailed(seed) {
         abdW: 24 * jitter(0.15), abdLen: 210 * jitter(0.12), legScale: 2.1 * jitter(0.12),
         thoraxAnchors: [[0, 0.5], [0.35, 1], [0.8, 0.9], [1, 0.55]],
         abdAnchors: [[0, 0.8], [0.15, 1], [0.6, 0.9], [0.9, 0.75], [0.98, 0.5], [1, 0]],
-        antenna: 'beaded', antLen: 40 * jitter(0.2), abdSeg: 8 });
+        antenna: 'moniliform', antLen: 36 * jitter(0.2), abdSeg: 8 });
       break;
     case 'lacewing':
       Object.assign(P, { headW: 30 * jitter(0.12), headH: 26 * jitter(0.12), thoraxW: 40 * jitter(0.12), thoraxLen: 60 * jitter(0.12),
@@ -716,31 +994,32 @@ function generateInsectDetailed(seed) {
         abdW: 70 * jitter(0.12), abdLen: 150 * jitter(0.12), legScale: 0.85 * jitter(0.1),
         thoraxAnchors: [[0, 0.8], [0.3, 1], [0.8, 0.95], [1, 0.75]],
         abdAnchors: [[0, 0.95], [0.2, 1], [0.6, 0.8], [0.9, 0.4], [1, 0]],
-        antenna: 'filiform', antLen: 12 * jitter(0.2), abdSeg: randInt(5, 7), subSeg: 2 });
+        antenna: 'setaceous', antLen: 9 * jitter(0.2), abdSeg: randInt(5, 7), subSeg: 2 });
       break;
     case 'wasp':
       Object.assign(P, { headW: 40 * jitter(0.12), headH: 34 * jitter(0.12), thoraxW: 52 * jitter(0.12), thoraxLen: 66 * jitter(0.12),
         abdW: 48 * jitter(0.12), abdLen: 170 * jitter(0.15), legScale: 1.15 * jitter(0.1), abdOverlap: 1,
         thoraxAnchors: [[0, 0.55], [0.35, 1], [0.8, 0.9], [1, 0.45]],
         abdAnchors: [[0, 0.12], [0.22, 0.14], [0.4, 0.75], [0.6, 1], [0.82, 0.7], [0.95, 0.3], [1, 0]],
-        antenna: 'filiform', antLen: 85 * jitter(0.15), abdSeg: randInt(5, 7) });
+        antenna: 'geniculate', antLen: 80 * jitter(0.15), abdSeg: randInt(5, 7) });
       break;
     case 'damselfly':
       Object.assign(P, { headW: 58 * jitter(0.1), headH: 22 * jitter(0.12), thoraxW: 36 * jitter(0.12), thoraxLen: 62 * jitter(0.12),
         abdW: 13 * jitter(0.15), abdLen: 290 * jitter(0.1), legScale: 0.55 * jitter(0.1),
         thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.6]],
         abdAnchors: [[0, 0.85], [0.1, 1], [0.5, 0.95], [0.9, 0.9], [0.97, 0.8], [1, 0]],
-        antenna: 'filiform', antLen: 10 * jitter(0.2), abdSeg: 8, wingLen: 230 * jitter(0.08) });
+        antenna: 'setaceous', antLen: 8 * jitter(0.2), abdSeg: 8, wingLen: 230 * jitter(0.08) });
       break;
     case 'mayfly':
       Object.assign(P, { headW: 30 * jitter(0.12), headH: 24 * jitter(0.12), thoraxW: 42 * jitter(0.12), thoraxLen: 56 * jitter(0.12),
         abdW: 24 * jitter(0.15), abdLen: 170 * jitter(0.12), legScale: 0.8 * jitter(0.1),
         thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.55]],
         abdAnchors: [[0, 0.85], [0.15, 1], [0.6, 0.85], [0.9, 0.6], [0.98, 0.4], [1, 0]],
-        antenna: 'filiform', antLen: 10 * jitter(0.2), abdSeg: 8 });
+        antenna: 'setaceous', antLen: 7 * jitter(0.2), abdSeg: 8 });
       break;
   }
   meta.variant = P.variant;
+  meta.antenna = P.antenna;
   // organic irregularity on profiles
   const wobble = a => a.map(([t, f]) => [t, f === 0 ? 0 : f * jitter(0.03)]);
   P.thoraxAnchors = wobble(P.thoraxAnchors);
@@ -839,12 +1118,28 @@ function generateInsectDetailed(seed) {
   const hr = { x: P.headW / 2, y: P.headH / 2 };
   L.thoraxHead.push(pathEl(ellipsePath([0, headCy], hr.x, hr.y, 0), SW.O, '#fff'));
   {
-    const E = { beetle: [0.36, 0.12, 0.24], moth: [0.34, 0.14, 0.27], fly: [0.3, 0.2, 0.4], bee: [0.34, 0.13, 0.33], dragonfly: [0.25, 0.24, 0.42], grasshopper: [0.33, 0.13, 0.28], cranefly: [0.32, 0.14, 0.3], lacewing: [0.34, 0.15, 0.3], cicada: [0.42, 0.08, 0.3], wasp: [0.33, 0.13, 0.33], damselfly: [0.4, 0.1, 0.42], mayfly: [0.3, 0.2, 0.4] }[type];
-    for (const s of [-1, 1]) L.thoraxHead.push(...eyeEls([s * P.headW * E[0], headCy - P.headH * 0.03], P.headW * E[1], P.headH * E[2]));
+    // [cx/headW, rx/headW, ry/headH, cy offset/headH, opts]  -- see docs/research-legs-eyes-antennae.md
+    const E = {
+      beetle: [0.36, 0.12, 0.25, -0.02, { dent: [-125, 0.32, 0.8] }],                 // oval, notched at the antennal socket
+      moth: [0.33, 0.16, 0.27, -0.03, {}],                                            // large and round
+      fly: [0.28, 0.24, 0.42, -0.03, { highlight: [-0.3, -0.5], highlightR: 0.3 }],   // holoptic: nearly meeting on top
+      bee: [0.34, 0.14, 0.4, -0.03, { dent: [180, 0.22, 0.75] }],                      // kidney-shaped
+      wasp: [0.34, 0.13, 0.38, -0.03, { dent: [180, 0.22, 0.75] }],
+      dragonfly: [0.25, 0.25, 0.42, 0.06, { highlight: [-0.25, -0.5], highlightR: 0.3 }], // huge, meeting on the midline
+      damselfly: [0.4, 0.11, 0.44, 0, {}],                                            // dumbbell head: eyes at the ends
+      grasshopper: [0.32, 0.13, 0.3, -0.08, {}],
+      cranefly: [0.33, 0.14, 0.32, -0.03, {}],
+      lacewing: [0.34, 0.15, 0.32, -0.03, {}],
+      cicada: [0.42, 0.09, 0.3, -0.03, {}],                                           // bulging at the head corners
+      mayfly: [0.28, 0.2, 0.4, -0.03, {}],
+    }[type];
+    for (const s of [-1, 1]) L.thoraxHead.push(...eyeEls([s * P.headW * E[0], headCy + P.headH * E[3]], P.headW * E[1], P.headH * E[2], E[4]));
     if (type !== 'beetle' && type !== 'moth') {   // ocelli
-      L.thoraxHead.push(circleEl([0, headCy - P.headH * 0.18], 1.3, SW.D));
-      L.thoraxHead.push(circleEl([-P.headW * 0.09, headCy - P.headH * 0.08], 1.3, SW.D));
-      L.thoraxHead.push(circleEl([P.headW * 0.09, headCy - P.headH * 0.08], 1.3, SW.D));
+      const oc = type === 'fly' || type === 'dragonfly' || type === 'mayfly' ? [[0, -0.42], [0.06, -0.34]] : [[0, -0.18], [0.09, -0.08]];
+      const r = type === 'dragonfly' ? 1.1 : 1.3;
+      L.thoraxHead.push(circleEl([0, headCy + P.headH * oc[0][1]], r, SW.D));
+      L.thoraxHead.push(circleEl([-P.headW * oc[1][0], headCy + P.headH * oc[1][1]], r, SW.D));
+      L.thoraxHead.push(circleEl([P.headW * oc[1][0], headCy + P.headH * oc[1][1]], r, SW.D));
     }
     if (type === 'beetle' || type === 'grasshopper') {   // mandibles
       for (const s of [-1, 1]) L.thoraxHead.push(pathEl(cubicBezierPath([[s * P.headW * 0.16, headTop + 2], [s * P.headW * 0.14, headTop - 4], [s * P.headW * 0.07, headTop - 7], [s * P.headW * 0.02, headTop - 6]], false), SW.D));
@@ -862,15 +1157,20 @@ function generateInsectDetailed(seed) {
 
   // ---------- antennae ----------
   {
-    const base = [P.headW * (type === 'dragonfly' || type === 'damselfly' ? 0.12 : 0.2), headTop + P.headH * (type === 'grasshopper' ? 0.35 : 0.28)];
-    L.antennae.push(...antennaEls(P.antenna, base, P.antLen));
+    // antennal sockets sit on the front of the head between the eyes
+    const AB = { dragonfly: [0.14, 0.12], damselfly: [0.12, 0.25], fly: [0.055, 0.2], bee: [0.16, 0.3], wasp: [0.16, 0.3], moth: [0.16, 0.3], beetle: [0.2, 0.3], grasshopper: [0.13, 0.24], mayfly: [0.08, 0.2], cicada: [0.22, 0.3] }[type] || [0.18, 0.28];
+    const base = [P.headW * AB[0], headTop + P.headH * AB[1]];
+    L.antennae.push(...antennaEls(P.antenna, base, P.antLen, P.headW));
     if (type === 'mayfly') L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 72, P.abdLen * 0.85, 14, 8), false), SW.D));   // outer tail filaments
   }
 
   // ---------- legs ----------
   {
     const u = P.legScale * (thorax.length / 60);
-    const widths = type === 'beetle' ? [[7, 6], [8.5, 6], [6, 3.5], [3.4, 2]] : [[6, 5], [7, 5], [5, 3], [3, 1.8]];
+    // leg thickness follows body size, with slender-legged orders thinned further
+    const wk = Math.sqrt(thorax.length / 60) * ({ beetle: 1.15, fly: 0.85, cranefly: 0.42, dragonfly: 0.8, damselfly: 0.62, mayfly: 0.72, moth: 0.85, lacewing: 0.8, grasshopper: 0.95 }[type] || 1);
+    const widths = [[6, 5], [7, 5], [5, 3.2], [3, 1.8]].map(w => [w[0] * wk, w[1] * wk]);
+    const tarsomeres = { dragonfly: 3, damselfly: 3, grasshopper: 3, cicada: 3, mayfly: 4, beetle: rng() < 0.3 ? 4 : 5 }[type] || 5;
     let specs;
     if (type === 'dragonfly' || type === 'damselfly') {
       specs = [
@@ -896,15 +1196,48 @@ function generateInsectDetailed(seed) {
         dirs: s.dirs.map(d => d + dirJ),
         lens: s.lens.map((l, k) => l * (k === 0 ? 1 : u) * jitter(0.08)),
         widths: widths.map(w => w.slice()),
-        curl: randRange(8, 14), spines: false, bowSign: 1,
+        curl: randRange(8, 14), spines: null, bowSign: 1, tarsomeres, spurs: 2, spurLen: 1.1,
       };
-      if (type === 'grasshopper' && i === 2) { spec.widths[1] = [16, 7]; spec.widths[2] = [5.5, 3]; spec.spines = true; spec.lens[0] = 12; }
-      if (type === 'bee' && i === 2) { spec.widths[2] = [8, 6]; spec.spines = true; }
-      if (type === 'bee' && i === 1) spec.spines = true;
-      if (type === 'fly') spec.widths = spec.widths.map(w => [w[0] * 0.8, w[1] * 0.8]);
-      if (type === 'cranefly') spec.widths = spec.widths.map(w => [w[0] * 0.5, w[1] * 0.5]);
-      if (type === 'mayfly' && i === 0) spec.lens = spec.lens.map((l, k) => k === 0 ? l : l * 1.6);
-      if (type === 'wasp' && i === 2) spec.spines = true;
+      const W = (k, a, b) => { spec.widths[k] = [a * wk, b * wk]; };
+      switch (type) {
+        case 'grasshopper':
+          if (i === 2) {   // saltatorial: huge femur with chevron muscles, serrated tibia, two pairs of apical spurs
+            W(1, 15, 6); W(2, 5.5, 3.2); spec.lens[0] = 12; spec.herringbone = true; spec.bowSign = -1;
+            spec.spines = { tibia: true, side: 'outer', double: true, spacing: 5, len: 0.75 };
+            spec.spursOuter = true; spec.spurLen = 1.4;
+          } else spec.spurs = 1;
+          break;
+        case 'bee':
+          spec.spurs = 1;
+          if (i === 2) {   // corbicula + flat basitarsus; the leg is swung outward so the tibia clears the wing
+            W(2, 4.5, 9.5); spec.corbicula = true; spec.basitarsus = [7 * wk, 6 * wk]; spec.spurs = 0;
+            spec.dirs = [25 + dirJ, 52 + dirJ, 100 + dirJ, 115 + dirJ]; spec.lens = spec.lens.map((l, k) => k === 0 ? l : l * 1.18);
+          }
+          break;
+        case 'wasp':
+          if (i > 0) spec.spines = { tibia: true, side: 'outer', spacing: 7, len: 0.45, sw: SW.F };
+          break;
+        case 'fly':
+          spec.pulvilli = true; spec.spurs = 0;
+          spec.spines = { femur: true, tibia: true, side: 'outer', spacing: 7.5, len: 0.5, sw: SW.F };   // bristles
+          break;
+        case 'cranefly':
+          spec.spurs = 1; spec.spurLen = 1.6; spec.shade = false;
+          break;
+        case 'dragonfly': case 'damselfly':   // spiny legs held forward as a prey basket
+          spec.spurs = 0;
+          spec.spines = { femur: true, tibia: true, side: 'inner', spacing: 4.5, len: 1.0, sw: SW.F };
+          break;
+        case 'cicada':
+          if (i === 0) { W(1, 9.5, 5); spec.femurTeeth = 3; }   // fore femora armed beneath with strong teeth
+          break;
+        case 'mayfly':
+          spec.spurs = 0;
+          if (i === 0) spec.lens = spec.lens.map((l, k) => k === 0 ? l : l * 1.6);
+          break;
+        case 'lacewing': spec.spurs = 1; break;
+        case 'beetle': spec.spurLen = 0.9; break;
+      }
       L.legs.push(...legEls(attach, spec, legMeta));
       legMeta[legMeta.length - 1].hw = hw;
       legMeta[legMeta.length - 1].pair = ['front', 'mid', 'hind'][i];
