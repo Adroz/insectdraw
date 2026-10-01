@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>insectdraw</title>
+<style>
+  html, body { margin: 0; background: #fff; color: #000; }
+  body { font: 14px/1.4 Georgia, "Times New Roman", serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 12px 16px; box-sizing: border-box; }
+  #stage { width: min(92vw, 600px); aspect-ratio: 1 / 1; }
+  #stage svg { width: 100%; height: 100%; display: block; }
+  .controls { display: flex; gap: 8px; align-items: center; margin: 14px 0 6px; flex-wrap: wrap; justify-content: center; }
+  input, button { font: inherit; padding: 4px 10px; border: 1px solid #000; background: #fff; color: #000; border-radius: 0; }
+  input { width: 10em; }
+  button { cursor: pointer; }
+  button:active { background: #000; color: #fff; }
+  #info { font-size: 13px; letter-spacing: 0.02em; }
+  #info i { font-style: italic; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div class="controls">
+  <label>Seed <input id="seed" type="number" value="1" min="0" step="1"></label>
+  <button id="gen">Generate</button>
+  <button id="rnd">Random</button>
+  <button id="daily">Daily</button>
+</div>
+<div id="info"></div>
+
+<script id="engine">
+'use strict';
+/* ============================================================
+   insectdraw — procedural Victorian-style insect plates
+   Everything below the UI block is pure generation: no DOM.
+   Coordinates: body axis is x = 0, head at top (y increasing
+   downward). The RIGHT half (x >= 0) is generated and mirrored.
+   ============================================================ */
+
+// ---------- PRNG (mulberry32) ----------
+let rng = null;
+function mulberry32(seed) {
+  let a = seed | 0;
+  return function () {
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function randRange(min, max) { return min + (max - min) * rng(); }
+function randInt(min, max) { return Math.floor(randRange(min, max + 1)); }
+function pick(arr) { return arr[Math.floor(rng() * arr.length)]; }
+function jitter(k) { return 1 + randRange(-k, k); }
+function hashString(str) {
+  let h = 2166136261;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+function dailySeed(date) { return hashString((date || new Date()).toISOString().slice(0, 10)); }
+
+// ---------- vector helpers ----------
+const D2R = Math.PI / 180;
+function add(a, b) { return [a[0] + b[0], a[1] + b[1]]; }
+function sub(a, b) { return [a[0] - b[0], a[1] - b[1]]; }
+function mul(a, k) { return [a[0] * k, a[1] * k]; }
+function vlen(a) { return Math.hypot(a[0], a[1]); }
+function norm(a) { const l = vlen(a) || 1; return [a[0] / l, a[1] / l]; }
+function perp(a) { return [-a[1], a[0]]; }
+function rot(p, ang) { const c = Math.cos(ang), s = Math.sin(ang); return [p[0] * c - p[1] * s, p[0] * s + p[1] * c]; }
+function lerp(a, b, t) { return a + (b - a) * t; }
+function lerpP(a, b, t) { return [lerp(a[0], b[0], t), lerp(a[1], b[1], t)]; }
+function dirv(deg) { return [Math.cos(deg * D2R), Math.sin(deg * D2R)]; }
+function fmt(n) { return Math.round(n * 10) / 10; }
+
+// ---------- bbox tracking (everything emitted passes through here) ----------
+let bbox = null;
+function bb(p) {
+  if (p[0] < bbox.minX) bbox.minX = p[0];
+  if (p[0] > bbox.maxX) bbox.maxX = p[0];
+  if (p[1] < bbox.minY) bbox.minY = p[1];
+  if (p[1] > bbox.maxY) bbox.maxY = p[1];
+}
+
+// ---------- stroke classes (tokens replaced once final scale is known) ----------
+const SW = { O: 'SW_O', D: 'SW_D', F: 'SW_F' };   // outline 1.5, detail 0.8, fine 0.5
+
+// ---------- curves ----------
+// pts = [p0, c1, c2, p1, c3, c4, p2, ...]
+function cubicBezierPath(pts, closed) {
+  bb(pts[0]);
+  let d = 'M' + fmt(pts[0][0]) + ',' + fmt(pts[0][1]);
+  for (let i = 1; i + 2 < pts.length; i += 3) {
+    bb(pts[i]); bb(pts[i + 1]); bb(pts[i + 2]);
+    d += ' C' + fmt(pts[i][0]) + ',' + fmt(pts[i][1]) + ' ' + fmt(pts[i + 1][0]) + ',' + fmt(pts[i + 1][1]) + ' ' + fmt(pts[i + 2][0]) + ',' + fmt(pts[i + 2][1]);
+  }
+  return closed ? d + ' Z' : d;
+}
+// Catmull-Rom spline through pts -> cubic bezier control list
+function catmullRomToBezier(pts, closed, tension) {
+  tension = tension === undefined ? 1 : tension;
+  const n = pts.length, out = [pts[0]];
+  const segs = closed ? n : n - 1;
+  for (let i = 0; i < segs; i++) {
+    const p0 = pts[closed ? (i - 1 + n) % n : Math.max(i - 1, 0)];
+    const p1 = pts[i];
+    const p2 = pts[(i + 1) % n];
+    const p3 = pts[closed ? (i + 2) % n : Math.min(i + 2, n - 1)];
+    out.push(add(p1, mul(sub(p2, p0), tension / 6)), sub(p2, mul(sub(p3, p1), tension / 6)), p2);
+  }
+  return out;
+}
+function smoothPath(pts, closed, tension) { return cubicBezierPath(catmullRomToBezier(pts, closed, tension), closed); }
+function sampleBezier(bz, perSeg) {
+  const out = [];
+  for (let i = 1; i + 2 < bz.length; i += 3) {
+    const p0 = bz[i - 1], c1 = bz[i], c2 = bz[i + 1], p1 = bz[i + 2];
+    for (let k = 0; k < perSeg; k++) {
+      const t = k / perSeg, u = 1 - t;
+      out.push([u * u * u * p0[0] + 3 * u * u * t * c1[0] + 3 * u * t * t * c2[0] + t * t * t * p1[0],
+                u * u * u * p0[1] + 3 * u * u * t * c1[1] + 3 * u * t * t * c2[1] + t * t * t * p1[1]]);
+    }
+  }
+  out.push(bz[bz.length - 1]);
+  return out;
+}
+function sampleSmooth(pts, closed, tension, perSeg) { return sampleBezier(catmullRomToBezier(pts, closed, tension), perSeg || 8); }
+function ellipseBezier(c, rx, ry, rotDeg) {
+  const k = 0.5523, a = (rotDeg || 0) * D2R;
+  const T = p => add(c, rot(p, a));
+  return [T([rx, 0]),
+    T([rx, ry * k]), T([rx * k, ry]), T([0, ry]),
+    T([-rx * k, ry]), T([-rx, ry * k]), T([-rx, 0]),
+    T([-rx, -ry * k]), T([-rx * k, -ry]), T([0, -ry]),
+    T([rx * k, -ry]), T([rx, -ry * k]), T([rx, 0])];
+}
+function ellipsePath(c, rx, ry, rotDeg) { return cubicBezierPath(ellipseBezier(c, rx, ry, rotDeg), true); }
+
+// ---------- polygon helpers ----------
+function pointInPoly(p, poly) {
+  let inside = false;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+  }
+  return inside;
+}
+function outlineYRange(poly, x) {
+  let top = Infinity, bot = -Infinity;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[0] <= x && x < b[0]) || (b[0] <= x && x < a[0])) {
+      const y = a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]);
+      if (y < top) top = y;
+      if (y > bot) bot = y;
+    }
+  }
+  return top === Infinity ? null : [top, bot];
+}
+function plAt(pl, t) { return pl[Math.max(0, Math.min(pl.length - 1, Math.round(t * (pl.length - 1))))]; }
+function plYAt(pl, x) {           // polyline monotonic in x
+  if (x < pl[0][0] || x > pl[pl.length - 1][0]) return null;
+  for (let i = 0; i + 1 < pl.length; i++) {
+    const a = pl[i], b = pl[i + 1];
+    if (x >= a[0] && x <= b[0]) return b[0] === a[0] ? a[1] : a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]);
+  }
+  return null;
+}
+
+// ---------- element emitters ----------
+function pathEl(d, sw, fill) { return '<path d="' + d + '" fill="' + (fill || 'none') + '" stroke-width="' + sw + '"/>'; }
+function lineEl(a, b, sw) { bb(a); bb(b); return '<line x1="' + fmt(a[0]) + '" y1="' + fmt(a[1]) + '" x2="' + fmt(b[0]) + '" y2="' + fmt(b[1]) + '" stroke-width="' + sw + '"/>'; }
+function polylineEl(pts, sw) { pts.forEach(bb); return '<polyline points="' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' ') + '" fill="none" stroke-width="' + sw + '"/>'; }
+function circleEl(c, r, sw, fill) { bb([c[0] - r, c[1] - r]); bb([c[0] + r, c[1] + r]); return '<circle cx="' + fmt(c[0]) + '" cy="' + fmt(c[1]) + '" r="' + fmt(r) + '" fill="' + (fill || 'none') + '" stroke-width="' + sw + '"/>'; }
+function bowLine(y, hw, bow, sw) {
+  return pathEl(cubicBezierPath([[-hw, y], [-hw * 0.35, y + bow], [hw * 0.35, y + bow], [hw, y]], false), sw);
+}
+
+// ---------- body part from a half-width profile ----------
+// anchors: [[t, f], ...]  t = 0..1 top->bottom, f = fraction of maxHw
+function bodyPart(yTop, length, maxHw, anchors, tension) {
+  const right = anchors.map(a => [a[1] * maxHw, yTop + a[0] * length]);
+  const pts = right.slice();
+  for (let i = right.length - 1; i >= 0; i--) if (right[i][0] > 0.01) pts.push([-right[i][0], right[i][1]]);
+  const bz = catmullRomToBezier(pts, true, tension);
+  const samples = sampleBezier(bz, 10);
+  function hwAt(y) {
+    let best = 0;
+    for (let i = 0; i + 1 < samples.length; i++) {
+      const a = samples[i], b = samples[i + 1];
+      if ((a[1] <= y && y <= b[1]) || (b[1] <= y && y <= a[1])) {
+        const x = b[1] === a[1] ? Math.max(a[0], b[0]) : a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]);
+        if (x > best) best = x;
+      }
+    }
+    return best;
+  }
+  return { path: cubicBezierPath(bz, true), samples, hwAt, yTop, yBot: yTop + length, length, maxHw,
+           yAt: t => yTop + t * length };
+}
+// shape with a straight inner edge on the centre line (elytron, tegmen)
+function halfShield(pts) {
+  const bz = catmullRomToBezier(pts, false, 1);
+  return cubicBezierPath(bz, false) + ' Z';
+}
+
+// ---------- limb segment: tapered, bowed, rounded ends, white fill ----------
+function limbSegment(A, B, w1, w2, bow) {
+  const d = norm(sub(B, A)), n = perp(d), L = vlen(sub(B, A));
+  const a1 = add(A, mul(n, w1 / 2)), a2 = sub(A, mul(n, w1 / 2));
+  const b1 = add(B, mul(n, w2 / 2)), b2 = sub(B, mul(n, w2 / 2));
+  const k = L * 0.35, bv = mul(n, bow);
+  const pts = [
+    a1,
+    add(add(a1, mul(d, k)), bv), add(sub(b1, mul(d, k)), bv), b1,
+    add(b1, mul(d, w2 * 0.55)), add(b2, mul(d, w2 * 0.55)), b2,
+    add(sub(b2, mul(d, k)), bv), add(add(a2, mul(d, k)), bv), a2,
+    sub(a2, mul(d, w1 * 0.55)), sub(a1, mul(d, w1 * 0.55)), a1,
+  ];
+  return pathEl(cubicBezierPath(pts, true), SW.O, '#fff');
+}
+
+// ---------- eyes ----------
+function eyeEls(c, rx, ry) {
+  const els = [pathEl(ellipsePath(c, rx, ry, 0), SW.D, '#fff')];
+  const step = 2.4 / ((rx + ry) / 2);
+  for (const ang of [50 * D2R, -50 * D2R]) {
+    const t = [Math.cos(ang), Math.sin(ang)], n = [-Math.sin(ang), Math.cos(ang)];
+    for (let d = -1 + step * 0.6; d < 1; d += step) {
+      const h = Math.sqrt(1 - d * d) * 0.93;
+      const p1 = add(mul(n, d), mul(t, -h)), p2 = add(mul(n, d), mul(t, h));
+      els.push(lineEl([c[0] + rx * p1[0], c[1] + ry * p1[1]], [c[0] + rx * p2[0], c[1] + ry * p2[1]], SW.F));
+    }
+  }
+  return els;
+}
+
+// ---------- antennae (right side) ----------
+function shaftPoints(base, dirDeg, length, curveDeg, n) {
+  const pts = []; let p = base, a = dirDeg;
+  for (let i = 0; i <= n; i++) { pts.push(p); p = add(p, mul(dirv(a), length / n)); a += curveDeg / n; }
+  return pts;
+}
+function antennaEls(kind, base, len) {
+  const els = [];
+  if (kind === 'filiform' || kind === 'beaded') {
+    const pts = shaftPoints(base, randRange(-65, -45), len, randRange(-45, -5), 14);
+    els.push(pathEl(smoothPath(pts, false), SW.D));
+    if (kind === 'beaded') {
+      const pl = sampleSmooth(pts, false, 1, 6);
+      for (let i = 4; i < pl.length - 1; i += 3) {
+        const d = norm(sub(pl[i + 1], pl[i - 1])), n = perp(d);
+        els.push(lineEl(add(pl[i], mul(n, 1.6)), sub(pl[i], mul(n, 1.6)), SW.F));
+      }
+    }
+  } else if (kind === 'clubbed') {
+    const pts = shaftPoints(base, randRange(-70, -50), len, randRange(-35, -10), 14);
+    els.push(pathEl(smoothPath(pts, false), SW.D));
+    const tip = pts[pts.length - 1], d = norm(sub(tip, pts[pts.length - 2]));
+    const ang = Math.atan2(d[1], d[0]) / D2R;
+    els.push(pathEl(ellipsePath(add(tip, mul(d, 3)), 5.5, 2.6, ang), SW.D, '#fff'));
+  } else if (kind === 'feathered') {
+    const pts = shaftPoints(base, randRange(-80, -55), len, randRange(-30, -5), 14);
+    els.push(pathEl(smoothPath(pts, false), SW.D));
+    const pl = sampleSmooth(pts, false, 1, 8);
+    const maxB = len * randRange(0.16, 0.24), bothSides = rng() < 0.5;
+    let side = 1;
+    for (let i = 2; i < pl.length - 1; i += 2) {
+      const u = i / pl.length;
+      const d = norm(sub(pl[i + 1], pl[i - 1])), n = perp(d);
+      const bl = maxB * Math.pow(1 - u, 0.6) * Math.min(1, u * 6 + 0.15);
+      const dir = norm(add(mul(n, side), mul(d, 0.45)));   // swept toward the tip
+      els.push(lineEl(pl[i], add(pl[i], mul(dir, bl)), SW.F));
+      if (bothSides) { const dir2 = norm(add(mul(n, -side), mul(d, 0.45))); els.push(lineEl(pl[i], add(pl[i], mul(dir2, bl * 0.9)), SW.F)); }
+      side = -side;
+    }
+  } else if (kind === 'elbowed') {
+    const d0 = randRange(-45, -25), L1 = len * 0.42;
+    const elbow = add(base, mul(dirv(d0), L1));
+    els.push(limbSegment(base, elbow, 3, 2.6, 0));
+    const d1 = d0 - randRange(65, 85);
+    const pts = shaftPoints(elbow, d1, len * 0.58, randRange(-25, 5), 10);
+    const pl = sampleSmooth(pts, false, 1, 5);
+    // flagellum as a thin tapered (clubbed) outline following the curve
+    const left = [], right = [];
+    for (let i = 0; i < pl.length; i++) {
+      const u = i / (pl.length - 1), w = lerp(2.4, 4.2, u) * (u > 0.92 ? (1 - u) / 0.08 * 0.6 + 0.4 : 1);
+      const d = norm(sub(pl[Math.min(i + 1, pl.length - 1)], pl[Math.max(i - 1, 0)])), n = perp(d);
+      left.push(add(pl[i], mul(n, w / 2))); right.push(sub(pl[i], mul(n, w / 2)));
+    }
+    els.push(pathEl(smoothPath(left.concat(right.reverse()), true, 0.8), SW.D, '#fff'));
+    for (let i = 2; i < pl.length - 1; i += 2) {
+      const d = norm(sub(pl[i + 1], pl[i - 1])), n = perp(d), w = lerp(2.4, 4.2, i / pl.length);
+      els.push(lineEl(add(pl[i], mul(n, w / 2)), sub(pl[i], mul(n, w / 2)), SW.F));
+    }
+  }
+  return els;
+}
+
+// ---------- legs (right side) ----------
+function legEls(attach, spec, meta) {
+  const els = []; let p = attach;
+  const dirs = spec.dirs, lens = spec.lens, ws = spec.widths;
+  for (let k = 0; k < 3; k++) {                       // coxa, femur, tibia
+    const q = add(p, mul(dirv(dirs[k]), lens[k]));
+    const bow = k === 0 ? 0 : lens[k] * 0.07 * (spec.bowSign || 1);
+    els.push(limbSegment(p, q, ws[k][0], ws[k][1], bow));
+    if (k === 2 && spec.spines) {
+      const d = dirv(dirs[k]), n = perp(d);
+      const outer = Math.abs(add(p, mul(n, 5))[0]) > Math.abs(sub(p, mul(n, 5))[0]) ? 1 : -1;
+      const kk = lens[k] * 0.35, bowV = mul(n, bow);
+      const e0 = add(p, mul(n, outer * ws[k][0] / 2)), e3 = add(q, mul(n, outer * ws[k][1] / 2));
+      const e1 = add(add(e0, mul(d, kk)), bowV), e2 = add(sub(e3, mul(d, kk)), bowV);
+      for (let s = 0.25; s < 0.95; s += 7 / lens[k]) {
+        const u = 1 - s;
+        const base = [u * u * u * e0[0] + 3 * u * u * s * e1[0] + 3 * u * s * s * e2[0] + s * s * s * e3[0],
+                      u * u * u * e0[1] + 3 * u * u * s * e1[1] + 3 * u * s * s * e2[1] + s * s * s * e3[1]];
+        els.push(lineEl(base, add(base, add(mul(n, outer * 3.5), mul(d, 2.5))), SW.D));
+      }
+    }
+    p = q;
+  }
+  // tarsus: 4 tarsomeres curling, then claws
+  let a = dirs[3]; const tl = lens[3];
+  const fr = [0.3, 0.27, 0.23, 0.2];
+  for (let k = 0; k < 4; k++) {
+    const q = add(p, mul(dirv(a), tl * fr[k]));
+    els.push(limbSegment(p, q, ws[3][0] - k * 0.35, ws[3][0] - (k + 1) * 0.35, 0));
+    p = q; a += spec.curl;
+  }
+  for (const s of [-28, 28]) els.push(lineEl(p, add(p, mul(dirv(a + s), 4)), SW.D));
+  if (meta) meta.push({ x: attach[0], y: attach[1], tip: p });
+  return els;
+}
+
+// ---------- wings ----------
+function makeWing(base, thetaDeg, localPts, tension) {
+  const th = thetaDeg * D2R;
+  const T = p => add(base, rot(p, th));
+  const worldPts = localPts.map(T);
+  const localPoly = sampleSmooth(localPts, true, tension, 8);
+  return {
+    path: smoothPath(worldPts, true, tension),
+    T, localPoly, localPts,
+    inside: p => pointInPoly(p, localPoly),
+    yRange: x => outlineYRange(localPoly, x),
+  };
+}
+function marginTargets(poly, origin, N, xMin) {
+  const cands = poly.filter(p => p[0] >= xMin)
+    .map(p => ({ p, a: Math.atan2(p[1] - origin[1], p[0] - origin[0]) }))
+    .sort((a, b) => a.a - b.a);
+  const out = [];
+  if (!cands.length) return out;
+  for (let i = 0; i < N; i++) out.push(cands[Math.floor((i + 0.5) / N * (cands.length - 1))].p);
+  return out;
+}
+// radiating veins: returns array of local polylines
+function radiatingVeins(wing, origin, N, xMin, bow) {
+  return marginTargets(wing.localPoly, origin, N, xMin).map(tg => {
+    const mid = lerpP(origin, tg, 0.5), n = perp(norm(sub(tg, origin)));
+    return sampleSmooth([origin, add(mid, mul(n, randRange(-bow, bow))), tg], false, 1, 10);
+  });
+}
+function emitLocalPolyline(wing, pl, sw) { return polylineEl(pl.map(wing.T), sw); }
+function scatterDots(wing, n, rMin, rMax, margin) {
+  const els = [], poly = wing.localPoly;
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of poly) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
+  let tries = 0, made = 0;
+  while (made < n && tries < n * 20) {
+    tries++;
+    const p = [randRange(minX, maxX), randRange(minY, maxY)];
+    if (!wing.inside(p)) continue;
+    const yr = wing.yRange(p[0]);
+    if (yr && (p[1] - yr[0] < margin || yr[1] - p[1] < margin)) continue;
+    els.push(circleEl(wing.T(p), randRange(rMin, rMax), SW.F));
+    made++;
+  }
+  return els;
+}
+
+// ============================================================
+//  generateInsect
+// ============================================================
+const TYPES = ['beetle', 'moth', 'fly', 'bee', 'dragonfly', 'grasshopper'];
+
+function generateInsectDetailed(seed) {
+  seed = seed >>> 0;
+  rng = mulberry32(seed);
+  bbox = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
+  const type = pick(TYPES);
+  const L = { wings: [], abdomen: [], covers: [], thoraxHead: [], legs: [], antennae: [] };
+  const meta = { seed, type, variant: null, legs: [] };
+
+  // ---------- proportions ----------
+  const P = {};
+  P.variant = null;
+  P.subSeg = randInt(1, 3);
+  P.abdSeg = randInt(4, 8);
+  P.abdOverlap = 8;
+  switch (type) {
+    case 'beetle':
+      Object.assign(P, { headW: 44 * jitter(0.15), headH: 34 * jitter(0.15), thoraxW: 92 * jitter(0.12), thoraxLen: 58 * jitter(0.15),
+        abdW: 100 * jitter(0.12), abdLen: 175 * jitter(0.15), legScale: 1.0 * jitter(0.1),
+        thoraxAnchors: [[0, 0.55], [0.35, 0.95], [0.75, 1], [1, 0.88]],
+        abdAnchors: [[0, 0.8], [0.3, 1], [0.7, 0.9], [0.92, 0.5], [1, 0]],
+        antenna: pick(['feathered', 'beaded', 'beaded']), antLen: 70 * jitter(0.2), subSeg: 1 });
+      break;
+    case 'moth':
+      P.variant = rng() < 0.4 ? 'butterfly' : 'moth';
+      Object.assign(P, { headW: 28 * jitter(0.12), headH: 26 * jitter(0.12), thoraxW: (P.variant === 'moth' ? 52 : 40) * jitter(0.12), thoraxLen: 58 * jitter(0.12),
+        abdW: (P.variant === 'moth' ? 44 : 30) * jitter(0.12), abdLen: (P.variant === 'moth' ? 140 : 150) * jitter(0.12), legScale: 0.8 * jitter(0.1),
+        thoraxAnchors: [[0, 0.5], [0.3, 1], [0.8, 0.9], [1, 0.55]],
+        abdAnchors: P.variant === 'moth' ? [[0, 0.75], [0.3, 1], [0.65, 0.9], [0.9, 0.55], [1, 0]] : [[0, 0.8], [0.3, 1], [0.7, 0.85], [0.95, 0.4], [1, 0]],
+        antenna: P.variant === 'moth' ? 'feathered' : 'clubbed', antLen: (P.variant === 'moth' ? 70 : 90) * jitter(0.15),
+        wingSpan: (P.variant === 'moth' ? 165 : 180) * jitter(0.1) });
+      break;
+    case 'fly':
+      Object.assign(P, { headW: 52 * jitter(0.12), headH: 38 * jitter(0.12), thoraxW: 58 * jitter(0.12), thoraxLen: 60 * jitter(0.12),
+        abdW: 54 * jitter(0.15), abdLen: 110 * jitter(0.15), legScale: 0.95 * jitter(0.1),
+        thoraxAnchors: [[0, 0.6], [0.3, 1], [0.75, 0.95], [1, 0.6]],
+        abdAnchors: [[0, 0.75], [0.25, 1], [0.6, 0.9], [0.85, 0.55], [1, 0]],
+        antenna: 'filiform', antLen: 22 * jitter(0.2) });
+      break;
+    case 'bee':
+      Object.assign(P, { headW: 42 * jitter(0.12), headH: 34 * jitter(0.12), thoraxW: 60 * jitter(0.12), thoraxLen: 64 * jitter(0.12),
+        abdW: 58 * jitter(0.12), abdLen: 150 * jitter(0.15), legScale: 1.0 * jitter(0.1), abdOverlap: 1,
+        thoraxAnchors: [[0, 0.55], [0.35, 1], [0.8, 0.9], [1, 0.5]],
+        abdAnchors: [[0, 0.22], [0.1, 0.35], [0.3, 0.95], [0.55, 1], [0.8, 0.7], [0.95, 0.3], [1, 0]],
+        antenna: 'elbowed', antLen: 60 * jitter(0.15), abdSeg: randInt(5, 7) });
+      break;
+    case 'dragonfly':
+      Object.assign(P, { headW: 50 * jitter(0.12), headH: 28 * jitter(0.12), thoraxW: 46 * jitter(0.12), thoraxLen: 72 * jitter(0.12),
+        abdW: 22 * jitter(0.15), abdLen: 250 * jitter(0.12), legScale: 0.62 * jitter(0.1),
+        thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.6]],
+        abdAnchors: [[0, 0.85], [0.1, 1], [0.5, 0.9], [0.85, 0.85], [0.97, 0.7], [1, 0]],
+        antenna: 'filiform', antLen: 12 * jitter(0.2), abdSeg: 8, wingLen: 235 * jitter(0.08) });
+      break;
+    case 'grasshopper':
+      Object.assign(P, { headW: 38 * jitter(0.12), headH: 42 * jitter(0.12), thoraxW: 50 * jitter(0.12), thoraxLen: 66 * jitter(0.12),
+        abdW: 48 * jitter(0.12), abdLen: 190 * jitter(0.12), legScale: 0.85 * jitter(0.1),
+        thoraxAnchors: [[0, 0.6], [0.3, 0.95], [0.7, 1], [1, 0.85]],
+        abdAnchors: [[0, 0.85], [0.2, 1], [0.55, 0.95], [0.85, 0.6], [0.97, 0.3], [1, 0]],
+        antenna: 'filiform', antLen: 95 * jitter(0.2), subSeg: 3, abdSeg: randInt(6, 8) });
+      break;
+  }
+  meta.variant = P.variant;
+  // organic irregularity on profiles
+  const wobble = a => a.map(([t, f]) => [t, f === 0 ? 0 : f * jitter(0.03)]);
+  P.thoraxAnchors = wobble(P.thoraxAnchors);
+  P.abdAnchors = wobble(P.abdAnchors);
+
+  // ---------- layout ----------
+  const headTop = 0, headCy = P.headH / 2;
+  const thorax = bodyPart(P.headH * 0.8, P.thoraxLen, P.thoraxW / 2, P.thoraxAnchors);
+  const abdomen = bodyPart(thorax.yBot - P.abdOverlap, P.abdLen, P.abdW / 2, P.abdAnchors);
+  const abdHW = P.abdW / 2;
+  meta.thorax = { yTop: thorax.yTop, yBot: thorax.yBot };
+
+  // ---------- abdomen + details ----------
+  L.abdomen.push(pathEl(abdomen.path, SW.O, '#fff'));
+  {
+    const n = P.abdSeg, startT = type === 'bee' ? 0.22 : 0.08;
+    const ys = [];
+    for (let i = 0; i <= n; i++) ys.push(abdomen.yAt(startT + (1 - startT) * i / n));
+    for (let i = 1; i < n; i++) {
+      const y = ys[i], hw = abdomen.hwAt(y);
+      if (hw < 2) continue;
+      L.abdomen.push(bowLine(y, hw - 0.5, hw * 0.18, SW.D));
+    }
+    // hatching: fine curves parallel to each boundary, plus bee stripes
+    for (let i = 0; i < n; i++) {
+      const y0 = ys[i], y1 = ys[i + 1], segH = y1 - y0;
+      if (type === 'bee' && i % 2 === 1) {
+        for (let y = y0 + 3; y < y1 - 2; y += 2.2) { const hw = abdomen.hwAt(y) - 2; if (hw > 2) L.abdomen.push(bowLine(y, hw, hw * 0.18, SW.F)); }
+      } else {
+        const k = Math.min(3, Math.floor(segH / 4));
+        for (let j = 1; j <= k; j++) {
+          const y = y1 - j * 3; const hw = abdomen.hwAt(y) - 3;
+          if (hw > 3) L.abdomen.push(bowLine(y, hw, hw * 0.18, SW.F));
+        }
+      }
+      // side texture ticks
+      if (type !== 'bee') {
+        for (let y = y0 + 4; y < y1 - 3; y += 3) {
+          const hw = abdomen.hwAt(y);
+          if (hw > 6) { L.abdomen.push(lineEl([hw - 1, y], [hw - 5, y + 0.6], SW.F)); L.abdomen.push(lineEl([-hw + 1, y], [-hw + 5, y + 0.6], SW.F)); }
+        }
+      }
+    }
+    if (type === 'dragonfly') {
+      L.abdomen.push(lineEl([0, abdomen.yTop + 4], [0, abdomen.yBot - 6], SW.F));
+      const tipY = abdomen.yBot;
+      L.abdomen.push(lineEl([2, tipY - 4], [5, tipY + 9], SW.D));
+      L.abdomen.push(lineEl([-2, tipY - 4], [-5, tipY + 9], SW.D));
+    }
+    if (type === 'grasshopper') {
+      const tipY = abdomen.yBot;
+      L.abdomen.push(lineEl([3, tipY - 6], [6, tipY + 6], SW.D));
+      L.abdomen.push(lineEl([-3, tipY - 6], [-6, tipY + 6], SW.D));
+    }
+  }
+
+  // ---------- thorax + head ----------
+  L.thoraxHead.push(pathEl(thorax.path, SW.O, '#fff'));
+  {
+    const sub = P.subSeg, t0 = thorax.yTop, len = thorax.length;
+    for (let i = 1; i < sub; i++) { const y = t0 + len * i / sub, hw = thorax.hwAt(y); L.thoraxHead.push(bowLine(y, hw - 0.5, hw * 0.15, SW.D)); }
+    if (type === 'beetle') {
+      L.thoraxHead.push(lineEl([0, t0 + len * 0.12], [0, t0 + len * 0.95], SW.F));
+      const hw1 = thorax.hwAt(t0 + len * 0.3);
+      L.thoraxHead.push(pathEl(cubicBezierPath([[-hw1 * 0.55, t0 + len * 0.12], [-hw1 * 0.3, t0 + len * 0.06], [hw1 * 0.3, t0 + len * 0.06], [hw1 * 0.55, t0 + len * 0.12]], false), SW.D));
+      for (const s of [-1, 1]) L.thoraxHead.push(pathEl(cubicBezierPath([[s * hw1 * 0.75, t0 + len * 0.25], [s * hw1 * 0.9, t0 + len * 0.5], [s * hw1 * 0.8, t0 + len * 0.75], [s * hw1 * 0.6, t0 + len * 0.9]], false), SW.F));
+    } else if (type === 'grasshopper') {
+      L.thoraxHead.push(lineEl([0, t0 + len * 0.08], [0, t0 + len * 0.96], SW.D));
+      const hwB = thorax.hwAt(t0 + len * 0.9);
+      for (const s of [-1, 1]) L.thoraxHead.push(pathEl(cubicBezierPath([[s * hwB * 0.45, t0 + len * 0.5], [s * hwB * 0.6, t0 + len * 0.75], [s * hwB * 0.7, t0 + len * 0.9], [s * hwB * 0.75, t0 + len * 1.0]], false), SW.F));
+    } else if (type === 'dragonfly') {
+      const hwM = thorax.hwAt(t0 + len * 0.5);
+      for (const s of [-1, 1]) {
+        L.thoraxHead.push(lineEl([s * hwM * 0.25, t0 + len * 0.3], [s * hwM * 0.85, t0 + len * 0.72], SW.D));
+        L.thoraxHead.push(lineEl([s * hwM * 0.35, t0 + len * 0.18], [s * hwM * 0.95, t0 + len * 0.6], SW.F));
+      }
+      L.thoraxHead.push(bowLine(t0 + len * 0.3, hwM * 0.9, hwM * 0.2, SW.D));
+    } else {
+      const yA = t0 + len * 0.38, yB = t0 + len * 0.72;
+      L.thoraxHead.push(bowLine(yA, thorax.hwAt(yA) - 0.5, thorax.hwAt(yA) * 0.25, SW.D));
+      L.thoraxHead.push(bowLine(yB, thorax.hwAt(yB) - 0.5, thorax.hwAt(yB) * 0.2, SW.D));
+      // scutellum
+      const hwB = thorax.hwAt(yB);
+      L.thoraxHead.push(pathEl(cubicBezierPath([[-hwB * 0.3, thorax.yBot - 4], [-hwB * 0.15, thorax.yBot + 6], [hwB * 0.15, thorax.yBot + 6], [hwB * 0.3, thorax.yBot - 4]], false), SW.D));
+      if (type === 'moth') {   // fuzzy thorax: ticks around the edge
+        for (let y = t0 + 6; y < thorax.yBot - 4; y += 3.2) { const hw = thorax.hwAt(y); for (const s of [-1, 1]) L.thoraxHead.push(lineEl([s * (hw - 0.5), y], [s * (hw - 4), y + 1.2], SW.F)); }
+      }
+    }
+    if (type === 'beetle') {   // scutellum triangle sits over the elytra junction
+      L.thoraxHead.push(pathEl(cubicBezierPath([[-7, thorax.yBot - 3], [-3, thorax.yBot + 9], [3, thorax.yBot + 9], [7, thorax.yBot - 3], [4, thorax.yBot - 4], [-4, thorax.yBot - 4], [-7, thorax.yBot - 3]], true), SW.D, '#fff'));
+    }
+  }
+  // head
+  const hr = { x: P.headW / 2, y: P.headH / 2 };
+  L.thoraxHead.push(pathEl(ellipsePath([0, headCy], hr.x, hr.y, 0), SW.O, '#fff'));
+  {
+    const E = { beetle: [0.36, 0.12, 0.24], moth: [0.34, 0.14, 0.27], fly: [0.3, 0.2, 0.4], bee: [0.34, 0.13, 0.33], dragonfly: [0.25, 0.24, 0.42], grasshopper: [0.33, 0.13, 0.28] }[type];
+    for (const s of [-1, 1]) L.thoraxHead.push(...eyeEls([s * P.headW * E[0], headCy - P.headH * 0.03], P.headW * E[1], P.headH * E[2]));
+    if (type !== 'beetle' && type !== 'moth') {   // ocelli
+      L.thoraxHead.push(circleEl([0, headCy - P.headH * 0.18], 1.3, SW.D));
+      L.thoraxHead.push(circleEl([-P.headW * 0.09, headCy - P.headH * 0.08], 1.3, SW.D));
+      L.thoraxHead.push(circleEl([P.headW * 0.09, headCy - P.headH * 0.08], 1.3, SW.D));
+    }
+    if (type === 'beetle' || type === 'grasshopper') {   // mandibles
+      for (const s of [-1, 1]) L.thoraxHead.push(pathEl(cubicBezierPath([[s * P.headW * 0.16, headTop + 2], [s * P.headW * 0.14, headTop - 4], [s * P.headW * 0.07, headTop - 7], [s * P.headW * 0.02, headTop - 6]], false), SW.D));
+    }
+    if (type === 'bee' || type === 'fly') {   // clypeus line
+      L.thoraxHead.push(bowLine(headCy - P.headH * 0.28, P.headW * 0.16, -P.headH * 0.08, SW.F));
+    }
+  }
+
+  // ---------- antennae ----------
+  {
+    const base = [P.headW * (type === 'dragonfly' ? 0.12 : 0.2), headTop + P.headH * (type === 'grasshopper' ? 0.35 : 0.28)];
+    L.antennae.push(...antennaEls(P.antenna, base, P.antLen));
+  }
+
+  // ---------- legs ----------
+  {
+    const u = P.legScale * (thorax.length / 60);
+    const widths = type === 'beetle' ? [[7, 6], [8.5, 6], [6, 3.5], [3.4, 2]] : [[6, 5], [7, 5], [5, 3], [3, 1.8]];
+    let specs;
+    if (type === 'dragonfly') {
+      specs = [
+        { t: 0.16, dirs: [-60, -55, -120, -130], lens: [8, 36, 36, 18] },
+        { t: 0.3, dirs: [-30, -25, -95, -105], lens: [8, 42, 42, 20] },
+        { t: 0.46, dirs: [5, 10, -55, -70], lens: [8, 48, 48, 22] },
+      ];
+    } else {
+      specs = [
+        { t: 0.25, dirs: [-50, -45, -105, -120], lens: [10, 42, 40, 22] },
+        { t: 0.55, dirs: [-10, -5, 50, 70], lens: [10, 48, 46, 24] },
+        { t: 0.85, dirs: [25, 35, 85, 100], lens: [10, 55, 55, 26] },
+      ];
+      if (type === 'grasshopper') specs[2] = { t: 0.85, dirs: [30, 55, 92, 100], lens: [12, 95, 95, 30] };
+    }
+    const legMeta = [];
+    for (let i = specs.length - 1; i >= 0; i--) {     // hind first so front overlaps
+      const s = specs[i];
+      const y = thorax.yAt(s.t), hw = thorax.hwAt(y);
+      const attach = [hw - 3, y];
+      const dirJ = randRange(-6, 6);
+      const spec = {
+        dirs: s.dirs.map(d => d + dirJ),
+        lens: s.lens.map((l, k) => l * (k === 0 ? 1 : u) * jitter(0.08)),
+        widths: widths.map(w => w.slice()),
+        curl: randRange(8, 14), spines: false, bowSign: 1,
+      };
+      if (type === 'grasshopper' && i === 2) { spec.widths[1] = [16, 7]; spec.widths[2] = [5.5, 3]; spec.spines = true; spec.lens[0] = 12; }
+      if (type === 'bee' && i === 2) { spec.widths[2] = [8, 6]; spec.spines = true; }
+      if (type === 'bee' && i === 1) spec.spines = true;
+      if (type === 'fly') spec.widths = spec.widths.map(w => [w[0] * 0.8, w[1] * 0.8]);
+      L.legs.push(...legEls(attach, spec, legMeta));
+      legMeta[legMeta.length - 1].hw = hw;
+      legMeta[legMeta.length - 1].pair = ['front', 'mid', 'hind'][i];
+    }
+    meta.legs = legMeta;
+  }
+
+  // ---------- wings / covers ----------
+  if (type === 'moth') {
+    const isB = P.variant === 'butterfly';
+    const W = P.wingSpan, H = W * (isB ? 0.95 : 0.8);
+    const by = thorax.yAt(0.35), bx = thorax.hwAt(by) * 0.5;
+    const j = () => jitter(0.04);
+    let fwPts, hwPts;
+    if (isB) {
+      fwPts = [[0, 0], [W * 0.45 * j(), -H * 0.5 * j()], [W * 0.78 * j(), -H * 0.62 * j()], [W * 0.95, -H * 0.58 * j()], [W * 1.0 * j(), -H * 0.3 * j()],
+        [W * 0.93 * j(), -H * 0.02], [W * 0.78 * j(), H * 0.25 * j()], [W * 0.52 * j(), H * 0.42 * j()], [W * 0.25, H * 0.33]];
+      hwPts = [[0, 8], [W * 0.4 * j(), H * 0.02], [W * 0.68 * j(), H * 0.15 * j()], [W * 0.7 * j(), H * 0.45 * j()], [W * 0.5 * j(), H * 0.68 * j()], [W * 0.28 * j(), H * 0.74 * j()], [W * 0.06, H * 0.5]];
+    } else {
+      fwPts = [[0, 0], [W * 0.5 * j(), -H * 0.38 * j()], [W * 0.85 * j(), -H * 0.48 * j()], [W * 1.0, -H * 0.42 * j()], [W * 0.95 * j(), -H * 0.15 * j()],
+        [W * 0.82 * j(), H * 0.15 * j()], [W * 0.58 * j(), H * 0.38 * j()], [W * 0.3, H * 0.3]];
+      hwPts = [[0, 8], [W * 0.4 * j(), -H * 0.02], [W * 0.68 * j(), H * 0.12 * j()], [W * 0.66 * j(), H * 0.42 * j()], [W * 0.45 * j(), H * 0.65 * j()], [W * 0.22 * j(), H * 0.7 * j()], [W * 0.05, H * 0.5]];
+    }
+    // scalloped outer margin
+    if (rng() < (isB ? 0.6 : 0.3)) {
+      const out = [];
+      for (let i = 0; i < fwPts.length; i++) {
+        out.push(fwPts[i]);
+        if (i >= 3 && i <= 6) { const m = lerpP(fwPts[i], fwPts[(i + 1) % fwPts.length], 0.5); out.push(mul(m, 0.975)); }
+      }
+      fwPts = out;
+    }
+    const base = [bx, by];
+    const fore = makeWing(base, 0, fwPts, 1), hind = makeWing(base, 0, hwPts, 1);
+    const origin = [W * 0.04, H * 0.03];
+    // hindwing
+    L.wings.push(pathEl(hind.path, SW.O, '#fff'));
+    for (const v of radiatingVeins(hind, [W * 0.06, H * 0.15], randInt(2, 4), W * 0.3, H * 0.03)) L.wings.push(emitLocalPolyline(hind, v, SW.D));
+    L.wings.push(...scatterDots(hind, randInt(6, 18), 0.7, 1.4, 4));
+    // forewing
+    L.wings.push(pathEl(fore.path, SW.O, '#fff'));
+    const veins = radiatingVeins(fore, origin, randInt(3, 5), W * 0.55, H * 0.03);
+    for (const v of veins) L.wings.push(emitLocalPolyline(fore, v, SW.D));
+    const ct = randRange(0.4, 0.5);
+    for (let i = 0; i + 1 < veins.length; i++) L.wings.push(lineEl(fore.T(plAt(veins[i], ct)), fore.T(plAt(veins[i + 1], ct)), SW.D));
+    // bands: wavy lines roughly parallel to the outer margin
+    const nb = randInt(1, 2);
+    for (let b = 0; b < nb; b++) {
+      const tb = 0.62 + b * 0.18 + randRange(-0.04, 0.04);
+      const pts = veins.map(v => plAt(v, tb + randRange(-0.03, 0.03)));
+      if (pts.length < 2) break;
+      const yr0 = fore.yRange(pts[0][0]), yr1 = fore.yRange(pts[pts.length - 1][0]);
+      const full = [];
+      if (yr0) full.push([pts[0][0], yr0[0] + 1]);
+      full.push(...pts);
+      if (yr1) full.push([pts[pts.length - 1][0], yr1[1] - 1]);
+      L.wings.push(pathEl(smoothPath(full.map(fore.T), false, 1), SW.F));
+    }
+    if (rng() < 0.55) {   // eyespot
+      const c = plAt(veins[Math.floor(veins.length / 2)], 0.6);
+      const r = randRange(5, 9);
+      if (fore.inside(add(c, [r + 2, 0])) && fore.inside(sub(c, [r + 2, 0])) && fore.inside(add(c, [0, r + 2])) && fore.inside(sub(c, [0, r + 2]))) {
+        L.wings.push(pathEl(ellipsePath(fore.T(c), r, r * 0.8, 0), SW.D));
+        L.wings.push(pathEl(ellipsePath(fore.T(c), r * 0.5, r * 0.4, 0), SW.D));
+      }
+    }
+    L.wings.push(...scatterDots(fore, randInt(15, 50), 0.7, 1.5, 4));
+  }
+
+  if (type === 'fly') {
+    const by = thorax.yAt(0.42), bx = thorax.hwAt(by) * 0.85;
+    const theta = randRange(30, 45);
+    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(1.1, 1.25);
+    const w = Lw * 0.36;
+    const pts = [[0, 0], [Lw * 0.25, -w * 0.42], [Lw * 0.6, -w * 0.5], [Lw * 0.9, -w * 0.35], [Lw, -w * 0.05], [Lw * 0.85, w * 0.35], [Lw * 0.5, w * 0.5], [Lw * 0.15, w * 0.3]];
+    const wing = makeWing([bx, by], theta, pts, 1);
+    L.wings.push(pathEl(wing.path, SW.O, '#fff'));
+    const veins = radiatingVeins(wing, [Lw * 0.04, -w * 0.02], randInt(3, 4), Lw * 0.5, w * 0.04);
+    for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, SW.D));
+    for (let i = 0; i + 1 < veins.length; i++) L.wings.push(lineEl(wing.T(plAt(veins[i], 0.5)), wing.T(plAt(veins[i + 1], 0.55)), SW.D));
+    // halteres
+    const hy = thorax.yAt(0.8), hx = thorax.hwAt(hy) * 0.8;
+    const hd = dirv(theta + 20);
+    L.wings.push(lineEl([hx, hy], add([hx, hy], mul(hd, 11)), SW.D));
+    L.wings.push(circleEl(add([hx, hy], mul(hd, 13)), 2.4, SW.D, '#fff'));
+  }
+
+  if (type === 'bee') {
+    const theta = randRange(38, 50);
+    const by = thorax.yAt(0.4), bx = thorax.hwAt(by) * 0.85;
+    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(0.92, 1.0);
+    const w = Lw * 0.3;
+    const fPts = [[0, 0], [Lw * 0.3, -w * 0.35], [Lw * 0.7, -w * 0.45], [Lw * 0.95, -w * 0.25], [Lw, w * 0.05], [Lw * 0.8, w * 0.4], [Lw * 0.45, w * 0.5], [Lw * 0.12, w * 0.25]];
+    const fore = makeWing([bx, by], theta, fPts, 1);
+    const hy = thorax.yAt(0.62), hx = thorax.hwAt(hy) * 0.85;
+    const Lh = Lw * 0.62, wh = w * 0.75;
+    const hPts = [[0, 0], [Lh * 0.3, -wh * 0.35], [Lh * 0.7, -wh * 0.45], [Lh, -wh * 0.05], [Lh * 0.8, wh * 0.4], [Lh * 0.45, wh * 0.5], [Lh * 0.12, wh * 0.25]];
+    const hind = makeWing([hx, hy], theta + 14, hPts, 1);
+    L.wings.push(pathEl(hind.path, SW.O, '#fff'));
+    for (const v of radiatingVeins(hind, [Lh * 0.04, 0], 2, Lh * 0.5, wh * 0.03)) L.wings.push(emitLocalPolyline(hind, v, SW.D));
+    L.wings.push(pathEl(fore.path, SW.O, '#fff'));
+    const veins = radiatingVeins(fore, [Lw * 0.04, 0], 3, Lw * 0.5, w * 0.03);
+    for (const v of veins) L.wings.push(emitLocalPolyline(fore, v, SW.D));
+    for (const st of [0.35, 0.62]) for (let i = 0; i + 1 < veins.length; i++) L.wings.push(lineEl(fore.T(plAt(veins[i], st)), fore.T(plAt(veins[i + 1], st + 0.06)), SW.D));
+    // leading-edge (costal) vein
+    const costa = sampleSmooth([[Lw * 0.02, -w * 0.05], [Lw * 0.45, -w * 0.3], [Lw * 0.9, -w * 0.25]], false, 1, 8);
+    L.wings.push(emitLocalPolyline(fore, costa, SW.D));
+  }
+
+  if (type === 'dragonfly') {
+    const Lw = P.wingLen;
+    const wingDefs = [
+      { t: 0.5, theta: randRange(-10, -3), w: Lw * 0.19, baseW: 0.14, hind: false },
+      { t: 0.8, theta: randRange(6, 14), w: Lw * 0.24, baseW: 0.3, hind: true },
+    ];
+    for (const wd of wingDefs) {
+      const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * 0.6;
+      const w = wd.w;
+      const pts = [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.5, -w * 0.5], [Lw * 0.88, -w * 0.42], [Lw, -w * 0.05], [Lw * 0.92, w * 0.33], [Lw * 0.6, w * 0.5],
+        [Lw * 0.25, w * (wd.hind ? 0.55 : 0.5)], [Lw * 0.06, w * (wd.hind ? 0.45 : 0.3)], [0, w * wd.baseW]];
+      const wing = makeWing([bx, by], wd.theta, pts, 0.9);
+      L.wings.push(pathEl(wing.path, SW.O, '#fff'));
+      // longitudinal veins: y(x) from base to margin targets
+      const nV = randInt(5, 7);
+      const targets = marginTargets(wing.localPoly, [Lw * 0.05, 0], nV, Lw * 0.55);
+      const veins = [];
+      for (let i = 0; i < nV; i++) {
+        const y0 = lerp(-w * 0.32, w * 0.3, i / (nV - 1)) * jitter(0.1);
+        const tg = targets[i];
+        if (!tg) continue;
+        const x0 = Lw * 0.03, pl = [];
+        const steps = 40;
+        for (let k = 0; k <= steps; k++) {
+          const x = x0 + (tg[0] - x0) * k / steps;
+          pl.push([x, y0 + (tg[1] - y0) * Math.pow(k / steps, 1.5)]);
+        }
+        veins.push(pl);
+      }
+      // forks
+      const nForks = randInt(1, 2);
+      for (let f = 0; f < nForks; f++) {
+        const parent = veins[randInt(0, veins.length - 1)];
+        const s = randRange(0.35, 0.55), start = plAt(parent, s);
+        const yr = wing.yRange(Lw * 0.97);
+        if (!yr) continue;
+        const tg = [Lw * 0.97, lerp(yr[0], yr[1], randRange(0.2, 0.8))];
+        const pl = []; const steps = 30;
+        for (let k = 0; k <= steps; k++) { const x = start[0] + (tg[0] - start[0]) * k / steps; pl.push([x, start[1] + (tg[1] - start[1]) * Math.pow(k / steps, 1.3)]); }
+        veins.push(pl);
+      }
+      for (const v of veins) L.wings.push(emitLocalPolyline(wing, v.filter(p => wing.inside(p) || p === v[v.length - 1]), SW.D));
+      // cross-veins: stations along x, cells subdivide toward the tip
+      let x = Lw * 0.07, cellIdx = 0;
+      while (x < Lw * 0.985) {
+        const step = Lw * (x < Lw * 0.6 ? 0.055 : 0.03) * randRange(0.75, 1.25);
+        const ys = [];
+        const yr = wing.yRange(x);
+        if (yr) {
+          ys.push(yr[0] + 0.3, yr[1] - 0.3);
+          for (const v of veins) { const y = plYAt(v, x); if (y !== null && y > yr[0] && y < yr[1]) ys.push(y); }
+          ys.sort((a, b) => a - b);
+          for (let i = 0; i + 1 < ys.length; i++) {
+            if (ys[i + 1] - ys[i] < 1.6) continue;
+            const xo = x + ((i + cellIdx) % 2) * step * 0.5;
+            const yrO = wing.yRange(xo);
+            if (!yrO) continue;
+            const yA = i === 0 ? yrO[0] + 0.3 : plYAt(veins.find(v => Math.abs((plYAt(v, x) ?? 1e9) - ys[i]) < 1e-6) || [[x, ys[i]], [x, ys[i]]], xo);
+            const yB = i + 1 === ys.length - 1 ? yrO[1] - 0.3 : plYAt(veins.find(v => Math.abs((plYAt(v, x) ?? 1e9) - ys[i + 1]) < 1e-6) || [[x, ys[i + 1]], [x, ys[i + 1]]], xo);
+            if (yA === null || yB === null || yB - yA < 1.2) continue;
+            L.wings.push(lineEl(wing.T([xo, yA]), wing.T([xo, yB]), SW.F));
+          }
+        }
+        x += step; cellIdx++;
+      }
+      // pterostigma: dense hatch cell near the tip on the leading edge
+      const psx0 = Lw * 0.8, psx1 = Lw * 0.88;
+      for (let px = psx0; px <= psx1; px += 1.3) {
+        const yr = wing.yRange(px); if (!yr) continue;
+        const y1 = plYAt(veins[0], px);
+        if (y1 === null) continue;
+        L.wings.push(lineEl(wing.T([px, yr[0] + 0.4]), wing.T([px, y1]), SW.F));
+      }
+    }
+  }
+
+  if (type === 'beetle') {
+    const top = thorax.yBot - 4;
+    const elen = P.abdLen * randRange(0.86, 1.0) + 4;
+    const eBot = top + elen;
+    const ew = abdHW * 1.03;
+    L.thoraxHead.push(lineEl([0, thorax.yBot + 10], [0, eBot - 3], SW.D));   // suture, drawn once above the elytra
+    if (eBot < abdomen.yBot - 8) {   // hindwing tips peeking out from under the elytra
+      const hwT = abdomen.hwAt(eBot + 4) * 0.9;
+      const t = [[hwT * 0.1, eBot - 12], [hwT * 0.95, eBot - 8], [hwT * 0.8, eBot + 5], [hwT * 0.15, eBot + 7]];
+      L.covers.push(pathEl(smoothPath(t, true, 1), SW.D, '#fff'));
+      for (let k = 1; k <= 2; k++) L.covers.push(pathEl(cubicBezierPath([[hwT * 0.2, eBot - 10 + k * 5], [hwT * 0.5, eBot - 9 + k * 5], [hwT * 0.75, eBot - 7 + k * 5], [hwT * 0.85, eBot - 3 + k * 5]], false), SW.F));
+    }
+    const outer = [[0, top], [ew * 0.5, top + 1], [ew * 0.98, top + elen * 0.1], [ew, top + elen * 0.45], [ew * 0.74, top + elen * 0.84], [ew * 0.28, top + elen * 0.985], [0, eBot]];
+    L.covers.push(pathEl(halfShield(outer), SW.O, '#fff'));
+    // striae (ridges) converging toward the apex
+    const nR = randInt(3, 5);
+    for (let k = 1; k <= nR; k++) {
+      const f = 1 - k / (nR + 1);
+      const pts = [[ew * 0.5 * f, top + 5], [ew * 0.98 * f, top + elen * 0.1], [ew * f, top + elen * 0.45], [ew * 0.74 * f, top + elen * 0.84], [ew * 0.28 * f, top + elen * 0.975]];
+      L.covers.push(pathEl(smoothPath(pts, false, 1), SW.F));
+    }
+    if (rng() < 0.5) {   // puncture rows between striae
+      const nPts = randInt(14, 22);
+      for (let k = 0; k <= nR; k++) {
+        const f = 1 - (k + 0.5) / (nR + 1);
+        const pts = [[ew * 0.5 * f, top + 8], [ew * 0.98 * f, top + elen * 0.1], [ew * f, top + elen * 0.45], [ew * 0.74 * f, top + elen * 0.84], [ew * 0.28 * f, top + elen * 0.95]];
+        const pl = sampleSmooth(pts, false, 1, 6);
+        for (let i = 0; i < nPts; i++) L.covers.push(circleEl(plAt(pl, (i + 0.5) / nPts), 0.8, SW.F));
+      }
+    }
+  }
+
+  if (type === 'grasshopper') {
+    const by = thorax.yBot - 6;
+    const Lt = P.abdLen * randRange(1.05, 1.18), wt = abdHW * 1.15;
+    if (rng() < 0.7) {   // folded hindwing fan peeking out
+      const fan = [[abdHW * 0.25, by + 4], [abdHW * 1.15, by + Lt * 0.25], [abdHW * 1.3, by + Lt * 0.5], [abdHW * 1.0, by + Lt * 0.72], [abdHW * 0.6, by + Lt * 0.82], [abdHW * 0.3, by + Lt * 0.6]];
+      L.covers.push(pathEl(smoothPath(fan, true, 1), SW.D, '#fff'));
+      for (let k = 1; k <= 6; k++) {
+        const tg = lerpP([abdHW * 1.3, by + Lt * 0.5], [abdHW * 0.6, by + Lt * 0.82], k / 7);
+        L.covers.push(lineEl([abdHW * 0.3, by + 6], tg, SW.F));
+      }
+    }
+    const teg = [[0, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * 0.78, by + Lt * 0.5], [wt * 0.55, by + Lt * 0.85], [wt * 0.2, by + Lt * 0.99], [0, by + Lt]];
+    L.covers.push(pathEl(halfShield(teg), SW.O, '#fff'));
+    const vs = [];
+    for (let k = 1; k <= 3; k++) {
+      const f = 1 - k / 4;
+      const pts = [[wt * 0.55 * f, by + 6], [wt * 0.75 * f, by + Lt * 0.12], [wt * 0.78 * f, by + Lt * 0.5], [wt * 0.55 * f, by + Lt * 0.85], [wt * 0.2 * f, by + Lt * 0.97]];
+      vs.push(sampleSmooth(pts, false, 1, 8));
+      L.covers.push(pathEl(smoothPath(pts, false, 1), SW.D));
+    }
+    for (let i = 0; i + 1 < vs.length; i++) {
+      for (let t = 0.12; t < 0.95; t += 0.1) L.covers.push(lineEl(plAt(vs[i], t), plAt(vs[i + 1], t + 0.03), SW.F));
+    }
+  }
+
+  // ---------- assemble ----------
+  const mirrored = k => '<g>' + L[k].join('') + '</g><g transform="scale(-1,1)">' + L[k].join('') + '</g>';
+  const single = k => '<g>' + L[k].join('') + '</g>';
+  const order = type === 'moth'
+    ? [mirrored('legs'), mirrored('wings'), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('antennae')]
+    : [mirrored('wings'), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('legs'), mirrored('antennae')];
+
+  // symmetric bbox (right half generated, left mirrored)
+  const halfW = Math.max(Math.abs(bbox.minX), Math.abs(bbox.maxX));
+  const bw = halfW * 2, bh = bbox.maxY - bbox.minY;
+  const margin = 24;
+  const s = Math.min((600 - 2 * margin) / bw, (600 - 2 * margin) / bh, 1.3);
+  const tx = 300, ty = 300 - (bbox.minY + bbox.maxY) / 2 * s;
+  meta.scale = s;
+  meta.bbox = { minX: -halfW, maxX: halfW, minY: bbox.minY, maxY: bbox.maxY };
+  meta.fitted = { minX: tx - halfW * s, maxX: tx + halfW * s, minY: ty + bbox.minY * s, maxY: ty + bbox.maxY * s };
+
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">' +
+    '<rect width="600" height="600" fill="#fff"/>' +
+    '<g transform="translate(' + fmt(tx) + ' ' + fmt(ty) + ') scale(' + (Math.round(s * 1000) / 1000) + ')" stroke="#000" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
+    order.join('') + '</g></svg>';
+  const sw = v => String(Math.round(v / s * 1000) / 1000);
+  svg = svg.replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
+  return { svg, meta };
+}
+
+function generateInsect(seed) { return generateInsectDetailed(seed).svg; }
+
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { generateInsect, generateInsectDetailed, dailySeed, hashString, mulberry32, TYPES };
+}
+</script>
+
+<script>
+(function () {
+  const seedInput = document.getElementById('seed');
+  const stage = document.getElementById('stage');
+  const info = document.getElementById('info');
+  const NAMES = { beetle: 'Coleoptera', moth: 'Lepidoptera', fly: 'Diptera', bee: 'Hymenoptera', dragonfly: 'Odonata', grasshopper: 'Orthoptera' };
+
+  function render(seed) {
+    seed = Number(seed) >>> 0;
+    seedInput.value = seed;
+    const r = generateInsectDetailed(seed);
+    stage.innerHTML = r.svg;
+    const label = r.meta.variant === 'butterfly' ? 'butterfly' : r.meta.type;
+    info.innerHTML = 'seed <b>' + seed + '</b> &middot; <i>' + NAMES[r.meta.type] + '</i> (' + label + ')';
+    history.replaceState(null, '', '#' + seed);
+    document.title = 'insectdraw #' + seed;
+  }
+
+  document.getElementById('gen').addEventListener('click', () => render(seedInput.value));
+  seedInput.addEventListener('keydown', e => { if (e.key === 'Enter') render(seedInput.value); });
+  document.getElementById('rnd').addEventListener('click', () => render(Math.floor(Math.random() * 4294967296)));
+  document.getElementById('daily').addEventListener('click', () => render(dailySeed()));
+
+  const fromHash = location.hash.slice(1);
+  render(/^\d+$/.test(fromHash) ? fromHash : dailySeed());
+  window.render = render;
+})();
+</script>
+</body>
+</html>

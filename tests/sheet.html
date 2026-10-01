@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>insectdraw sheet</title>
+<style>body{margin:0;background:#fff}#grid{display:grid;grid-template-columns:repeat(var(--cols,3),1fr);gap:0}#grid div{border:1px solid #ccc}#grid svg{width:100%;height:auto;display:block}#grid span{font:11px monospace;position:absolute}</style>
+</head><body><div id="grid"></div>
+<script>
+// loads the engine from ../index.html and renders ?seeds=1,2,3&cols=3
+fetch('../index.html').then(r => r.text()).then(html => {
+  const m = html.match(/<script id="engine">([\s\S]*?)<\/script>/);
+  const sc=document.createElement('script');sc.textContent=m[1];document.head.appendChild(sc);
+  const q = new URLSearchParams(location.search);
+  const seeds = (q.get('seeds') || '1,2,3,4,5,6').split(',').map(Number);
+  document.getElementById('grid').style.setProperty('--cols', q.get('cols') || 3);
+  for (const s of seeds) {
+    const r = generateInsectDetailed(s);
+    const d = document.createElement('div');
+    d.innerHTML = r.svg + '<span>' + s + ' ' + (r.meta.variant || r.meta.type) + '</span>';
+    document.getElementById('grid').appendChild(d);
+  }
+});
+</script></body></html>
