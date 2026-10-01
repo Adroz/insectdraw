@@ -1473,29 +1473,68 @@ function generateInsectDetailed(seed) {
     const SF = lepSpace(fore, [W * 0.1, 0], ends(fVeins), nR + 3);       // cells posterior to M3 start at nR+3
     const SH = lepSpace(hind, [W * 0.08, H * 0.14], ends(hVeins), 5);
 
-    // ---- pattern recipe (groundplan elements as tonal regions; see docs/research-lepidoptera-wings.md) ----
-    const recipe = isB ? pick(['nymphalid', 'satyrine', 'pierid', 'lycaenid']) : pick(['noctuid', 'noctuid', 'geometrid', 'tiger', 'emperor', 'hawk']);
-    meta.recipe = recipe;
-    const Q = { ground: 0 };
-    switch (recipe) {
-      case 'nymphalid': Object.assign(Q, { ground: rng() < 0.5 ? 1 : 0, uBand: randRange(0.44, 0.52), wBand: randRange(0.1, 0.16), uBasal: randRange(0.24, 0.34), ocelli: rng() < 0.65, lvBasal: pick([2, 3]), wave: randRange(-0.025, 0.025) }); break;
-      case 'satyrine': Object.assign(Q, { ground: 1, uPale: randRange(0.64, 0.72), wPale: randRange(0.16, 0.24), nOcF: randInt(1, 2), nOcH: randInt(2, 4) }); break;
-      case 'pierid': Object.assign(Q, { ground: 0, uApex: randRange(0.72, 0.8), apexCells: randInt(2, 4), tips: rng() < 0.7 }); break;
-      case 'lycaenid': Object.assign(Q, { ground: pick([0, 1]), uRow: randRange(0.58, 0.66), uLun: randRange(0.8, 0.86), halo: rng() < 0.6 }); break;
-      case 'noctuid': Object.assign(Q, { ground: pick([1, 1, 2]), uAm: randRange(0.26, 0.33), uPm: randRange(0.68, 0.76), uSt: randRange(0.84, 0.88), clav: rng() < 0.5, dash: rng() < 0.6, teeth: pick([1, 2]) }); break;
-      case 'geometrid': Object.assign(Q, { ground: pick([0, 1]), lines: [randRange(0.26, 0.32), randRange(0.46, 0.52), randRange(0.66, 0.74)], wave: randRange(0.015, 0.03), teeth: pick([1, 2, 2]), shade: rng() < 0.7, cheq: rng() < 0.3 }); break;
-      case 'tiger': { const nb = randInt(3, 4), bands = []; for (let k = 0; k < nb; k++) bands.push({ u: lerp(0.2, 0.86, (k + 0.5) / nb) + randRange(-0.04, 0.04), w: randRange(0.08, 0.14) });
-        Object.assign(Q, { ground: 0, bands, slope: randRange(-0.15, 0.15), edge: rng() < 0.4 }); break; }
-      case 'emperor': Object.assign(Q, { ground: 1, rEye: W * randRange(0.08, 0.12), uAm: randRange(0.22, 0.28), uPm: randRange(0.7, 0.76) }); break;
-      case 'hawk': Object.assign(Q, { ground: 1, slope: randRange(-0.5, -0.35), n: randInt(2, 4) }); break;
-    }
+    // ---- pattern: a compositional ground plan (docs/research-lepidoptera-wings.md). Every element
+    // (basal field, bands, cross-lines, discal element, ocelli, spot rows, submarginal, margin, apical
+    // patch, oblique streaks, vein tips, dusting, fringe, hatch geometry) is rolled independently with its
+    // own position, tone and shape; the family only biases the odds, so no two seeds share a layout. ----
+    const fam = isB ? pick(['nymphalid', 'satyrine', 'pierid', 'lycaenid', 'papilionid']) : pick(['noctuid', 'noctuid', 'geometrid', 'arctiid', 'saturniid', 'sphingid', 'plain']);
+    meta.recipe = fam;
+    const P01 = p => rng() < p;
+    const F = {   // ground tone weights [white, light, mid]; element odds; bands = weighted counts
+      nymphalid:  { ground: [0.4, 0.45, 0.15], basal: 0.8, bands: [0, 1, 2, 2, 3], lines: 0.2, discal: ['none', 'none', 'dot', 'lunule'], ocelli: 0.6, row: 0.2, submarg: 0.8, margin: 0.9, apical: 0.3, streaks: 0.1, tips: 0.3, cheq: 0.15 },
+      satyrine:   { ground: [0.1, 0.5, 0.4], basal: 0.7, bands: [0, 1, 1, 2], lines: 0.1, discal: ['none', 'none', 'dot'], ocelli: 0.95, row: 0.1, submarg: 0.8, margin: 0.9, apical: 0.2, streaks: 0, tips: 0.1, cheq: 0.1 },
+      pierid:     { ground: [0.85, 0.15, 0], basal: 0.6, bands: [0, 0, 1], lines: 0.05, discal: ['dot', 'dot', 'none', 'lunule'], ocelli: 0.1, row: 0.15, submarg: 0.3, margin: 0.5, apical: 0.85, streaks: 0, tips: 0.6, cheq: 0.1 },
+      lycaenid:   { ground: [0.5, 0.4, 0.1], basal: 0.7, bands: [0, 1, 1], lines: 0.1, discal: ['none', 'dot', 'lunule'], ocelli: 0.3, row: 0.85, submarg: 0.8, margin: 0.9, apical: 0.1, streaks: 0, tips: 0.2, cheq: 0.3 },
+      papilionid: { ground: [0.3, 0.5, 0.2], basal: 0.5, bands: [1, 2, 2, 3], lines: 0.1, discal: ['none', 'dot'], ocelli: 0.4, row: 0.3, submarg: 0.9, margin: 0.9, apical: 0.3, streaks: 0.4, tips: 0.4, cheq: 0.2 },
+      noctuid:    { ground: [0.1, 0.6, 0.3], basal: 0.6, bands: [0, 1, 1, 2], lines: 0.9, discal: ['stigmata', 'stigmata', 'stigmata', 'lunule'], ocelli: 0.05, row: 0.1, submarg: 0.9, margin: 0.5, apical: 0.2, streaks: 0.2, tips: 0.3, cheq: 0.6 },
+      geometrid:  { ground: [0.5, 0.4, 0.1], basal: 0.4, bands: [0, 1, 1, 2], lines: 0.95, discal: ['dot', 'dot', 'none'], ocelli: 0.05, row: 0.05, submarg: 0.7, margin: 0.5, apical: 0.2, streaks: 0.1, tips: 0.3, cheq: 0.4 },
+      arctiid:    { ground: [0.7, 0.2, 0.1], basal: 0.4, bands: [2, 3, 3, 4], lines: 0.1, discal: ['none', 'dot'], ocelli: 0.1, row: 0.3, submarg: 0.4, margin: 0.5, apical: 0.2, streaks: 0.3, tips: 0.3, cheq: 0.2 },
+      saturniid:  { ground: [0.2, 0.6, 0.2], basal: 0.5, bands: [1, 2, 2], lines: 0.5, discal: ['eyespot', 'eyespot', 'eyespot', 'lunule'], ocelli: 0.1, row: 0.1, submarg: 0.8, margin: 0.7, apical: 0.5, streaks: 0.1, tips: 0.2, cheq: 0.2 },
+      sphingid:   { ground: [0.2, 0.6, 0.2], basal: 0.7, bands: [0, 1, 1], lines: 0.3, discal: ['dot', 'none'], ocelli: 0.05, row: 0, submarg: 0.5, margin: 0.6, apical: 0.3, streaks: 0.9, tips: 0.2, cheq: 0.1 },
+      plain:      { ground: [0.4, 0.5, 0.1], basal: 0.5, bands: [0, 0, 1], lines: 0.4, discal: ['none', 'dot', 'lunule'], ocelli: 0.05, row: 0.05, submarg: 0.4, margin: 0.5, apical: 0.2, streaks: 0.1, tips: 0.3, cheq: 0.3 },
+    }[fam];
+    const wpick = w => { const r = rng() * (w[0] + w[1] + w[2]); return r < w[0] ? 0 : r < w[0] + w[1] ? 1 : 2; };
+    const slots = (n, lo, hi) => { const a = []; for (let k = 0; k < n; k++) a.push(lerp(lo, hi, (k + 0.15 + 0.7 * rng()) / n)); return a; };
+    const ground = wpick(F.ground);
+    const contrast = lv => lv === ground ? (ground === 0 ? randInt(2, 4) : P01(0.5) ? 0 : Math.min(4, ground + 2)) : lv;   // never invisible against the ground
+    const eyeRings = (dark) => {   // concentric rings, innermost first, alternating tone
+      const k = randInt(2, 5), rings = []; let d = dark === undefined ? P01(0.5) : dark;
+      for (let i = 0; i < k; i++) { rings.push([lerp(0.25, 1, (i + 1) / k) * (i + 1 < k ? jitter(0.1) : 1), d ? randInt(3, 4) : randInt(0, 1)]); d = !d; }
+      return rings;
+    };
+    const Q = {
+      ground,
+      basal: P01(F.basal) ? { u: randRange(0.14, 0.4), lv: contrast(randInt(1, 3)), wave: randRange(0, 0.04), amp: randRange(0, 0.04), edge: pick(['fine', null, 'det']) } : null,
+      bands: slots(pick(F.bands), 0.28, 0.9).map(u => ({ u, w: randRange(0.03, 0.16), lv: contrast(randInt(0, 4)), wave: randRange(-0.04, 0.04), teeth: randInt(1, 3),
+        slope: P01(0.3) ? randRange(-0.2, 0.2) : 0, amp: randRange(0, 0.06), m3x: randRange(0, 0.05), drop: P01(0.3) ? randRange(0.1, 0.35) : 0, edge: pick([null, 'fine', 'fine', 'det']) })),
+      lines: P01(F.lines) ? slots(randInt(1, 3), 0.22, 0.8).map(u => ({ u, amp: randRange(0.008, 0.035), teeth: randInt(1, 4), doubled: P01(0.5), amp2: randRange(0, 0.02) })) : [],
+      discal: pick(F.discal),
+      discalP: { r: randRange(1.6, 3.6), ring: P01(0.4), rEye: W * randRange(0.06, 0.13), rings: eyeRings(), clav: P01(0.5), paleCore: P01(0.6), dash: P01(0.5) },
+      ocelli: P01(F.ocelli) ? { u: randRange(0.66, 0.8), r: randRange(3, 7), lo: randInt(-3, 0), hi: randInt(0, 2), p: randRange(0.55, 1), rings: pick([[[0.4, 0], [1, 3]], [[0.28, 0], [0.5, 4], [0.78, 1], [1, 3]], [[0.5, 4], [1, 0]], [[1, 3]], eyeRings(true)]), pupil: P01(0.6), outline: P01(0.7) } : null,
+      row: P01(F.row) ? { u: randRange(0.52, 0.68), r: randRange(2, 3.2), halo: P01(0.5), p: randRange(0.6, 1) } : null,
+      submarg: P01(F.submarg) ? { kind: pick(['lunules', 'chevrons', 'paleLine', 'shadeLine', 'dots', 'lunules']), u: randRange(0.8, 0.9), lv: contrast(randInt(1, 3)), w: randRange(0.03, 0.07) } : null,
+      margin: P01(F.margin) ? { u: randRange(0.9, 0.96), lv: contrast(randInt(1, 3)), white: P01(0.4), wave: randRange(0, 0.02) } : null,
+      apical: P01(F.apical) ? { u: randRange(0.65, 0.82), cells: randInt(1, 4), lv: contrast(randInt(2, 4)), slope: randRange(0, 0.06) } : null,
+      streaks: P01(F.streaks) ? { n: randInt(1, 4), slope: randRange(0.3, 0.55) * (P01(0.8) ? -1 : 1), w: randRange(0.03, 0.07), lv: contrast(randInt(2, 4)), u0: randRange(0.8, 0.9), gap: randRange(0.09, 0.14) } : null,
+      tips: P01(F.tips) ? { lv: randInt(2, 3), f: randRange(0.15, 0.3), u: randRange(0.9, 0.96) } : null,
+      dust: P01(0.3) ? { lv: Math.min(4, ground + 1), u1: randRange(0.5, 0.8) } : null,
+      cheq: P01(F.cheq),
+      hind: { plain: isB ? P01(0.25) : P01(0.7), shift: randRange(0.02, 0.08), keep: randRange(0.5, 1), spots: randInt(0, 3), ground: P01(0.5) ? ground : Math.max(0, ground - 1) },
+      hatch: { crossF: randRange(125, 155), crossH: randRange(140, 170), focusF: -W * randRange(1.2, 2.4), focusH: -W * randRange(0.4, 0.9), spacing: randRange(2.2, 2.7), xSpacing: randRange(2.4, 3.0), stipple: P01(0.7) },
+    };
+    meta.patternSig = [Q.ground, Q.basal ? Q.basal.lv : '-', Q.bands.map(b => b.lv + (b.drop ? 'd' : '') + (b.edge || '')).join(''), Q.lines.map(l => l.teeth + (l.doubled ? 'd' : '')).join(''), Q.discal, Q.ocelli ? 'o' + Q.ocelli.lo + Q.ocelli.hi : '', Q.row ? 'r' : '', Q.submarg ? Q.submarg.kind : '', Q.margin ? 'm' + Q.margin.lv + (Q.margin.white ? 'w' : '') : '', Q.apical ? 'a' + Q.apical.cells : '', Q.streaks ? 's' + Q.streaks.n : '', Q.tips ? 't' : '', Q.dust ? 'u' : '', Q.cheq ? 'c' : '', Q.hind.plain ? 'hp' : 'h'].join('|');
     const disl = (S, amp, m3x) => { const a = []; for (let c = 0; c < S.n; c++) a.push(randRange(-amp, amp) + (c >= S.m3 ? (m3x || 0) : 0)); return a; };
     function lepPattern(S, wing, hindW) {
-      const o = { ground: Q.ground, elems: [], spots: [], fine: [], det: [], after: [], chequered: false };
+      const o = { ground: hindW ? Q.hind.ground : Q.ground, elems: [], spots: [], fine: [], det: [], after: [], chequered: Q.cheq };
       const n = S.n, last = n - 1, U = hindW ? hU : fU, Dd = hindW ? hD : fD, B = hindW ? hB : fB;
+      const sh = hindW ? Q.hind.shift : 0, keep = () => !hindW || P01(Q.hind.keep);
       const curve = (uFn, c0, c1, gap) => lepCurve(wing, S, uFn, c0 === undefined ? 0 : c0, c1 === undefined ? last : c1, gap === undefined ? 0.05 : gap);
-      const bandFn = opt => { const d = opt.dis || S.zero, wv = opt.wave || 0, sl = opt.slope || 0; return (c, t) => opt.u + d[c] + sl * (n > 1 ? c / (n - 1) : 0) + wv * Math.sin(Math.PI * t); };
-      const band = (opt, edge) => { o.elems.push(lepEl.band(S, opt)); if (edge) { const f = bandFn(opt); o[edge].push(...curve((c, t) => f(c, t) - opt.w / 2), ...curve((c, t) => f(c, t) + opt.w / 2)); } };
+      const bandFn = opt => { const d = opt.dis || S.zero, wv = opt.wave || 0, sl = opt.slope || 0, th = opt.teeth || 1; return (c, t) => opt.u + d[c] + sl * (n > 1 ? c / (n - 1) : 0) + wv * Math.sin(Math.PI * th * t); };
+      const band = (opt, edge) => {
+        const f = bandFn(opt);
+        o.elems.push((u, th, c, t) => Math.abs(u - f(c, t)) < opt.w / 2 ? opt.lv : -1);
+        if (edge) o[edge].push(...curve((c, t) => f(c, t) - opt.w / 2), ...curve((c, t) => f(c, t) + opt.w / 2));
+      };
       const basal = (opt, edge) => { o.elems.push(lepEl.basal(S, opt)); if (edge) { const d = opt.dis || S.zero, wv = opt.wave || 0; o[edge].push(...curve((c, t) => opt.u + d[c] + wv * Math.sin(Math.PI * t))); } };
       const margin = (opt, edge) => { o.elems.push(lepEl.margin(S, opt)); if (edge) { const d = opt.dis || S.zero; o[edge].push(...curve(c => opt.u + d[c])); } };
       const wavy = (u, amp, teeth, d) => (c, t) => u + d[c] + amp * Math.sin(Math.PI * teeth * t);
@@ -1514,130 +1553,93 @@ function generateInsectDetailed(seed) {
         if (wing.inside(P)) spot(P, r, rings, opt);
       };
       const discal = k => lerpP(B, lerpP(U, Dd, 0.5), k);   // along the discal cell's axis; k = 1 is the discocellular
-      switch (recipe) {
-        case 'nymphalid': {
-          const d1 = disl(S, 0.03, 0.04), d2 = disl(S, 0.02);
-          basal({ u: Q.uBasal + (hindW ? 0.06 : 0), lv: Q.lvBasal, dis: d2, wave: 0.03 }, 'fine');
-          band({ u: Q.uBand + (hindW ? 0.04 : 0), w: Q.wBand, lv: 3, dis: d1, wave: Q.wave }, 'fine');
-          band({ u: 0.84, w: 0.05, lv: 2, dis: d2, wave: -0.03 });                       // submarginal lunules
-          margin({ u: 0.94, lv: 3, dis: d2 }, 'fine');
-          if (Q.ocelli) for (let c = S.m3 - (hindW ? 3 : 2); c <= S.m3 + (hindW ? 1 : 0); c++) cellSpot(c, 0.72 + d2[c], hindW ? 4.5 : 3.8, [[0.4, 0], [1, 3]], { outline: true });
+      const D = Q.discalP;
+
+      if (hindW && Q.hind.plain) {   // plain hindwing: a pale field, maybe a discal lunule, a margin
+        if (Q.basal) basal({ u: Q.basal.u + 0.1, lv: Math.min(1, Q.basal.lv), dis: disl(S, Q.basal.amp), wave: Q.basal.wave });
+        if (P01(0.6)) cellSpot(S.m3 - 2, 0.5, 3, [[0.55, 0], [1, 2]]);
+        if (Q.margin) { margin({ u: Q.margin.u - 0.06, lv: Math.min(2, Q.margin.lv) }); }
+        if (Q.bands.length && P01(0.5)) { const b = Q.bands[0]; band({ u: Math.min(0.8, b.u + 0.1), w: b.w, lv: Math.min(2, b.lv), dis: disl(S, b.amp), wave: b.wave }); }
+        return o;
+      }
+      // basal field
+      if (Q.basal && keep()) basal({ u: Q.basal.u + sh, lv: Q.basal.lv, dis: disl(S, Q.basal.amp), wave: Q.basal.wave }, Q.basal.edge);
+      // costal dusting
+      if (Q.dust && !hindW) o.elems.push(lepEl.cells(S, { set: new Set([0]), u0: 0.1, u1: Q.dust.u1, lv: Q.dust.lv }));
+      // bands, each dislocated at the veins and optionally dropped from some cells (blotches)
+      for (const b of Q.bands) {
+        if (!keep()) continue;
+        const d = disl(S, b.amp, b.m3x);
+        if (b.drop) for (let c = 0; c < n; c++) if (P01(b.drop)) d[c] += 5;
+        band({ u: Math.min(0.92, b.u + sh), w: b.w, lv: b.lv, dis: d, wave: b.wave, teeth: b.teeth, slope: b.slope }, b.edge);
+      }
+      // cross-lines (antemedial / postmedial style), optionally doubled
+      for (const ln of Q.lines) {
+        if (!keep()) continue;
+        const d = disl(S, 0.015);
+        o.det.push(...curve(wavy(ln.u + sh, ln.amp, ln.teeth, d)));
+        if (ln.doubled) o.det.push(...curve(wavy(ln.u + sh + 0.025, ln.amp + ln.amp2, ln.teeth, d)));
+      }
+      // oblique streaks (sphingid style)
+      if (Q.streaks && !hindW) {
+        const d = disl(S, 0.012);
+        for (let k = 0; k < Q.streaks.n; k++) band({ u: Q.streaks.u0 - k * Q.streaks.gap, w: Q.streaks.w * (k === 0 ? 1.3 : 1), lv: k < 2 ? Q.streaks.lv : Math.max(1, Q.streaks.lv - 1), dis: d, slope: Q.streaks.slope }, k < 2 ? 'fine' : null);
+      }
+      // apical patch
+      if (Q.apical && !hindW) {
+        const d = disl(S, 0.03);
+        o.elems.push(lepEl.apical(S, { u: Q.apical.u, cells: Q.apical.cells, lv: Q.apical.lv, dis: d, slope: Q.apical.slope }));
+        o.fine.push(...curve(c => Q.apical.u + d[c] + Q.apical.slope * c, 0, Q.apical.cells - 1));
+      }
+      // discal element
+      if (keep()) switch (Q.discal) {
+        case 'dot': spot(discal(0.98), D.r, [[1, 3]], { outline: D.ring }); break;
+        case 'lunule': cellSpot(S.m3 - 2, 0.55, D.r + 1.5, [[0.55, 0], [1, 3]], { outline: true }); break;
+        case 'stigmata': if (!hindW) {
+          const pale = D.paleCore ? 0 : Math.max(0, o.ground - 1);
+          if (D.clav) spot(add(lerpP(B, lerpP(U, Dd, 0.85), 0.62), [0, H * 0.035]), 4, [[1, Math.min(3, o.ground + 1)]], { ry: 2, outline: true });   // claviform
+          spot(discal(0.7), 4.2 * jitter(0.15), [[0.72, pale], [1, 3]], { outline: true });                                                            // orbicular
+          { const dv = sub(Dd, U); spot(discal(0.98), 3.4, [[0.7, pale], [1, 3]], { ry: 6.2, rot: Math.atan2(dv[0], -dv[1]), outline: true }); }      // reniform
+          if (D.dash && n > 2) o.elems.push(lepEl.streak(S, { A: S.point(S.mid(1), 0.05), B: S.point(S.mid(1), 0.26), hw: 1.4, lv: 4 }));              // basal dash
+        } else cellSpot(S.m3 - 2, 0.5, 3, [[0.55, 0], [1, 2]]);
           break;
-        }
-        case 'satyrine': {
-          const d = disl(S, 0.02);
-          basal({ u: hindW ? 0.36 : 0.3, lv: 3, dis: d, wave: 0.02 });
-          band({ u: Q.uPale - Q.wPale / 2 - 0.05, w: 0.1, lv: 2, dis: d, wave: 0.02 });   // postmedian shade...
-          band({ u: Q.uPale + (hindW ? 0.03 : 0), w: Q.wPale, lv: 0, dis: d, wave: 0.02 }, 'fine');   // ...before the pale band
-          margin({ u: 0.87, lv: 2 });
-          band({ u: 0.905, w: 0.025, lv: 0 });                                            // pale submarginal line
-          margin({ u: 0.93, lv: 3 });
-          const rings = [[0.28, 0], [0.5, 4], [0.78, 1], [1, 3]];
-          if (hindW) for (let k = 0; k < Q.nOcH; k++) cellSpot(S.m3 - 2 + k, 0.76, 5.5, rings, { outline: true, pupil: 0.5 });
-          else for (let k = 0; k < Q.nOcF; k++) cellSpot(1 + k, 0.76, 7, rings, { outline: true, pupil: 0.5 });
-          break;
-        }
-        case 'pierid': {
-          const d = disl(S, 0.03);
-          basal({ u: hindW ? 0.3 : 0.2, lv: 1, dis: d, wave: 0.03 });
-          if (!hindW) {
-            o.elems.push(lepEl.cells(S, { set: new Set([0]), u0: 0.1, u1: 0.7, lv: 1 }));      // dusted costa
-            o.elems.push(lepEl.apical(S, { u: Q.uApex, cells: Q.apexCells, lv: 3, dis: d, slope: 0.04 }));
-            o.fine.push(...curve(c => Q.uApex + d[c] + 0.04 * c, 0, Q.apexCells - 1));
-          }
-          cellSpot(S.m3 - 2, 0.56, hindW ? 2.6 : 3.4, [[1, hindW ? 2 : 3]], { outline: !hindW });   // discal spot
-          if (Q.tips) o.elems.push(lepEl.veinTips(S, { u: 0.95, f: 0.22, lv: hindW ? 2 : 3 }));
-          break;
-        }
-        case 'lycaenid': {
-          const d = disl(S, 0.025, 0.02);
-          basal({ u: hindW ? 0.3 : 0.24, lv: 2, dis: d, wave: 0.03 });
-          for (let c = 1; c < last; c++) cellSpot(c, Q.uRow + d[c] + (hindW ? 0.02 : 0), 2.8, Q.halo ? [[0.55, 3], [1, 0]] : [[1, 3]], Q.halo ? { pupil: 0.55 } : { outline: true });
-          band({ u: Q.uLun, w: 0.06, lv: 2, dis: d, wave: 0.025 }, 'fine');                   // submarginal lunules
-          band({ u: 0.925, w: 0.02, lv: 0 });                                             // white line inside the dark margin
-          margin({ u: 0.945, lv: 3 });
-          if (hindW) for (let c = 2; c < last; c++) cellSpot(c, 0.88, 2, [[1, 3]]);
-          break;
-        }
-        case 'noctuid': {
-          const d = disl(S, 0.02, 0.02);
-          if (!hindW) {
-            const gl = Math.min(3, Q.ground + 1), pale = Math.max(0, Q.ground - 1);
-            basal({ u: 0.1, lv: gl });
-            if (Q.dash && n > 2) o.elems.push(lepEl.streak(S, { A: S.point(S.mid(1), 0.05), B: S.point(S.mid(1), 0.26), hw: 1.4, lv: 4 }));   // basal dash
-            o.det.push(...curve(wavy(Q.uAm, 0.015, Q.teeth, d)), ...curve(wavy(Q.uAm + 0.025, 0.015, Q.teeth, d)));                           // antemedial, doubled
-            band({ u: 0.5, w: 0.07, lv: gl, dis: d, wave: 0.01 });                                                                                 // median shade
-            if (Q.clav) spot(add(lerpP(B, lerpP(U, Dd, 0.85), 0.62), [0, H * 0.035]), 4, [[1, gl]], { ry: 2, outline: true });                     // claviform
-            spot(discal(0.7), 4.2 * jitter(0.15), [[0.72, pale], [1, 3]], { outline: true });                                                     // orbicular
-            { const dv = sub(Dd, U); spot(discal(0.98), 3.4, [[0.7, pale], [1, 3]], { ry: 6.2, rot: Math.atan2(dv[0], -dv[1]), outline: true }); }  // reniform
-            o.det.push(...curve(wavy(Q.uPm, 0.02, 2, d)), ...curve(wavy(Q.uPm + 0.025, 0.02, 2, d)));                                          // postmedial, dentate
-            band({ u: Q.uSt - 0.035, w: 0.05, lv: 3, dis: d, wave: 0.015 });                                                                     // dark shade before...
-            band({ u: Q.uSt, w: 0.025, lv: 0, dis: d, wave: 0.015 });                                                                            // ...the pale subterminal line
-            o.det.push(...curve(() => 0.975, 0, last, 0.3));                                                                                     // terminal line, dashed between veins
-          } else {
-            o.ground = 0;
-            basal({ u: 0.35, lv: 1, dis: d, wave: 0.03 });
-            cellSpot(S.m3 - 2, 0.5, 3, [[0.55, 0], [1, 2]]);                                   // discal lunule
-            band({ u: 0.68, w: 0.06, lv: 1, dis: d, wave: 0.02 });
-            margin({ u: 0.86, lv: 1 }); margin({ u: 0.94, lv: 2 });
-          }
-          o.chequered = true;
-          break;
-        }
-        case 'geometrid': {
-          const d = disl(S, 0.015), ls = hindW ? [Q.lines[1] + 0.05, Q.lines[2] + 0.04] : Q.lines, gl = Math.min(3, Q.ground + 1);
-          for (const u of ls) o.det.push(...curve(wavy(u, Q.wave, Q.teeth, d)));
-          if (Q.shade) band({ u: (ls[ls.length - 2] + ls[ls.length - 1]) / 2, w: ls[ls.length - 1] - ls[ls.length - 2] - 0.04, lv: gl, dis: d, wave: Q.wave });   // median band
-          band({ u: 0.86, w: 0.035, lv: gl, dis: d, wave: Q.wave });
-          margin({ u: 0.955, lv: 2 });
-          { const P = wing.T(discal(0.98)); o.after.push(circleEl(P, 1.6, SW.D), circleEl(P, 0.6, SW.D)); }   // discal dot
-          o.chequered = Q.cheq;
-          break;
-        }
-        case 'tiger': {
-          if (!hindW) {
-            for (const bd of Q.bands) {
-              const d = disl(S, 0.07, 0.05);
-              for (let c = 0; c < n; c++) if (rng() < 0.22) d[c] += 5;              // blotch: band missing from this cell
-              band({ u: bd.u, w: bd.w, lv: 3, dis: d, slope: Q.slope }, 'det');
-            }
-            if (Q.edge) margin({ u: 0.95, lv: 3 });
-          } else {
-            const d = disl(S, 0.02);
-            for (let k = 0, m = randInt(2, 4); k < m; k++) cellSpot(randInt(1, last - 1), randRange(0.6, 0.8) + d[k], 6, [[1, 3]], { outline: true });
-            if (Q.edge) margin({ u: 0.93, lv: 3 }, 'det');
-          }
-          break;
-        }
-        case 'emperor': {
-          const d = disl(S, 0.015);
-          band({ u: Q.uAm + (hindW ? 0.05 : 0), w: 0.035, lv: 3, dis: d, wave: 0.02 }, 'fine');
-          band({ u: Q.uPm + (hindW ? 0.03 : 0), w: 0.04, lv: 3, dis: d, wave: 0.02 }, 'fine');
-          band({ u: 0.86, w: 0.08, lv: 2, dis: d, wave: 0.01 });
-          band({ u: 0.935, w: 0.03, lv: 0 });
-          if (!hindW) o.elems.push(lepEl.apical(S, { u: 0.8, cells: 2, lv: 3, dis: d }));
-          const r = Q.rEye * (hindW ? 1.15 : 1), P = discal(hindW ? 1.1 : 1.05);
-          spot(P, r, [[0.22, 4], [0.4, 0], [0.62, 2], [0.78, 0], [1, 3]], { outline: true, pupil: 0.78 });
-          o.after.push(circleEl(wing.T(P), r * 0.4, SW.D));
-          break;
-        }
-        case 'hawk': {
-          const d = disl(S, 0.012);
-          if (!hindW) {
-            basal({ u: 0.15, lv: 2, dis: d });
-            for (let k = 0; k < Q.n; k++) band({ u: 0.88 - k * 0.11, w: k === 0 ? 0.06 : 0.045, lv: k < 2 ? 3 : 2, dis: d, slope: Q.slope }, k < 2 ? 'fine' : null);   // oblique streaks
-            o.elems.push(lepEl.streak(S, { A: S.point(S.mid(0), 0.8), B: S.point(S.mid(0), 0.98), hw: 1.8, lv: 4 }));                       // apical streak
-            spot(discal(0.98), 2.2, [[0.6, 0], [1, 3]], { outline: true });                                                                   // white discal dot
-            margin({ u: 0.95, lv: 2 });
-          } else {
-            o.ground = 2;
-            basal({ u: 0.3, lv: 3, dis: d });
-            band({ u: 0.55, w: 0.12, lv: 0, dis: d, wave: 0.02 }, 'fine');
-            margin({ u: 0.88, lv: 3 });
-          }
+        case 'eyespot': {
+          const r = D.rEye * (hindW ? 1.15 : 1), P = discal(hindW ? 1.1 : 1.05);
+          spot(P, r, D.rings, { outline: true, pupil: D.rings.length > 2 ? D.rings[0][0] * 1.6 : 0 });
           break;
         }
       }
+      // ocelli row: a random subset of cells around M3
+      if (Q.ocelli && keep()) {
+        const d = disl(S, 0.02);
+        for (let c = S.m3 + Q.ocelli.lo - (hindW ? 1 : 0); c <= S.m3 + Q.ocelli.hi; c++) if (P01(Q.ocelli.p)) cellSpot(c, Q.ocelli.u + sh + d[c], Q.ocelli.r * (hindW ? 0.85 : 1), Q.ocelli.rings, { outline: Q.ocelli.outline, pupil: Q.ocelli.pupil ? 0.5 : 0 });
+      }
+      // postmedian spot row (lycaenid style)
+      if (Q.row && keep()) {
+        const d = disl(S, 0.025, 0.02);
+        for (let c = 1; c < last; c++) if (P01(Q.row.p)) cellSpot(c, Q.row.u + sh + d[c], Q.row.r, Q.row.halo ? [[0.55, 3], [1, 0]] : [[1, 3]], Q.row.halo ? { pupil: 0.55 } : { outline: true });
+      }
+      // submarginal series
+      if (Q.submarg && keep()) {
+        const sm = Q.submarg, d = disl(S, 0.02), u = sm.u + sh * 0.5;
+        switch (sm.kind) {
+          case 'lunules': band({ u, w: sm.w, lv: sm.lv, dis: d, wave: -0.03 }, P01(0.5) ? 'fine' : null); break;
+          case 'chevrons': band({ u, w: sm.w, lv: sm.lv, dis: d, wave: 0.04 }, 'fine'); break;
+          case 'paleLine': band({ u, w: 0.025, lv: 0, dis: d, wave: 0.015 }); break;
+          case 'shadeLine': band({ u: u - 0.035, w: 0.05, lv: Math.max(2, sm.lv), dis: d, wave: 0.015 }); band({ u, w: 0.025, lv: 0, dis: d, wave: 0.015 }); break;
+          case 'dots': for (let c = 1; c < last; c++) cellSpot(c, u + d[c], 2, [[1, 3]]); break;
+        }
+      }
+      // margin, with an optional white line inside it
+      if (Q.margin && keep()) {
+        const d = disl(S, 0.012);
+        if (Q.margin.white) band({ u: Q.margin.u - 0.025, w: 0.02, lv: 0 });
+        margin({ u: Q.margin.u, lv: Q.margin.lv, dis: d, wave: Q.margin.wave }, P01(0.5) ? 'fine' : null);
+      }
+      if (Q.tips && keep()) o.elems.push(lepEl.veinTips(S, { u: Q.tips.u, f: Q.tips.f, lv: Q.tips.lv }));
+      // hindwing extras: a few loose spots
+      if (hindW) for (let k = 0; k < Q.hind.spots; k++) cellSpot(randInt(1, last - 1), randRange(0.55, 0.8), randRange(3, 6), [[1, 3]], { outline: true });
+      if (!hindW && Q.lines.length && P01(0.5)) o.det.push(...curve(() => 0.975, 0, last, 0.3));   // terminal line, dashed between veins
       return o;
     }
     // draw order: white outline -> hatching (fan with the veins, cross set parallel to the margin for the darks)
@@ -1645,10 +1647,10 @@ function generateInsectDetailed(seed) {
     function drawLepWing(wing, S, veins, o, hindW) {
       const tone = lepTone(S, o.ground, o.elems, o.spots), mask = hindW ? fore.localPoly : null;
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
-      const clsFan = lv => lv <= 0 ? 0 : lv === 1 ? 3 : lv === 2 ? 1 : 2;                     // light = stipple, mid = fine lines, dark = heavier lines
+      const clsFan = lv => lv <= 0 ? 0 : lv === 1 ? (Q.hatch.stipple ? 3 : 1) : lv === 2 ? 1 : 2;   // light = stipple or fine lines, mid = fine lines, dark = heavier lines
       const clsX = lv => lv < 3 ? 0 : lv === 3 ? 1 : 2;                                        // cross-hatch only in the darks
-      L.wings.push(...lepHatch(wing, lepFan(wing, hindW ? [-W * 0.6, H * 0.05] : [-W * 1.7, H * 0.05], 2.4), tone, clsFan, 1.2, mask));
-      L.wings.push(...lepHatch(wing, lepParallel(wing, hindW ? 155 : 140, 2.6), tone, clsX, 1.2, mask));
+      L.wings.push(...lepHatch(wing, lepFan(wing, [hindW ? Q.hatch.focusH : Q.hatch.focusF, H * 0.05], Q.hatch.spacing), tone, clsFan, 1.2, mask));
+      L.wings.push(...lepHatch(wing, lepParallel(wing, hindW ? Q.hatch.crossH : Q.hatch.crossF, Q.hatch.xSpacing), tone, clsX, 1.2, mask));
       for (const pl of o.fine) L.wings.push(pathEl(smoothPath(pl.map(wing.T), false, 1), SW.F));
       if (!hindW) L.wings.push(...costaEls(wing, 0, W * 0.9));
       for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, SW.D));
