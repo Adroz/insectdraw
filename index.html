@@ -523,6 +523,131 @@ function onBot(wing, x) { return [x, botAt(wing, x, 0.6)]; }
 function onTip(wing, x) { return [x, (topAt(wing, x) + botAt(wing, x)) / 2]; }
 
 // ============================================================
+//  Names — deterministic Latin-style binomials + a common name.
+//  Uses its OWN PRNG stream (derived from the seed) so it never
+//  consumes numbers from the drawing's rng: drawings stay identical.
+// ============================================================
+const NAME_PREFIX = ['Chryso', 'Callo', 'Lepto', 'Macro', 'Micro', 'Ortho', 'Neuro', 'Platy', 'Steno', 'Pachy', 'Melano', 'Xantho',
+  'Eury', 'Poly', 'Hetero', 'Aniso', 'Cteno', 'Dolicho', 'Brachy', 'Trachy', 'Tricho', 'Erythro', 'Leuco', 'Cyano', 'Chloro',
+  'Phaeo', 'Sphaero', 'Rhino', 'Acantho', 'Hoplo', 'Dory', 'Cosmo', 'Pseudo', 'Para', 'Proto', 'Meta', 'Hemi', 'Oxy', 'Dasy', 'Lasio',
+  'Calli', 'Nemo', 'Hydro', 'Helio', 'Argyro', 'Stigmo', 'Campto', 'Cyclo', 'Lio', 'Gono'];
+// genus tails per order, with grammatical gender (m/f/n) so epithets can agree
+const NAME_TAIL = {
+  beetle: [['cera', 'f'], ['soma', 'n'], ['notus', 'm'], ['derus', 'm'], ['morpha', 'f'], ['gnathus', 'm'], ['cephala', 'f'], ['pus', 'm'],
+    ['dactylus', 'm'], ['carabus', 'm'], ['phagus', 'm'], ['bius', 'm'], ['nychus', 'm'], ['stomus', 'm'], ['chila', 'f'], ['phorus', 'm'], ['ella', 'f']],
+  moth: [['ptera', 'f'], ['phora', 'f'], ['noctua', 'f'], ['phila', 'f'], ['mera', 'f'], ['chroa', 'f'], ['stigma', 'n'], ['psyche', 'f'],
+    ['pyga', 'f'], ['lepis', 'f'], ['pteryx', 'f'], ['thyris', 'f'], ['morpha', 'f'], ['ptilia', 'f']],
+  butterfly: [['ptera', 'f'], ['nympha', 'f'], ['pteryx', 'f'], ['chroma', 'n'], ['psyche', 'f'], ['thyra', 'f'], ['cera', 'f'], ['phora', 'f'],
+    ['chrysa', 'f'], ['lepis', 'f'], ['nais', 'f']],
+  fly: [['myia', 'f'], ['pogon', 'm'], ['cera', 'f'], ['phora', 'f'], ['soma', 'n'], ['rhina', 'f'], ['phaga', 'f'], ['nema', 'n'],
+    ['ptera', 'f'], ['cnemis', 'f'], ['merus', 'm'], ['pus', 'm']],
+  cranefly: [['tipula', 'f'], ['limnobia', 'f'], ['ptera', 'f'], ['phlebia', 'f'], ['cera', 'f'], ['myia', 'f'], ['peza', 'f'], ['nephria', 'f'], ['pus', 'm']],
+  bee: [['apis', 'f'], ['melitta', 'f'], ['melissa', 'f'], ['glossa', 'f'], ['cera', 'f'], ['nomia', 'f'], ['phora', 'f'], ['soma', 'n'], ['podia', 'f'], ['trichia', 'f']],
+  wasp: [['vespa', 'f'], ['sphex', 'm'], ['crabro', 'm'], ['cerus', 'm'], ['gaster', 'f'], ['pompilus', 'm'], ['pelta', 'f'], ['cera', 'f'], ['bia', 'f'], ['lestes', 'm']],
+  dragonfly: [['gomphus', 'm'], ['lestes', 'm'], ['themis', 'f'], ['ptera', 'f'], ['cordulia', 'f'], ['aeschna', 'f'], ['neura', 'f'],
+    ['agrion', 'n'], ['cordia', 'f'], ['libellula', 'f'], ['cnemis', 'f'], ['anax', 'm']],
+  damselfly: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
+  grasshopper: [['locusta', 'f'], ['acris', 'f'], ['cerus', 'm'], ['tettix', 'm'], ['pus', 'm'], ['notus', 'm'], ['tropis', 'f'], ['soma', 'n'],
+    ['cephala', 'f'], ['morpha', 'f'], ['phyma', 'n'], ['dera', 'f']],
+  lacewing: [['chrysa', 'f'], ['leon', 'm'], ['ptera', 'f'], ['nympha', 'f'], ['neura', 'f'], ['bius', 'm'], ['pteryx', 'f'], ['psectra', 'f'], ['phlebia', 'f'], ['merobius', 'm']],
+  cicada: [['cicada', 'f'], ['tettix', 'm'], ['tibicen', 'm'], ['cephala', 'f'], ['psaltria', 'f'], ['soma', 'n'], ['neura', 'f'], ['ptera', 'f'], ['cerus', 'm'], ['notus', 'm']],
+  mayfly: [['phlebia', 'f'], ['ephemera', 'f'], ['nema', 'n'], ['baetis', 'f'], ['genia', 'f'], ['ptera', 'f'], ['neura', 'f'], ['philus', 'm'], ['bius', 'm'], ['urus', 'm'], ['cercus', 'm']],
+};
+// species epithets: [stem, declension]  A = -us/-a/-um, B = -is/-is/-e, X = invariable, M = minor/minus style
+const EPITHET = [
+  ['fuscat', 'A'], ['aurat', 'A'], ['maculat', 'A'], ['punctat', 'A'], ['striat', 'A'], ['marginat', 'A'], ['fasciat', 'A'], ['lineat', 'A'],
+  ['obscur', 'A'], ['flav', 'A'], ['ruf', 'A'], ['cinere', 'A'], ['livid', 'A'], ['pallid', 'A'], ['splendid', 'A'], ['venust', 'A'], ['hirt', 'A'],
+  ['villos', 'A'], ['pict', 'A'], ['ornat', 'A'], ['lucid', 'A'], ['nitid', 'A'], ['minut', 'A'], ['pygmae', 'A'], ['umbros', 'A'], ['nemoros', 'A'],
+  ['montan', 'A'], ['bimaculat', 'A'], ['quadrimaculat', 'A'], ['sexpunctat', 'A'], ['decempunctat', 'A'], ['cruciat', 'A'], ['reticulat', 'A'],
+  ['undulat', 'A'], ['variegat', 'A'], ['rubicund', 'A'], ['lute', 'A'], ['ferrugine', 'A'], ['chalybe', 'A'], ['aene', 'A'], ['cupre', 'A'],
+  ['argente', 'A'], ['aure', 'A'], ['fenestrat', 'A'], ['lacte', 'A'], ['nebulos', 'A'], ['fuliginos', 'A'], ['hyalin', 'A'], ['vitre', 'A'],
+  ['limbat', 'A'], ['nigrocinct', 'A'], ['pulchell', 'A'], ['bicolor', 'X'], ['concolor', 'X'], ['tricolor', 'X'],
+  ['vulgar', 'B'], ['boreal', 'B'], ['austral', 'B'], ['oriental', 'B'], ['occidental', 'B'], ['sylvestr', 'B'], ['pratens', 'B'], ['arvens', 'B'],
+  ['palustr', 'B'], ['fluviatil', 'B'], ['lacustr', 'B'], ['campestr', 'B'], ['nigricorn', 'B'], ['flavicorn', 'B'], ['tenu', 'B'], ['gracil', 'B'],
+  ['agil', 'B'], ['virid', 'B'], ['lugubr', 'B'], ['nobil', 'B'], ['mirabil', 'B'], ['moll', 'B'], ['brev', 'B'], ['grand', 'B'], ['saltator', 'B'],
+  ['flavipes', 'X'], ['rufipes', 'X'], ['longipes', 'X'], ['nigripes', 'X'], ['albipes', 'X'], ['elegans', 'X'], ['nitens', 'X'], ['splendens', 'X'],
+  ['virens', 'X'], ['lucens', 'X'], ['rutilans', 'X'], ['fulgens', 'X'], ['repens', 'X'], ['nigricans', 'X'], ['albicans', 'X'], ['flavescens', 'X'],
+  ['rufescens', 'X'], ['minor', 'M'], ['major', 'M'],
+];
+// epithets built from the genus syllable table: lowercase prefix + tail
+const EPITHET_TAIL = [['pter', 'A'], ['som', 'A'], ['cephal', 'A'], ['dactyl', 'A'], ['not', 'A'], ['pus', 'X'], ['gnath', 'A'], ['cer', 'A']];
+const AUTHORS = ['Thorne', 'Ashworth', 'Hartley', 'Fenwick', 'Lindqvist', 'Brandt', 'Dufour', 'Marchetti', 'Whitlock', 'Pemberton', 'Castellane',
+  'Vossberg', 'Haldane', 'Kirkbride', 'Lacroix', 'Reinholt', 'Sedgwick', 'Tarrant', 'Ullmann', 'Verhoeven', 'Winterbourne', 'Zanetti', 'Bramwell',
+  'Coldwell', 'Dalgleish', 'Eastgate', 'Fairbrother', 'Greaves', 'Holloway', 'Ingram', 'Jessop', 'Kendrick', 'Moncrieff', 'Norbury', 'Osgood',
+  'Prendergast', 'Quayle', 'Rathbone', 'Stroud', 'Tennant', 'Wendelin', 'Berthold', 'Olafsen', 'Petrov', 'Guimarães'];
+const COMMON_ADJ = ['Lesser', 'Greater', 'Banded', 'Spotted', 'Velvet', 'Marsh', 'Heath', 'Northern', 'Southern', 'Common', 'Dusky', 'Golden',
+  'Striped', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Scarce', 'Brindled', 'Clouded', 'Bronze', 'Silver', 'Ruddy', 'Small',
+  'Large', 'Variable', 'Four-spotted', 'Dark', 'Pale', 'Hairy', 'Black-tailed', 'White-legged', 'Emerald', 'Scarlet', 'Twin-spot', 'Chalk', 'River'];
+const COMMON = {
+  beetle: { nouns: ['Ground', 'Leaf', 'Soldier', 'Jewel', 'Longhorn', 'Click', 'Darkling', 'Chafer', 'Rove', 'Tiger', 'Flower', 'Bark'], base: 'Beetle' },
+  moth: { nouns: ['Carpet', 'Pug', 'Wave', 'Underwing', 'Tiger', 'Footman', 'Rustic', 'Quaker', 'Thorn', 'Prominent', 'Hawk', 'Emerald', 'Wainscot', 'Dart', 'Brocade'], base: 'Moth' },
+  butterfly: { nouns: ['Fritillary', 'Skipper', 'Blue', 'Copper', 'Hairstreak', 'Argus', 'Brown', 'White', 'Admiral', 'Tortoiseshell', 'Swallowtail', 'Ringlet'], base: '' },
+  fly: { nouns: ['Hover', 'Soldier', 'Snipe', 'Dance', 'Robber', 'Bee', 'Flesh', 'Dung', 'Picture-winged', 'Long-legged', 'Stiletto', 'Thick-headed', 'Flat-footed'], base: 'Fly' },
+  cranefly: { nouns: ['Meadow', 'Tiger', 'Phantom', 'Winter', 'Giant', 'Fen', 'Bog', 'Spotted', 'Short-palped', 'Hairy-eyed'], base: 'Crane Fly' },
+  bee: { nouns: ['Mining', 'Mason', 'Leafcutter', 'Carpenter', 'Furrow', 'Nomad', 'Flower', 'Carder', 'Plasterer', 'Sweat', 'Blood', 'Yellow-faced', 'Bumble', 'Cuckoo'], base: 'Bee' },
+  wasp: { nouns: ['Digger', 'Mason', 'Potter', 'Paper', 'Spider', 'Sand', 'Ruby-tailed', 'Gall', 'Ichneumon', 'Wood', 'Cuckoo', 'Thread-waisted'], base: 'Wasp' },
+  dragonfly: { nouns: ['Hawker', 'Darter', 'Skimmer', 'Emperor', 'Chaser', 'Clubtail', 'Emerald', 'Goldenring'], base: '',
+    adj: ['Northern', 'Southern', 'Common', 'Migrant', 'Brown', 'Hairy', 'Ruddy', 'Black', 'Four-spotted', 'Scarce', 'Keeled', 'Broad-bodied', 'Lesser', 'Vagrant', 'Emerald', 'Moorland', 'Downy'] },
+  damselfly: { nouns: ['Demoiselle', 'Bluet', 'Spreadwing', 'Damsel', 'Featherleg', 'Jewelwing', 'Bluetail', 'Redtail'], base: '',
+    adj: ['Azure', 'Large Red', 'Small Red', 'Scarce', 'Emerald', 'Banded', 'White-legged', 'Variable', 'Northern', 'Blue-tailed', 'Willow', 'Dainty', 'Dusky', 'Southern', 'Copper'] },
+  grasshopper: { nouns: ['Field', 'Meadow', 'Heath', 'Marsh', 'Bush', 'Dune', 'Band-winged', 'Stripe-winged', 'Toothed', 'Pygmy', 'Rufous'], base: 'Grasshopper' },
+  lacewing: { nouns: ['Green', 'Brown', 'Giant', 'Dusty', 'Pleasing', 'Beaded', 'Silky', 'Spoon-winged', 'Thread', 'Pearly'], base: 'Lacewing' },
+  cicada: { nouns: ['Harvest', 'Dog-day', 'Dusk', 'Scissor', 'Floury', 'Bladder', 'Hill', 'Hairy', 'Bush', 'Mountain', 'Grass'], base: 'Cicada' },
+  mayfly: { nouns: ['Dun', 'Spinner', 'Drake'], base: '',
+    adj: ['Pale', 'Dark', 'Olive', 'Large', 'Small', 'Summer', 'Autumn', 'Blue-winged', 'Claret', 'Sepia', 'Yellow', 'Brook', 'Lake', 'Grey', 'Evening', 'Dusky', 'Iron', 'Green'] },
+};
+
+function insectName(seed, type, variant) {
+  const r = mulberry32((((seed >>> 0) ^ 0x9E3779B9) >>> 0));   // private PRNG: never touches the drawing's rng
+  const pk = arr => arr[Math.floor(r() * arr.length)];
+  const kind = variant === 'butterfly' ? 'butterfly' : type;
+  const tails = NAME_TAIL[kind] || NAME_TAIL.beetle;
+
+  // genus: capitalised prefix + order-appropriate tail; collapse doubled vowels ("Chryso" + "aeschna" -> "Chrysaeschna")
+  const pre = pk(NAME_PREFIX);
+  const [tail, gender] = pk(tails);
+  let genus = pre + tail;
+  if (/[aeiou]$/.test(pre) && /^[aeiou]/.test(tail)) genus = pre.slice(0, -1) + tail;
+  genus = genus.charAt(0).toUpperCase() + genus.slice(1).toLowerCase();
+
+  // species epithet: either a Latin adjective or one built from the same syllable tables; agree with genus gender
+  const decline = (stem, cls) => {
+    if (cls === 'A') return stem + (gender === 'm' ? 'us' : gender === 'f' ? 'a' : 'um');
+    if (cls === 'B') return stem + (gender === 'n' ? 'e' : 'is');
+    if (cls === 'M') return gender === 'n' ? stem.slice(0, -2) + 'us' : stem;   // minor -> minus, major -> majus
+    return stem;
+  };
+  let species;
+  if (r() < 0.25) {
+    let p2 = pk(NAME_PREFIX);
+    if (p2 === pre) p2 = pk(NAME_PREFIX);
+    const [t2, cls] = pk(EPITHET_TAIL);
+    let stem = p2.toLowerCase();
+    if (/[aeiou]$/.test(stem) && /^[aeiou]/.test(t2)) stem = stem.slice(0, -1);
+    species = decline(stem + t2, cls);
+  } else {
+    const [stem, cls] = pk(EPITHET);
+    species = decline(stem, cls);
+  }
+
+  // authority (~70%): "(Thorne, 1874)" or "Thorne, 1874"
+  let authority = null;
+  if (r() < 0.7) {
+    const a = pk(AUTHORS) + ', ' + (1758 + Math.floor(r() * 153));
+    authority = r() < 0.5 ? '(' + a + ')' : a;
+  }
+
+  // common name: <Adjective> <Noun> [<Base>], never repeating a word
+  const c = COMMON[kind] || COMMON.beetle;
+  const adjs = c.adj || COMMON_ADJ;
+  let adj = pk(adjs), noun = pk(c.nouns);
+  for (let i = 0; i < 8 && (adj === noun || adj.split(/[ -]/).includes(noun) || noun.split(/[ -]/).includes(adj)); i++) noun = pk(c.nouns);
+  const common = [adj, noun, c.base].filter(Boolean).join(' ');
+
+  return { genus, species, authority, common, binomial: genus + ' ' + species };
+}
+
+// ============================================================
 //  generateInsect
 // ============================================================
 const TYPES = ['beetle', 'moth', 'fly', 'bee', 'dragonfly', 'grasshopper', 'cranefly', 'lacewing', 'cicada', 'wasp', 'damselfly', 'mayfly'];
@@ -1239,16 +1364,28 @@ function generateInsectDetailed(seed) {
   const halfW = Math.max(Math.abs(bbox.minX), Math.abs(bbox.maxX));
   const bw = halfW * 2, bh = bbox.maxY - bbox.minY;
   const margin = 24;
-  const s = Math.min((600 - 2 * margin) / bw, (600 - 2 * margin) / bh, 1.3);
-  const tx = 300, ty = 300 - (bbox.minY + bbox.maxY) / 2 * s;
+  const CAPTION_H = 45;                       // band reserved at the foot of the plate for the caption
+  const plateH = 600 - CAPTION_H;             // drawing is centred within the top 555px
+  const s = Math.min((600 - 2 * margin) / bw, (plateH - 2 * margin) / bh, 1.3);
+  const tx = 300, ty = plateH / 2 - (bbox.minY + bbox.maxY) / 2 * s;
+  meta.name = insectName(seed, type, P.variant);
   meta.scale = s;
   meta.bbox = { minX: -halfW, maxX: halfW, minY: bbox.minY, maxY: bbox.maxY };
   meta.fitted = { minX: tx - halfW * s, maxX: tx + halfW * s, minY: ty + bbox.minY * s, maxY: ty + bbox.maxY * s };
 
+  // plate caption: italic binomial (+ roman authority) and a letter-spaced small-caps common name
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const nm = meta.name;
+  const caption =
+    '<text x="300" y="571" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="16" fill="#000">' +
+    '<tspan font-style="italic">' + esc(nm.binomial) + '</tspan>' + (nm.authority ? ' ' + esc(nm.authority) : '') + '</text>' +
+    '<text x="300" y="587" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="11" font-variant="small-caps" letter-spacing="1.5" fill="#000">' +
+    esc(nm.common) + '</text>';
+
   let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">' +
     '<rect width="600" height="600" fill="#fff"/>' +
     '<g transform="translate(' + fmt(tx) + ' ' + fmt(ty) + ') scale(' + (Math.round(s * 1000) / 1000) + ')" stroke="#000" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
-    order.join('') + '</g></svg>';
+    order.join('') + '</g>' + caption + '</svg>';
   const sw = v => String(Math.round(v / s * 1000) / 1000);
   svg = svg.replace(/SW_H/g, sw(2.2)).replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
   return { svg, meta };
@@ -1257,7 +1394,7 @@ function generateInsectDetailed(seed) {
 function generateInsect(seed) { return generateInsectDetailed(seed).svg; }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { generateInsect, generateInsectDetailed, dailySeed, hashString, mulberry32, TYPES };
+  module.exports = { generateInsect, generateInsectDetailed, insectName, dailySeed, hashString, mulberry32, TYPES };
 }
 </script>
 
@@ -1274,7 +1411,10 @@ if (typeof module !== 'undefined' && module.exports) {
     const r = generateInsectDetailed(seed);
     stage.innerHTML = r.svg;
     const label = r.meta.variant === 'butterfly' ? 'butterfly' : r.meta.type;
-    info.innerHTML = 'seed <b>' + seed + '</b> &middot; <i>' + NAMES[r.meta.type] + '</i> (' + label + ')';
+    const n = r.meta.name;
+    const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;');
+    info.innerHTML = 'seed <b>' + seed + '</b> &middot; <i>' + esc(n.binomial) + '</i>' + (n.authority ? ' ' + esc(n.authority) : '') +
+      ' &middot; ' + esc(n.common) + ' &middot; ' + NAMES[r.meta.type] + ' (' + label + ')';
     history.replaceState(null, '', '#' + seed);
     document.title = 'insectdraw #' + seed;
   }
