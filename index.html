@@ -380,6 +380,80 @@ function scatterDots(wing, n, rMin, rMax, margin) {
   return els;
 }
 
+
+// ---------- secondary venation: Voronoi cells between primary veins ----------
+// After Hoffmann et al. 2018 (PNAS): inhibitory centres scattered between the
+// primary veins repel each other; secondary veins form the boundaries between
+// them, i.e. a (near-)Voronoi tessellation of each inter-vein strip.
+function clipHalfPlane(poly, a, b) {   // keep the part of poly closer to a than to b
+  const f = p => (p[0] - a[0]) * (p[0] - a[0]) + (p[1] - a[1]) * (p[1] - a[1]) - (p[0] - b[0]) * (p[0] - b[0]) - (p[1] - b[1]) * (p[1] - b[1]);
+  const out = [];
+  for (let i = 0; i < poly.length; i++) {
+    const P = poly[i], Q = poly[(i + 1) % poly.length], fp = f(P), fq = f(Q);
+    if (fp <= 0) out.push(P);
+    if ((fp <= 0) !== (fq <= 0)) out.push(lerpP(P, Q, fp / (fp - fq)));
+  }
+  return out;
+}
+function poissonInPoly(poly, rFn, maxTries) {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const p of poly) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
+  const pts = [];
+  for (let t = 0; t < maxTries; t++) {
+    const p = [randRange(minX, maxX), randRange(minY, maxY)];
+    if (!pointInPoly(p, poly)) continue;
+    const r = rFn(p);
+    let ok = true;
+    for (const q of pts) if (vlen(sub(p, q.p)) < (r + q.r) * 0.5) { ok = false; break; }
+    if (ok) pts.push({ p, r });
+  }
+  return pts.map(q => q.p);
+}
+function voronoiEdges(sites, boundary) {
+  const seen = new Set(), edges = [];
+  const key = p => Math.round(p[0] * 2) + ',' + Math.round(p[1] * 2);
+  for (let i = 0; i < sites.length; i++) {
+    let cell = boundary;
+    for (let j = 0; j < sites.length && cell.length > 2; j++) if (j !== i) cell = clipHalfPlane(cell, sites[i], sites[j]);
+    for (let k = 0; k < cell.length; k++) {
+      const P = cell[k], Q = cell[(k + 1) % cell.length];
+      if (vlen(sub(P, Q)) < 0.8) continue;
+      const ka = key(P), kb = key(Q), kk = ka < kb ? ka + '|' + kb : kb + '|' + ka;
+      if (seen.has(kk)) continue;
+      seen.add(kk); edges.push([P, Q]);
+    }
+  }
+  return edges;
+}
+function outlineWalk(poly, i, j) {      // the shorter way round the outline from index i to j, inclusive
+  const n = poly.length, fwd = (j - i + n) % n, bwd = (i - j + n) % n, out = [];
+  if (fwd <= bwd) for (let k = 0; k <= fwd; k++) out.push(poly[(i + k) % n]);
+  else for (let k = 0; k <= bwd; k++) out.push(poly[(i - k + n) % n]);
+  return out;
+}
+// polygon bounded by vein a, the outline between the vein ends, and vein b
+function stripPolygon(poly, a, b) {
+  const ia = poly.indexOf(a[a.length - 1]), ib = poly.indexOf(b[b.length - 1]);
+  const walk = (ia >= 0 && ib >= 0) ? outlineWalk(poly, ia, ib) : [];
+  return a.concat(walk.slice(1, -1), b.slice().reverse());
+}
+function voronoiStrip(poly, a, b, rFn) {
+  const strip = stripPolygon(poly, a, b);
+  if (strip.length < 3) return [];
+  return voronoiEdges(poissonInPoly(strip, rFn, 700), strip);
+}
+function emitEdges(wing, edges, sw) { return edges.map(e => lineEl(wing.T(e[0]), wing.T(e[1]), sw)); }
+// smooth vein through control points -> local polyline
+function vein(pts, n) { return sampleSmooth(pts, false, 1, n || 8); }
+function topAt(wing, x, d) { const r = wing.yRange(x); return r ? r[0] + (d || 0) : 0; }
+function botAt(wing, x, d) { const r = wing.yRange(x); return r ? r[1] - (d || 0) : 0; }
+// nearest outline point to p (so strip polygons can walk the outline from it)
+function nearestOutlinePoint(poly, p) {
+  let best = poly[0], bd = Infinity;
+  for (const q of poly) { const d = vlen(sub(q, p)); if (d < bd) { bd = d; best = q; } }
+  return best;
+}
+
 // ============================================================
 //  generateInsect
 // ============================================================
@@ -621,8 +695,7 @@ function generateInsectDetailed(seed) {
         [W * 0.82 * j(), H * 0.15 * j()], [W * 0.58 * j(), H * 0.38 * j()], [W * 0.3, H * 0.3]];
       hwPts = [[0, 8], [W * 0.4 * j(), -H * 0.02], [W * 0.68 * j(), H * 0.12 * j()], [W * 0.66 * j(), H * 0.42 * j()], [W * 0.45 * j(), H * 0.65 * j()], [W * 0.22 * j(), H * 0.7 * j()], [W * 0.05, H * 0.5]];
     }
-    // scalloped outer margin
-    if (rng() < (isB ? 0.6 : 0.3)) {
+    if (rng() < (isB ? 0.6 : 0.3)) {   // scalloped outer margin
       const out = [];
       for (let i = 0; i < fwPts.length; i++) {
         out.push(fwPts[i]);
@@ -632,23 +705,49 @@ function generateInsectDetailed(seed) {
     }
     const base = [bx, by];
     const fore = makeWing(base, 0, fwPts, 1), hind = makeWing(base, 0, hwPts, 1);
-    const origin = [W * 0.04, H * 0.03];
+
+    // Comstock-Needham layout: a closed discal cell near the wing centre; Sc+R1 runs
+    // along the costa; R2-R5 fan from the cell's upper corner to the apex; M1-M3 leave
+    // the discocellular crossvein; Cu1/Cu2 leave the lower edge; 1A runs to the inner margin.
+    function lepVeins(wing, b, U, D, nR, scX, aX, xMin) {
+      const vs = [];
+      const bowed = (p, q, k) => { const n = perp(norm(sub(q, p))); return vein([p, add(lerpP(p, q, 0.5), mul(n, k)), q]); };
+      const cellTop = bowed(b, U, -W * 0.015), cellBot = bowed(b, D, W * 0.012);
+      const dcv = bowed(U, D, W * 0.02);          // discocellular, concave toward the base
+      vs.push(cellTop, cellBot, dcv);
+      vs.push(bowed([b[0] + W * 0.03, b[1] - H * 0.04], [scX, topAt(wing, scX, 0.5)], -W * 0.01));
+      const nT = nR + 3 + 2;
+      const tg = marginTargets(wing.localPoly, U, nT, xMin);
+      if (tg.length < nT) return vs;
+      // R branches: R2 from the corner, the rest from a short stem continuing the cell's top edge
+      const stemDir = norm(sub(tg[0], U));
+      for (let i = 0; i < nR; i++) {
+        const start = i === 0 ? U : add(U, mul(stemDir, W * 0.05 * Math.min(i, 2)));
+        if (i > 0 && i <= 2) vs.push([U, start]);
+        vs.push(bowed(start, tg[i], randRange(-1, 1) * W * 0.01));
+      }
+      for (let i = 0; i < 3; i++) vs.push(bowed(plAt(dcv, 0.15 + i * 0.35), tg[nR + i], randRange(-1, 1) * W * 0.012));
+      vs.push(bowed(D, tg[nR + 3], W * 0.01));
+      vs.push(bowed(plAt(cellBot, 0.68), tg[nR + 4], W * 0.012));
+      vs.push(bowed([b[0], b[1] + H * 0.03], [aX, botAt(wing, aX, 0.5)], W * 0.012));
+      return vs;
+    }
+
     // hindwing
     L.wings.push(pathEl(hind.path, SW.O, '#fff'));
-    for (const v of radiatingVeins(hind, [W * 0.06, H * 0.15], randInt(2, 4), W * 0.3, H * 0.03)) L.wings.push(emitLocalPolyline(hind, v, SW.D));
+    for (const v of lepVeins(hind, [W * 0.05, H * 0.1], [W * 0.4, H * 0.12], [W * 0.36, H * 0.3], 2, W * 0.42, W * 0.28, W * 0.45)) L.wings.push(emitLocalPolyline(hind, v, SW.D));
     L.wings.push(...scatterDots(hind, randInt(6, 18), 0.7, 1.4, 4));
     // forewing
     L.wings.push(pathEl(fore.path, SW.O, '#fff'));
-    const veins = radiatingVeins(fore, origin, randInt(3, 5), W * 0.55, H * 0.03);
+    const nR = randInt(3, 5);
+    const veins = lepVeins(fore, [W * 0.05, H * 0.02], [W * 0.52, -H * 0.26], [W * 0.47, H * 0.06], nR, W * 0.62, W * 0.42, W * 0.62);
     for (const v of veins) L.wings.push(emitLocalPolyline(fore, v, SW.D));
-    const ct = randRange(0.4, 0.5);
-    for (let i = 0; i + 1 < veins.length; i++) L.wings.push(lineEl(fore.T(plAt(veins[i], ct)), fore.T(plAt(veins[i + 1], ct)), SW.D));
-    // bands: wavy lines roughly parallel to the outer margin
+    // bands: wavy lines roughly parallel to the outer margin, threaded through the marginal veins
+    const marginal = veins.slice(4).filter(v => v.length > 2).slice(0, -1);   // R, M, Cu veins in fan order (drop 1A)
     const nb = randInt(1, 2);
-    for (let b = 0; b < nb; b++) {
-      const tb = 0.62 + b * 0.18 + randRange(-0.04, 0.04);
-      const pts = veins.map(v => plAt(v, tb + randRange(-0.03, 0.03)));
-      if (pts.length < 2) break;
+    for (let b = 0; b < nb && marginal.length > 2; b++) {
+      const tb = 0.5 + b * 0.25 + randRange(-0.04, 0.04);
+      const pts = marginal.map(v => plAt(v, tb + randRange(-0.04, 0.04)));
       const yr0 = fore.yRange(pts[0][0]), yr1 = fore.yRange(pts[pts.length - 1][0]);
       const full = [];
       if (yr0) full.push([pts[0][0], yr0[0] + 1]);
@@ -656,10 +755,10 @@ function generateInsectDetailed(seed) {
       if (yr1) full.push([pts[pts.length - 1][0], yr1[1] - 1]);
       L.wings.push(pathEl(smoothPath(full.map(fore.T), false, 1), SW.F));
     }
-    if (rng() < 0.55) {   // eyespot
-      const c = plAt(veins[Math.floor(veins.length / 2)], 0.6);
-      const r = randRange(5, 9);
-      if (fore.inside(add(c, [r + 2, 0])) && fore.inside(sub(c, [r + 2, 0])) && fore.inside(add(c, [0, r + 2])) && fore.inside(sub(c, [0, r + 2]))) {
+    if (rng() < 0.55 && marginal.length > 3) {   // eyespot in a cell between marginal veins
+      const c = lerpP(plAt(marginal[2], 0.55), plAt(marginal[3], 0.55), 0.5);
+      const r = randRange(4, 8);
+      if ([[r + 2, 0], [-r - 2, 0], [0, r + 2], [0, -r - 2]].every(d => fore.inside(add(c, d)))) {
         L.wings.push(pathEl(ellipsePath(fore.T(c), r, r * 0.8, 0), SW.D));
         L.wings.push(pathEl(ellipsePath(fore.T(c), r * 0.5, r * 0.4, 0), SW.D));
       }
@@ -672,12 +771,29 @@ function generateInsectDetailed(seed) {
     const theta = randRange(30, 45);
     const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(1.1, 1.25);
     const w = Lw * 0.36;
-    const pts = [[0, 0], [Lw * 0.25, -w * 0.42], [Lw * 0.6, -w * 0.5], [Lw * 0.9, -w * 0.35], [Lw, -w * 0.05], [Lw * 0.85, w * 0.35], [Lw * 0.5, w * 0.5], [Lw * 0.15, w * 0.3]];
+    const pts = [[0, 0], [Lw * 0.25, -w * 0.42], [Lw * 0.6, -w * 0.5], [Lw * 0.9, -w * 0.35], [Lw, -w * 0.05], [Lw * 0.85, w * 0.35], [Lw * 0.5, w * 0.5], [Lw * 0.2, w * 0.38], [Lw * 0.06, w * 0.12]];
     const wing = makeWing([bx, by], theta, pts, 1);
+    // alula + calypter: small lobes at the base of the trailing edge, under the wing
+    L.wings.push(pathEl(smoothPath([[Lw * 0.03, w * 0.12], [Lw * 0.06, w * 0.4], [Lw * 0.17, w * 0.46], [Lw * 0.22, w * 0.36]].map(wing.T), true, 1), SW.D, '#fff'));
     L.wings.push(pathEl(wing.path, SW.O, '#fff'));
-    const veins = radiatingVeins(wing, [Lw * 0.04, -w * 0.02], randInt(3, 4), Lw * 0.5, w * 0.04);
-    for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, SW.D));
-    for (let i = 0; i + 1 < veins.length; i++) L.wings.push(lineEl(wing.T(plAt(veins[i], 0.5)), wing.T(plAt(veins[i + 1], 0.55)), SW.D));
+    // Muscid venation: Sc, R1, R2+3 to the costa; R4+5 to the apex; M1+2 with a forward
+    // bend; CuA1 and A1 to the trailing edge; r-m, dm-cu and bm-cu crossveins.
+    const b = [Lw * 0.03, -w * 0.02];
+    const V = {
+      sc: vein([b, [Lw * 0.2, -w * 0.24], [Lw * 0.36, topAt(wing, Lw * 0.36, 0.5)]]),
+      r1: vein([b, [Lw * 0.3, -w * 0.18], [Lw * 0.56, topAt(wing, Lw * 0.56, 0.5)]]),
+      r23: vein([b, [Lw * 0.45, -w * 0.12], [Lw * 0.86, topAt(wing, Lw * 0.86, 0.5)]]),
+      r45: vein([b, [Lw * 0.5, -w * 0.03], [Lw * 0.985, (topAt(wing, Lw * 0.985) + botAt(wing, Lw * 0.985)) / 2]]),
+      m: vein([b, [Lw * 0.4, w * 0.12], [Lw * 0.7, w * 0.12], [Lw * 0.78, w * 0.02 * jitter(0.5)], [Lw * 0.955, botAt(wing, Lw * 0.955, 0.5)]], 12),
+      cu: vein([b, [Lw * 0.3, w * 0.27], [Lw * 0.62, botAt(wing, Lw * 0.62, 0.5)]]),
+      a: vein([b, [Lw * 0.15, w * 0.32], [Lw * 0.3, botAt(wing, Lw * 0.3, 0.5)]]),
+    };
+    for (const k in V) L.wings.push(emitLocalPolyline(wing, V[k], SW.D));
+    const cross = (va, xa, vb, xb) => { const ya = plYAt(va, xa), yb = plYAt(vb, xb); if (ya !== null && yb !== null) L.wings.push(lineEl(wing.T([xa, ya]), wing.T([xb, yb]), SW.D)); };
+    cross(V.r45, Lw * 0.47, V.m, Lw * 0.5);      // r-m
+    cross(V.m, Lw * 0.66, V.cu, Lw * 0.6);       // dm-cu
+    cross(V.m, Lw * 0.3, V.cu, Lw * 0.28);       // bm-cu
+    cross(V.cu, Lw * 0.2, V.a, Lw * 0.22);       // closes the anal cell
     // halteres
     const hy = thorax.yAt(0.8), hx = thorax.hwAt(hy) * 0.8;
     const hd = dirv(theta + 20);
@@ -696,19 +812,41 @@ function generateInsectDetailed(seed) {
     const Lh = Lw * 0.62, wh = w * 0.75;
     const hPts = [[0, 0], [Lh * 0.3, -wh * 0.35], [Lh * 0.7, -wh * 0.45], [Lh, -wh * 0.05], [Lh * 0.8, wh * 0.4], [Lh * 0.45, wh * 0.5], [Lh * 0.12, wh * 0.25]];
     const hind = makeWing([hx, hy], theta + 14, hPts, 1);
+    const cross = (wg, va, xa, vb, xb) => { const ya = plYAt(va, xa), yb = plYAt(vb, xb); if (ya !== null && yb !== null) L.wings.push(lineEl(wg.T([xa, ya]), wg.T([xb, yb]), SW.D)); };
+    // hindwing: R, M, Cu plus a row of hamuli (hooks) on the leading edge
     L.wings.push(pathEl(hind.path, SW.O, '#fff'));
-    for (const v of radiatingVeins(hind, [Lh * 0.04, 0], 2, Lh * 0.5, wh * 0.03)) L.wings.push(emitLocalPolyline(hind, v, SW.D));
+    {
+      const b = [Lh * 0.03, 0];
+      const r = vein([b, [Lh * 0.4, -wh * 0.2], [Lh * 0.9, topAt(hind, Lh * 0.9, 0.5)]]);
+      const m = vein([b, [Lh * 0.5, wh * 0.05], [Lh * 0.985, (topAt(hind, Lh * 0.985) + botAt(hind, Lh * 0.985)) / 2]]);
+      const cu = vein([b, [Lh * 0.25, wh * 0.25], [Lh * 0.5, botAt(hind, Lh * 0.5, 0.5)]]);
+      for (const v of [r, m, cu]) L.wings.push(emitLocalPolyline(hind, v, SW.D));
+      cross(hind, r, Lh * 0.42, m, Lh * 0.45); cross(hind, r, Lh * 0.62, m, Lh * 0.65); cross(hind, m, Lh * 0.35, cu, Lh * 0.33);
+      for (let x = Lh * 0.42; x < Lh * 0.62; x += Lh * 0.045) { const p = [x, topAt(hind, x, 0.3)]; L.wings.push(lineEl(hind.T(p), hind.T([p[0] + 1.2, p[1] - 2.2]), SW.D)); }
+    }
+    // forewing: costal vein to the stigma, marginal cell, three submarginal cells, discoidal cells
     L.wings.push(pathEl(fore.path, SW.O, '#fff'));
-    const veins = radiatingVeins(fore, [Lw * 0.04, 0], 3, Lw * 0.5, w * 0.03);
-    for (const v of veins) L.wings.push(emitLocalPolyline(fore, v, SW.D));
-    for (const st of [0.35, 0.62]) for (let i = 0; i + 1 < veins.length; i++) L.wings.push(lineEl(fore.T(plAt(veins[i], st)), fore.T(plAt(veins[i + 1], st + 0.06)), SW.D));
-    // leading-edge (costal) vein
-    const costa = sampleSmooth([[Lw * 0.02, -w * 0.05], [Lw * 0.45, -w * 0.3], [Lw * 0.9, -w * 0.25]], false, 1, 8);
-    L.wings.push(emitLocalPolyline(fore, costa, SW.D));
+    {
+      const b1 = [Lw * 0.03, -w * 0.05], b2 = [Lw * 0.03, w * 0.02], b3 = [Lw * 0.03, w * 0.08];
+      const sc = vein([b1, [Lw * 0.25, -w * 0.3], [Lw * 0.47, topAt(fore, Lw * 0.47, 0.5)]]);
+      const r1 = vein([[Lw * 0.56, topAt(fore, Lw * 0.56, w * 0.09)], [Lw * 0.75, topAt(fore, Lw * 0.75, w * 0.16)], [Lw * 0.93, topAt(fore, Lw * 0.93, 0.5)]]);
+      const rs = vein([b1, [Lw * 0.4, -w * 0.06], [Lw * 0.7, -w * 0.02], [Lw * 0.97, (topAt(fore, Lw * 0.97) + botAt(fore, Lw * 0.97)) / 2]], 12);
+      const m = vein([b2, [Lw * 0.35, w * 0.12], [Lw * 0.7, w * 0.12], [Lw * 0.88, botAt(fore, Lw * 0.88, 0.5)]]);
+      const cu = vein([b3, [Lw * 0.25, w * 0.27], [Lw * 0.55, botAt(fore, Lw * 0.55, 0.5)]]);
+      const a = vein([b3, [Lw * 0.12, w * 0.36], [Lw * 0.28, botAt(fore, Lw * 0.28, 0.5)]]);
+      for (const v of [sc, r1, rs, m, cu, a]) L.wings.push(emitLocalPolyline(fore, v, SW.D));
+      // pterostigma: small hatched cell on the costa between Sc's end and the marginal cell
+      for (let x = Lw * 0.48; x <= Lw * 0.56; x += 1.3) L.wings.push(lineEl(fore.T([x, topAt(fore, x, 0.4)]), fore.T([x, topAt(fore, x, w * 0.08)]), SW.F));
+      cross(fore, r1, Lw * 0.6, rs, Lw * 0.58); cross(fore, r1, Lw * 0.7, rs, Lw * 0.69); cross(fore, r1, Lw * 0.82, rs, Lw * 0.8);   // submarginal cells
+      cross(fore, rs, Lw * 0.35, m, Lw * 0.33); cross(fore, rs, Lw * 0.5, m, Lw * 0.5); cross(fore, rs, Lw * 0.69, m, Lw * 0.7);     // discoidal cells
+      cross(fore, m, Lw * 0.3, cu, Lw * 0.28); cross(fore, m, Lw * 0.5, cu, Lw * 0.48);
+      cross(fore, cu, Lw * 0.2, a, Lw * 0.2);
+    }
   }
 
   if (type === 'dragonfly') {
     const Lw = P.wingLen;
+    const nodusX = Lw * randRange(0.42, 0.5);
     const wingDefs = [
       { t: 0.5, theta: randRange(-10, -3), w: Lw * 0.19, baseW: 0.14, hind: false },
       { t: 0.8, theta: randRange(6, 14), w: Lw * 0.24, baseW: 0.3, hind: true },
@@ -716,69 +854,56 @@ function generateInsectDetailed(seed) {
     for (const wd of wingDefs) {
       const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * 0.6;
       const w = wd.w;
-      const pts = [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.5, -w * 0.5], [Lw * 0.88, -w * 0.42], [Lw, -w * 0.05], [Lw * 0.92, w * 0.33], [Lw * 0.6, w * 0.5],
-        [Lw * 0.25, w * (wd.hind ? 0.55 : 0.5)], [Lw * 0.06, w * (wd.hind ? 0.45 : 0.3)], [0, w * wd.baseW]];
-      const wing = makeWing([bx, by], wd.theta, pts, 0.9);
+      // costa with a small notch at the nodus
+      const pts = [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], [Lw * 0.9, -w * 0.38], [Lw, -w * 0.05],
+        [Lw * 0.92, w * 0.33], [Lw * 0.6, w * 0.5], [Lw * 0.25, w * (wd.hind ? 0.55 : 0.5)], [Lw * 0.06, w * (wd.hind ? 0.45 : 0.3)], [0, w * wd.baseW]];
+      const wing = makeWing([bx, by], wd.theta, pts, 0.8);
+      const poly = wing.localPoly;
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
-      // longitudinal veins: y(x) from base to margin targets
+      // primary longitudinal veins, all fused at the base. Sc ends at the nodus; R1 runs
+      // under the costa to the tip; the rest (R2-R4, MA, MP, CuA, CuP) fan to the margin.
+      const x0 = Lw * 0.03, yr0 = wing.yRange(Lw * 0.045) || [-w * 0.3, w * 0.1];
       const nV = randInt(5, 7);
-      const targets = marginTargets(wing.localPoly, [Lw * 0.05, 0], nV, Lw * 0.55);
+      const tipTargets = marginTargets(poly, [Lw * 0.05, 0], nV + 1, Lw * 0.55);
+      const scTarget = nearestOutlinePoint(poly, [nodusX, topAt(wing, nodusX)]);
+      const makeVein = (y0, tg, pow) => {
+        const pl = [], steps = 40;
+        for (let k = 0; k <= steps; k++) { const x = x0 + (tg[0] - x0) * k / steps; pl.push([x, y0 + (tg[1] - y0) * Math.pow(k / steps, pow)]); }
+        pl[pl.length - 1] = tg;          // exact outline point, so strips can walk the margin
+        return pl;
+      };
       const veins = [];
-      for (let i = 0; i < nV; i++) {
-        const y0 = lerp(-w * 0.32, w * 0.3, i / (nV - 1)) * jitter(0.1);
-        const tg = targets[i];
-        if (!tg) continue;
-        const x0 = Lw * 0.03, pl = [];
-        const steps = 40;
-        for (let k = 0; k <= steps; k++) {
-          const x = x0 + (tg[0] - x0) * k / steps;
-          pl.push([x, y0 + (tg[1] - y0) * Math.pow(k / steps, 1.5)]);
-        }
-        veins.push(pl);
+      veins.push(makeVein(yr0[0] + 1.5, scTarget, 1.0));                                  // Sc
+      veins.push(makeVein(yr0[0] + 3.5, tipTargets[0], 1.6));                             // R1
+      for (let i = 1; i <= nV; i++) veins.push(makeVein(lerp(yr0[0] + 5, yr0[1] - 1.5, i / nV), tipTargets[i], 1.5));
+      for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, SW.D));
+      // antenodal crossveins (C-Sc and Sc-R1, aligned), postnodals (C-R1), pterostigma
+      const stepA = Lw * 0.035;
+      for (let x = Lw * 0.09; x < nodusX - 2; x += stepA) {
+        const t = topAt(wing, x, 0.3), ys = plYAt(veins[0], x), yr = plYAt(veins[1], x);
+        if (ys !== null) L.wings.push(lineEl(wing.T([x, t]), wing.T([x, ys]), SW.F));
+        if (ys !== null && yr !== null) L.wings.push(lineEl(wing.T([x, ys]), wing.T([x, yr]), SW.F));
       }
-      // forks
-      const nForks = randInt(1, 2);
-      for (let f = 0; f < nForks; f++) {
-        const parent = veins[randInt(0, veins.length - 1)];
-        const s = randRange(0.35, 0.55), start = plAt(parent, s);
-        const yr = wing.yRange(Lw * 0.97);
-        if (!yr) continue;
-        const tg = [Lw * 0.97, lerp(yr[0], yr[1], randRange(0.2, 0.8))];
-        const pl = []; const steps = 30;
-        for (let k = 0; k <= steps; k++) { const x = start[0] + (tg[0] - start[0]) * k / steps; pl.push([x, start[1] + (tg[1] - start[1]) * Math.pow(k / steps, 1.3)]); }
-        veins.push(pl);
+      const psx0 = Lw * 0.78, psx1 = Lw * 0.86;
+      for (let x = nodusX + Lw * 0.02; x < Lw * 0.97; x += Lw * 0.028) {
+        if (x > psx0 - 2 && x < psx1 + 2) continue;
+        const yr = plYAt(veins[1], x);
+        if (yr !== null) L.wings.push(lineEl(wing.T([x, topAt(wing, x, 0.3)]), wing.T([x, yr]), SW.F));
       }
-      for (const v of veins) L.wings.push(emitLocalPolyline(wing, v.filter(p => wing.inside(p) || p === v[v.length - 1]), SW.D));
-      // cross-veins: stations along x, cells subdivide toward the tip
-      let x = Lw * 0.07, cellIdx = 0;
-      while (x < Lw * 0.985) {
-        const step = Lw * (x < Lw * 0.6 ? 0.055 : 0.03) * randRange(0.75, 1.25);
-        const ys = [];
-        const yr = wing.yRange(x);
-        if (yr) {
-          ys.push(yr[0] + 0.3, yr[1] - 0.3);
-          for (const v of veins) { const y = plYAt(v, x); if (y !== null && y > yr[0] && y < yr[1]) ys.push(y); }
-          ys.sort((a, b) => a - b);
-          for (let i = 0; i + 1 < ys.length; i++) {
-            if (ys[i + 1] - ys[i] < 1.6) continue;
-            const xo = x + ((i + cellIdx) % 2) * step * 0.5;
-            const yrO = wing.yRange(xo);
-            if (!yrO) continue;
-            const yA = i === 0 ? yrO[0] + 0.3 : plYAt(veins.find(v => Math.abs((plYAt(v, x) ?? 1e9) - ys[i]) < 1e-6) || [[x, ys[i]], [x, ys[i]]], xo);
-            const yB = i + 1 === ys.length - 1 ? yrO[1] - 0.3 : plYAt(veins.find(v => Math.abs((plYAt(v, x) ?? 1e9) - ys[i + 1]) < 1e-6) || [[x, ys[i + 1]], [x, ys[i + 1]]], xo);
-            if (yA === null || yB === null || yB - yA < 1.2) continue;
-            L.wings.push(lineEl(wing.T([xo, yA]), wing.T([xo, yB]), SW.F));
-          }
-        }
-        x += step; cellIdx++;
-      }
-      // pterostigma: dense hatch cell near the tip on the leading edge
-      const psx0 = Lw * 0.8, psx1 = Lw * 0.88;
-      for (let px = psx0; px <= psx1; px += 1.3) {
-        const yr = wing.yRange(px); if (!yr) continue;
-        const y1 = plYAt(veins[0], px);
-        if (y1 === null) continue;
-        L.wings.push(lineEl(wing.T([px, yr[0] + 0.4]), wing.T([px, y1]), SW.F));
+      for (let x = psx0; x <= psx1; x += 1.3) { const yr = plYAt(veins[1], x); if (yr !== null) L.wings.push(lineEl(wing.T([x, topAt(wing, x, 0.4)]), wing.T([x, yr]), SW.F)); }
+      L.wings.push(lineEl(wing.T([psx0, topAt(wing, psx0, 0.3)]), wing.T([psx0, plYAt(veins[1], psx0) || 0]), SW.D));
+      L.wings.push(lineEl(wing.T([psx1, topAt(wing, psx1, 0.3)]), wing.T([psx1, plYAt(veins[1], psx1) || 0]), SW.D));
+      // secondary venation: Voronoi cells in each strip from R1 down to the trailing edge;
+      // cells about one strip-width across, shrinking toward the tip and the hind margin
+      const basePt = nearestOutlinePoint(poly, [0, w * wd.baseW]);
+      for (let i = 1; i < veins.length; i++) {
+        const a = veins[i], b = i + 1 < veins.length ? veins[i + 1] : [basePt];
+        const rFn = p => {
+          const ya = plYAt(a, p[0]), yb = i + 1 < veins.length ? plYAt(b, p[0]) : botAt(wing, p[0]);
+          const width = (ya !== null && yb !== null) ? Math.abs(yb - ya) : 8;
+          return Math.max(4.5, Math.min(11, width * 0.9)) * (1 - 0.25 * p[0] / Lw);
+        };
+        L.wings.push(...emitEdges(wing, voronoiStrip(poly, a, b, rFn), SW.F));
       }
     }
   }
@@ -829,14 +954,16 @@ function generateInsectDetailed(seed) {
     const teg = [[0, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * 0.78, by + Lt * 0.5], [wt * 0.55, by + Lt * 0.85], [wt * 0.2, by + Lt * 0.99], [0, by + Lt]];
     L.covers.push(pathEl(halfShield(teg), SW.O, '#fff'));
     const vs = [];
-    for (let k = 1; k <= 3; k++) {
+    for (let k = 0; k <= 3; k++) {   // k = 0 is the outer edge itself, used only as a strip boundary
       const f = 1 - k / 4;
       const pts = [[wt * 0.55 * f, by + 6], [wt * 0.75 * f, by + Lt * 0.12], [wt * 0.78 * f, by + Lt * 0.5], [wt * 0.55 * f, by + Lt * 0.85], [wt * 0.2 * f, by + Lt * 0.97]];
       vs.push(sampleSmooth(pts, false, 1, 8));
-      L.covers.push(pathEl(smoothPath(pts, false, 1), SW.D));
+      if (k > 0) L.covers.push(pathEl(smoothPath(pts, false, 1), SW.D));
     }
-    for (let i = 0; i + 1 < vs.length; i++) {
-      for (let t = 0.12; t < 0.95; t += 0.1) L.covers.push(lineEl(plAt(vs[i], t), plAt(vs[i + 1], t + 0.03), SW.F));
+    const ident = { T: p => p };
+    for (let i = 0; i + 1 < vs.length; i++) {   // irregular reticulation between the longitudinal veins
+      const strip = vs[i].concat(vs[i + 1].slice().reverse());
+      L.covers.push(...emitEdges(ident, voronoiEdges(poissonInPoly(strip, () => randRange(6, 9), 400), strip), SW.F));
     }
   }
 
