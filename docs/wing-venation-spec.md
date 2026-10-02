@@ -546,3 +546,13 @@ Each step: contact sheet for the order, zoom of one wing beside the reference, `
 A step is done when a 4× zoom of a generated wing placed beside the reference shows: no
 straight full-span vein, no 90° junction, closed cells where the reference has them, open
 membrane where it does not, the stigma as a lens, and the weight hierarchy of R7.
+
+## Follow-ups noted at the 2026-10-02 merge
+
+- Lacewing: the costal ladder continues under Sc into the Sc–R1 strip on some seeds; the
+  references (neu-nothochrysa) carry the ladder only between C and Sc. Restrict site rungs in the
+  Sc–R1 strip to a few, or none.
+- Butterfly with a swallowtail (e.g. seed 236): the hindwing veins converge into the tail root and
+  read as a tangle; aim 2A and Cu2 at nodes either side of the tail root, not into it.
+- Grasshopper: hind femur still reads slender for a saltatorial leg (body track).
+- Bee/wasp: geniculate antennae occasionally cross above the head (antenna step of the body plan).
