@@ -177,9 +177,59 @@ Observed:
 - Small dark **pterostigma** on the costa at Sc's end. **Vena spuria** in syrphids.
 - Alula and calypter lobes at the base.
 
-Rules: graph template per family (muscid / nematoceran / syrphid / tabanid / asilid /
-tipulid) with the named cells closed, r-m and dm-cu positions rolled, M1 bend gene, R4 fork
-gene (tabanid), stubs for CuA2 and A2; stigma per R5 (small).
+Rules: grown by `growVeins` v2 (see *Growth, not templates*), the second order on it after
+Hymenoptera. Lane plan measured on dip-eristalis and the Comstock Diptera plan (u = span fraction,
+s = chord fraction from the costa; every value is a per-seed roll inside the range; tipulid ranges
+in brackets where they differ):
+
+| lane | from (u, s) | to | notes |
+|---|---|---|---|
+| C | – | apex | `costaEls`, H; costal spines gene |
+| Sc | (0.02, 0.2) | costa at u 0.42–0.55 [0.6–0.7] | D; hugs the costa (bow −0.02..−0.06); the small stigma lens sits at its end |
+| R1 | (0.02, 0.3) | costa at u 0.6–0.72 [0.76–0.84] | D; the stem before the Rs fork is O |
+| Rs | fork off R1 at u 0.17–0.23 | apex node, or `r45J` (u mEnd + 0.12–0.16, s 0.3) when r4+5 closes | O to its own fork, then D as R4+5 (O with the heavy gene); `R45b` carries it on from `r45J` to the apex |
+| R2+3 | fork off Rs at u 0.48–0.62 [0.62–0.72] | costa at u 0.8–0.9 | D; concave toward the costa |
+| R4 | fork off Rs at u 0.66–0.74 | costa at r23 + 0.05 | tabanid and asilid only |
+| M | (0.02, 0.45) | `mE` (u mEnd 0.7–0.8, s 0.5) in bend families; `mF` (u mf, s 0.5) in fork / three | D (O if heavy); carries r-m, bm-cu, dm-cu |
+| M1 (bend) | `mE` | `r45J` (r4+5 closed: a long oblique vein as in eristalis), or the elbow `m1K` (u mEnd + 0.07–0.1, s 0.5 − bend 0.1–0.16) and on to the margin just behind the apex | muscid: the two-lane elbow is the bent M1 |
+| M1, M2 (fork / three) | `mF` | hind margin at u 0.95 / 0.88 [0.96 / 0.89] | M2 odds 0.75 in nematocerans, always in tabanid / asilid |
+| M3 | fork off M at dm-cu + 0.02 | hind margin at u 0.81 [0.82] | odds 0.5 nemato, 0.8 tipulid, always tabanid / asilid |
+| CuA1 | (0.02, 0.6) | `cuK` (u dm-cu + 0.01–0.03, s 0.74), then `CuA1b` down to the margin at dm-cu + 0.05–0.1 [0.04–0.08] | D (O if heavy); dm's lower edge sits at s ≈ 0.75 as in eristalis, so the drop to the margin is short |
+| CuA2 | (0.02, 0.64) | `cupJ` (u 0.28–0.4, s 0.84): cup closes; [margin at u 0.54–0.62, cup open] | D; strong negative bow (−0.1..−0.14) so it runs out, then bends down onto A1 |
+| A1 | (0.02, 0.8) | `cupJ` [margin at cu2 − 0.16] | D |
+| A1c | `cupJ` | margin at cu2 + 0.05 | A1+CuA2, the short way on to the margin |
+| A2 | (0.02, 0.9) | margin at u 0.14–0.24 | F; odds 0.3–0.6, always in tipulids |
+
+Named crossveins, all through `place` so their junction angles are enforced and counted: **h**
+Sc–R1 at u 0.1–0.17 (odds 0.7–0.8); **r-m** Rs–M just basal of the Rs fork (fork − 0.03..0.1, never
+below 0.4); **bm-cu** M–CuA1 at u 0.33–0.42 [0.42–0.52] (odds 0.8–1); **dm-cu** M–CuA1 at u 0.6–0.7
+[0.62–0.72], bowed toward the apex. The cup closure and the r4+5 closure are lane junctions (three
+lanes sharing a node) rather than crossveins: M1 meets R4+5 at ~150°, a fusion of longitudinals,
+outside R-D's band for a crossvein. Crossvein bows stay within ±0.06: a bow rotates both end
+tangents of the arc by about atan(4·bow), so a −0.1 bow on dm-cu could never satisfy both junction
+angles.
+
+Family parameters (ky = breadth / span; k = site spacing / strip width; sepAbs = narrowest strip,
+as a fraction of the span, that carries sites):
+
+| family | ky | len | M1 mode | r4+5 closed | R4 fork | cup | k | sepAbs | uOpen |
+|---|---|---|---|---|---|---|---|---|---|
+| muscid | 0.92–1.1 | 1.05–1.28 | bend | 0.5 | – | closed | 2.5–4 | 0.1 | 0.7–0.8 |
+| nemato | 0.85–1.0 | 1.05–1.25 | fork (M3 0.5) | – | – | closed | 2.5–4 | 0.1 | 0.72–0.8 |
+| syrphid | 0.95–1.1 | 1.08–1.28 | bend | always | – | closed | 2.5–4 | 0.1 | 0.72–0.8 |
+| tabanid | 1.08–1.2 | 1.05–1.2 | three | – | always | closed | 2.5–3.5 | 0.1 | 0.74–0.8 |
+| asilid | 0.72–0.84 | 1.2–1.35 | three | – | always | closed | 2.5–4 | 0.1 | 0.74–0.8 |
+| tipulid | 0.56–0.68 | 0.95–1.05 | fork (M3 0.8) | – | – | open | 1.6–2.4 | 0.055 | 0.88–0.92 |
+
+Sites: with `sepAbs` 0.1 the basal bundle and every strip narrower than a tenth of the span carry
+no sites, so a fly gets 0–1 secondary rungs (3.3–3.8 joins per wing, nearly all named), as in the
+references; crane flies get 1–3 extra rungs (4.6 joins). `noPair` keeps cup, the anal field, the
+subcostal strip and r2+3 clean, and the strip under R1 in everything but crane flies. The syrphid
+vena spuria is a plain `wingGraph` chain between Rs and M (it is a fold, so it joins nothing and
+is allowed to cross r-m). Stigma per R5 (small, at Sc's end), alula lobe, fringe, costal spines,
+halteres and the posture genes are unchanged from the template version. `meta.wingStats` is
+asserted by `tests/check.js`; the signature carries lane, join and fork counts plus every family
+switch (r4+5 closed, R4, M2, M3, A2, h, bm-cu, stigma style, heavy).
 
 ### Lepidoptera (ref: lep-agrotis, lep-papilio)
 
@@ -279,6 +329,9 @@ to its `deflect` step:
   orders (Odonata) pass `rows2` with an absolute `cell` size: each strip is then cut into segments
   that are one-row ladders where width / cell < 1.6 and rows of Voronoi cells where it is wider,
   every mesh segment closed by crossveins or the margin (see the Odonata rules above).
+  `minSepAbs` (a fraction of the span, default 0) additionally drops strips narrower than an absolute
+  width: `minSep` is a chord fraction, so on its own it lets sites into the tight basal bundle of a
+  fly wing, where real wings have no secondaries.
 - **Junction angle** (R-D): the near end is fixed; the far end slides along its lane within one
   spacing until the obtuse angle between crossvein and lane lies in [105°, 140°] at both ends
   (target `angle` gene 112–128°, `lean` gene preferring the costal end distal as in the references);
@@ -292,11 +345,16 @@ to its `deflect` step:
 - **Density gradient** (R-H): site spacing shrinks toward the tip and trailing edge by `grad`.
 
 `growVeins` returns `{ lanes, joins, forks, stats }`; `stats = { joins, dropped, minAngle, maxAngle }`
-is exposed as `meta.wingStats` for bee and wasp and asserted by `tests/check.js`. The family only
-sets which lanes, forks and named crossveins exist and the site spacing, so two wasps differ in
-topology, not only in node positions; lane, join and fork counts and the hindwing size go into
-`meta.wingSig`. Hymenoptera (fore and hind) use this now; the orders below still use explicit
-templates and are candidates to move.
+is exposed as `meta.wingStats` for bee, wasp, fly and cranefly and asserted by `tests/check.js`. The
+family only sets which lanes, forks and named crossveins exist and the site spacing, so two wasps
+differ in topology, not only in node positions; lane, join and fork counts and the hindwing size go
+into `meta.wingSig`. Hymenoptera (fore and hind) and Diptera use this now; the orders below still
+use explicit templates and are candidates to move. Diptera showed two things Hymenoptera did not:
+a lane that is already diving where a named crossvein lands (CuA1 under dm-cu, M under r-m in the
+forked families) makes the two junction angles differ by the lanes' divergence and the crossvein is
+dropped, so the dive starts at a junction node (`cuK`, `mE` / `mF`) as it does in the references;
+and a lane that must end on another lane (M1 onto R4+5, CuA2 onto A1) is written as lanes sharing a
+node, as the Hymenoptera marginal cell already was.
 
 What changed from v1: lanes are no longer `wingGraph` chains with a node per junction (that is what
 kinked them) and the `off` / `deflect` machinery is gone; crossveins come from sites rather than a
@@ -350,6 +408,13 @@ the references, seeds listed per order) and what it changed:
   stigma, stems O / branches D / crossveins F. Pass.
 - Diptera (dip-eristalis, dip-asilid-photo; fly 9, 15, 29, 75): br, bm, dm, cup close; r-m and dm-cu
   oblique; the muscid M1 bend reads as a curve. No change needed. Pass.
+- Diptera, second audit (dip-eristalis, dip-asilid-photo, dip-limonia; fly 9, 15, 29, 75, cranefly 6,
+  10) after moving to `growVeins` v2: lanes smooth, every crossvein junction 105–140° over 3000 seeds
+  (`wingStats`), br / bm / cup / dm closed, r4+5 closed by a long oblique M1 in syrphids and half the
+  muscids, the muscid elbow a real bend to the margin behind the apex, CuA1 turning down at dm-cu's
+  foot, no rungs in the basal bundle (`minSepAbs`), tipulids with the Limonia plan plus a few extra
+  cells, asilid and tabanid with R4 and M1–M3 to the margin. Named crossveins drop on under 1% of
+  wings (7% of tabanids, the broad wing, lose bm-cu). Pass.
 - Neuroptera (neu-nothochrysa; seeds 1, 16, 22): gradates read as one oblique line; now true zigzags;
   a branch could double back to the costal side at the apex (fixed); twigs now end on the outline. Pass.
 - Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass.

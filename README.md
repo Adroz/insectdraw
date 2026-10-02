@@ -100,10 +100,15 @@ margin-terminating vein ends on an outline sample.
   discocellular, Sc+R1 along the costa, R2 from the cell's upper corner and R3–R5
   stalked on a common stem, M1–M3 off the discocellular, Cu1/Cu2 off the lower
   edge, 2A to the tornus and a short 3A; hindwing with a hooked humeral vein.
-- **Fly** — Sc, R1, R2+3 to the costa, R4+5 to the apex, M1 bent forward
-  (muscid), forked (nematoceran) or straight (asilid), tabanid R4 fork, the
-  closed cells br / bm / dm / cup, a small stigma where Sc ends, syrphid vena
-  spuria.
+- **Fly** — grown like the bee and wasp wings: smooth lanes for Sc and R1 (to
+  the costa), Rs forking off R1 and again into R2+3 (costa) and R4+5 (apex), M,
+  CuA1, CuA2 bending back onto A1 to close cup, A1 (+ A2), with the named
+  crossveins h, r-m, bm-cu and dm-cu placed at 105–140° so br, bm, cup and dm
+  close and nothing dangles; the apex past dm-cu is open membrane. The family
+  decides how M1 ends: bent forward to the margin behind the apex or onto R4+5
+  so r4+5 closes (muscid, syrphid), forked into M1 / M2 (+ M3) (nematoceran),
+  or three branches to the margin with R4 forking off R4+5 (tabanid, asilid).
+  Small stigma where Sc ends, syrphid vena spuria, alula and halteres.
 - **Bee / wasp** — grown rather than templated: smooth longitudinal lanes
   (Sc+R into the stigma, R1 closing the marginal cell, Rs forking off Sc+R, an
   M+Cu stem forking at the basal vein, A) carry the family's named crossveins
@@ -115,7 +120,10 @@ margin-terminating vein ends on an outline sample.
   basal vein, vespids a long narrow first discoidal, ichneumonids a big stigma
   and a tiny areolet, sawflies dense with closed anal cells, chalcids bare;
   hindwing grown the same way, with hamuli.
-- **Crane fly** — the Nematoceran plan: forked M, discal cell, narrow stalked wings.
+- **Crane fly** — the same growth with the Limonia plan: narrow stalked wing, Sc
+  and R1 running far out under the costa, a late Rs fork, forked M with M3, cup
+  open (CuA2, A1 and A2 each to the hind margin), denser inhibitory sites so a
+  few extra cells appear.
 - **Grasshopper** — tegmina with near-parallel longitudinals and an archedictyon
   grid of leaning rungs between them.
 - **Lacewing** — Sc and R1 hugging the costa with a ladder of costal crossveins,
