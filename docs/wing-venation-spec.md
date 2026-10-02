@@ -1,6 +1,6 @@
 # Wing venation: what the references show and how we generate it
 
-Status: implemented 2026-10-02 for Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera and the lepidopteran discocellular; the grasshopper archedictyon. Supersedes `research-hymenoptera-wings.md`. Reference images
+Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera) and audited at 4x against the references the same day; see Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
 are in `ref/` with sources and licences in `ref/README.md`. `research-lepidoptera-wings.md`
 still covers lepidopteran *patterns* (tone, hatching); this document covers veins and cells
 for every order.
@@ -119,10 +119,12 @@ Observed:
 - Anal veins A1–A3 short, to the hind margin near the base; clavus with A1 fold.
 - Hindwing: same plan at half size, ambient vein too.
 
-Rules: graph with the basal cells closed by the nodal line; apical veins as chains with two
-nodes each (bow) ending on the ambient vein, never on the margin; ambient vein as an inset
-copy of the outline from costa-apex round to the clavus; peripheral membrane left blank;
-6–9 apical cells; crossveins oblique (R2).
+Rules: graph with the basal cells closed by the nodal line; each basal vein a three-segment chain
+with alternating bows (R1); M and CuA leave a short common stem (`mcuFork` gene) as in the photo;
+the nodal line slants back toward the base and zigzags (`zig` gene: N1 a little distal, N2 a little
+basal) so every crossvein meets its veins obliquely (R2); apical veins as chains with two offset
+nodes ending on the ambient vein, never on the margin; ambient vein as an inset copy of the outline
+from costa-apex round to the clavus; peripheral membrane left blank; 6–9 apical cells.
 
 ### Diptera (ref: dip-eristalis, dip-asilid-photo, dip-limonia)
 
@@ -156,8 +158,11 @@ Observed:
 - Hindwing: humeral vein, Sc+R1 along the costa, Rs, M1–M3, Cu1–2, 2A, 3A; cell shorter.
 - Papilio: veins thicker and the margin scalloped between vein ends.
 
-Rules: keep the Comstock–Needham graph; dcv as a 2–3 node chain with bends; R stalk gene
-already present, extend to R3–R5 common stem; add humeral vein and 3A; vein convexity per R1.
+Rules: keep the Comstock–Needham graph; dcv as a 2–3 node chain with bends; R2 from the cell corner,
+R3–R5 leaving one bowed stem one after another (`stalk` gene = how many steps before the last two fork);
+humeral vein hooked from the root of Sc+R1 to the hindwing costa (`hum` gene, its reach); 3A; bows per R1
+signed by vein (R convex to the costa, Cu / 2A convex to the hind margin, M nearly straight); weight per R7
+(cell edges and stems `SW.O`, branches `SW.D`, 3A / humeral `SW.F`).
 
 ### Neuroptera, Chrysopidae (ref: neu-nothochrysa, neu-chrysoperla)
 
@@ -172,8 +177,12 @@ Observed:
   (inner at ~50%, outer at ~75% of the branch length).
 - Cells are lozenges: the branches and gradates cross at ~60°.
 
-Rules: branches as chains with one mid node (bow outward); gradates as zigzag polylines whose
-steps follow the branch spacing; im cell as a 4-node rhombus; costal ladder rung spacing gene.
+Rules: branches as chains with one mid node (bow outward); gradates as zigzag staircases: each
+rung leans outward by `zig` (7–12% of a branch) from branch i to i+1 and the next rung leaves
+branch i+1 behind where the last one landed (`drift`), so rung / riser / rung alternate; branch
+targets only on the hind margin and apex (never the costal side, so no branch doubles back);
+twigs fork at 90% of the branch and end on the outline; im cell as a 4-node rhombus; costal
+ladder rung spacing gene.
 
 ### Ephemeroptera (ref: eph-mayfly-1956)
 
@@ -200,7 +209,8 @@ Observed:
 - Hindwing is a fan of anal veins with ladder crossveins.
 
 Rules: longitudinals as near-parallel chains; grid regime (rows of rungs between consecutive
-longitudinals, rung spacing ≈ strip width) instead of Voronoi; fan hindwing ladder spacing gene.
+longitudinals, rung spacing ≈ strip width, rungs leaning 15–45% of a cell so the grid is rhombic
+rather than square) instead of Voronoi; fan hindwing ladder spacing gene.
 
 ## Generation model
 
@@ -231,7 +241,23 @@ L.wings.push(...g.emit());                  // chains → smooth curves, edges �
 
 ## Status
 
-Done: steps 1–9 below. Open: the lepidopteran humeral vein. Each implemented order was compared at 4× against its reference.
+Done: steps 1–9 below, including the lepidopteran humeral vein. Audit of 2026-10-02 (4× zooms beside
+the references, seeds listed per order) and what it changed:
+
+- Lepidoptera (lep-agrotis, lep-papilio; seeds 8, 23, 51, 65): R3–R5 now leave one stem successively
+  instead of fanning from a point; bows raised to 2–6% of the chord and signed per vein; stems and cell
+  edges heavier than branches; hindwing Sc+R1 starts inside the costa with a hooked humeral vein. Pass.
+- Cicadidae (cic-cicada; seeds 2, 3, 17): basal veins were straight rods to a square nodal line; now
+  three-segment chains, M+CuA stem, slanted zigzag nodal line, apical veins with two nodes. Pass.
+- Hymenoptera (hym-apis, hym-ross, hym-ichneumonidae-diagram; bee 12, 24, 60, wasp 20, 69, 124):
+  submarginals close, basal vein slants back, costa stops at the stigma; r-m and recurrent crossveins
+  now carry an explicit lean so none sits square. Pass.
+- Diptera (dip-eristalis, dip-asilid-photo; fly 9, 15, 29, 75): br, bm, dm, cup close; r-m and dm-cu
+  oblique; the muscid M1 bend reads as a curve. No change needed. Pass.
+- Neuroptera (neu-nothochrysa; seeds 1, 16, 22): gradates read as one oblique line; now true zigzags;
+  a branch could double back to the costal side at the apex (fixed); twigs now end on the outline. Pass.
+- Ephemeroptera (seeds 4, 36) and Odonata (18, 27, 30): quick check, unchanged. Pass.
+- Orthoptera (orth-grasshopper; seeds 14, 21): archedictyon rungs were near-square; lean raised. Pass.
 
 ## Sequencing
 

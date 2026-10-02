@@ -2377,7 +2377,7 @@ function generateInsectDetailed(seed) {
   if (type === 'grasshopper') {
     const by = thorax.yBot - 6;
     // ---- tegmen genes ----
-    const G = { nL: randInt(2, 4), cell: randRange(5, 10), tilt: randRange(0.05, 0.3), subRow: rng() < 0.6, wt: randRange(1.05, 1.28), tipX: randRange(0.1, 0.32), tipY: randRange(0.96, 1.0), fan: rng() < 0.7, rays: randInt(4, 8), bulge: randRange(0.72, 0.82), midX: randRange(0.4, 0.6) };
+    const G = { nL: randInt(2, 4), cell: randRange(5, 10), tilt: randRange(0.15, 0.45), subRow: rng() < 0.6, wt: randRange(1.05, 1.28), tipX: randRange(0.1, 0.32), tipY: randRange(0.96, 1.0), fan: rng() < 0.7, rays: randInt(4, 8), bulge: randRange(0.72, 0.82), midX: randRange(0.4, 0.6) };
     meta.wingSig = ['orth', G.nL, G.subRow ? 1 : 0, Math.round(G.tilt * 10), G.fan ? 1 : 0, G.rays, Math.round(G.cell), Math.round(G.wt * 20), Math.round(G.tipX * 10), Math.round(G.bulge * 20), Math.round(G.midX * 10)].join(',');
     const Lt = P.abdLen * randRange(1.05, 1.18), wt = abdHW * G.wt;
     if (G.fan) {   // folded hindwing fan peeking out

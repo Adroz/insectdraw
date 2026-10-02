@@ -77,9 +77,10 @@ margin-terminating vein ends on an outline sample.
   tessellation of a row lattice in each inter-vein strip (one row = a ladder of
   quadrilaterals, several rows = hexagonal mesh), after
   [Hoffmann et al. 2018, PNAS](https://www.pnas.org/doi/10.1073/pnas.1721248115).
-- **Butterfly / moth** — Comstock–Needham layout: closed discal cell, Sc+R1
-  along the costa, R2–R5 fanning from the cell's upper corner, M1–M3 off the
-  discocellular, Cu1/Cu2 off the lower edge, 1A to the inner margin.
+- **Butterfly / moth** — Comstock–Needham layout: closed discal cell with a bent
+  discocellular, Sc+R1 along the costa, R2 from the cell's upper corner and R3–R5
+  stalked on a common stem, M1–M3 off the discocellular, Cu1/Cu2 off the lower
+  edge, 2A to the tornus and a short 3A; hindwing with a hooked humeral vein.
 - **Fly** — Sc, R1, R2+3 to the costa, R4+5 to the apex, M1 bent forward
   (muscid), forked (nematoceran) or straight (asilid), tabanid R4 fork, the
   closed cells br / bm / dm / cup, a small stigma where Sc ends, syrphid vena
@@ -89,13 +90,14 @@ margin-terminating vein ends on an outline sample.
   the submarginal corners, basal vein, M and Cu stubs into the open apex,
   recurrent veins, areolet, cu-a and anal cells; hindwing with hamuli.
 - **Crane fly** — the Nematoceran plan: forked M, discal cell, narrow stalked wings.
-- **Grasshopper** — tegmina with longitudinals and Voronoi reticulation.
+- **Grasshopper** — tegmina with near-parallel longitudinals and an archedictyon
+  grid of leaning rungs between them.
 - **Lacewing** — Sc and R1 hugging the costa with a ladder of costal crossveins,
   the intramedian cell at the root of Rs, 8–14 curved pectinate Rs branches
   with twigged ends, 1–3 zigzag gradate series.
-- **Cicada** — Sc+R, M, CuA, CuP heavy and parallel to the nodal line, apical
-  veins forking as trees to the ambient vein, peripheral membrane left blank,
-  anal veins to the clavus.
+- **Cicada** — Sc+R, M, CuA, CuP heavy and undulating to a slanted zigzag nodal
+  line (M and CuA on a short common stem), apical veins forking as trees to the
+  ambient vein, peripheral membrane left blank, anal veins to the clavus.
 - **Damselfly** — the dragonfly model on petiolate (stalked) wings.
 - **Mayfly** — triangular forewing with 10–14 fanning longitudinals and dense
   crossveins, vestigial hindwing, three tail filaments.
