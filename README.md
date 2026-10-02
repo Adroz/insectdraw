@@ -100,10 +100,12 @@ margin-terminating vein ends on an outline sample.
   (muscid), forked (nematoceran) or straight (asilid), tabanid R4 fork, the
   closed cells br / bm / dm / cup, a small stigma where Sc ends, syrphid vena
   spuria.
-- **Bee / wasp** — family cell plans (apid, vespid, ichneumonid, sawfly,
-  chalcid): Sc+R into the stigma, R1 closing the marginal cell, Rs through
-  the submarginal corners, basal vein, M and Cu stubs into the open apex,
-  recurrent veins, areolet, cu-a and anal cells; hindwing with hamuli.
+- **Bee / wasp** — grown rather than templated: trunks (Sc+R into the stigma,
+  R1 closing the marginal cell, Rs, an M+Cu stem forking at the basal vein, A)
+  fork and are joined by crossveins at a family-specific density, every
+  junction kinking the veins, so cell topology differs per seed; sawflies
+  dense and many-celled, chalcids bare; hindwing grown the same way, with
+  hamuli.
 - **Crane fly** — the Nematoceran plan: forked M, discal cell, narrow stalked wings.
 - **Grasshopper** — tegmina with near-parallel longitudinals and an archedictyon
   grid of leaning rungs between them.

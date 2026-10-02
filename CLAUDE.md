@@ -38,7 +38,8 @@ contract for changes.
 - Terminal veins must end on the outline: use `marginTargets`, `tipPoint`, or evaluate
   `topAt`/`botAt` at the same x as the endpoint. Only anatomically open cells may stop short.
 - Venation follows `docs/wing-venation-spec.md` and the references in `docs/ref/`. New wing
-  code goes on the `wingGraph` helper (nodes, chains, edges, stubs, ladders, stigma): no
+  code goes on the `wingGraph` helper (nodes, chains, edges, stubs, ladders, stigma) and, where the
+  order's cells vary between species, on `growVeins` (trunks that fork and join; see the spec): no
   straight full-span veins, no 90° junctions, closed cells where the reference has them.
   Before calling a wing done, put a 4× zoom next to its reference image and compare.
 

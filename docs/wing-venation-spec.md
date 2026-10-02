@@ -77,10 +77,10 @@ Observed:
 - Hindwing: three longitudinals, 1–3 crossveins, a jugal lobe, hamuli on the leading edge.
 - Vespula photo: veins are brown, 1.5–2.5× membrane-hair width, with slightly swollen nodes.
 
-Rules: graph template per family (node table in `index.html`, normalised to span × half-breadth),
-positions rolled ±5–8%, bows rolled; stubs on M and Cu; stigma lens per R5 with depth
-0.08–0.14 of breadth (ichneumonid 0.14–0.2, chalcid small); submarginal/discoidal counts per
-family; areolet as two close r-m crossveins; marginal cell open/closed gene.
+Rules: grown (see *Growth, not templates*). Lanes Sc+R (pinned to the stigma), R1 (from the
+stigma to the marginal node), Rs, M+Cu (deterministic fork at the basal vein), A, optional second
+cubital and anal lanes; family sets join density (sawfly dense, apid mid, vespid sparse, chalcid
+none), fork count (sawfly 1–3), `uOpen` (0.72–0.9), stub odds; stigma lens per R5.
 
 ### Odonata (ref: odo-dragonfly, odo-anax-ris1921, odo-damsel-ris1921)
 
@@ -213,6 +213,31 @@ longitudinals, rung spacing ≈ strip width, rungs leaning 15–45% of a cell so
 rather than square) instead of Voronoi; fan hindwing ladder spacing gene.
 
 ## Generation model
+
+### Growth, not templates
+
+A fixed cell template with jittered corners always reads as the same wing. The references read as
+a growth process, so `growVeins(g, G)` grows the venation:
+
+- **Trunks** leave the base in lanes across the chord (s = 0 costa .. 1 hind margin), each heading
+  for its own stretch of margin along a smooth track. Anatomy pins a few: Sc+R ends in the
+  pterostigma, R1 leaves it and closes the marginal cell with Rs, M+Cu is one stem.
+- **Forks**: a lane may fork into a child lane aimed between its own target and its neighbour's.
+  Deterministic forks (the M+Cu split at the basal vein) plus `forks` random ones per seed.
+- **Joins**: walking the span in steps, adjacent live lanes are joined by a crossvein with a
+  probability from a density profile (peak position, height and width are genes) in a brick
+  pattern, only once the lanes have separated by `minSep`, never within `minGap` of the last
+  join on that pair, and never past `uOpen`.
+- **Deflection**: every junction shifts both lanes a little (`deflect`), so veins zigzag through
+  the cells instead of passing straight through them.
+- **Ends**: past the last join a lane reaches the margin, ends on its pinned node, or fades as a
+  stub into open membrane (`stubProb`, `stubLen`).
+
+Family parameters are growth parameters (how many trunks, how often they fork, how dense the
+joins, where they stop), so two wasps differ in topology, not only in node positions. The lane
+count, join count and hindwing graph size go into `meta.wingSig`. Hymenoptera use this now; the
+orders below still use explicit templates and are candidates to move.
+
 
 A small planar-graph engine added to the engine script, used by every wing block:
 
