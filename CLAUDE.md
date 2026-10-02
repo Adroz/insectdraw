@@ -35,6 +35,15 @@ contract for changes.
   exposes a discrete `meta.wingSig`. `tests/check.js` fails if one signature covers more than 10%
   of a type's plates or fewer than half the plates are distinct. When you add a structural
   choice, add it to the signature; when you add a wing type, give it a signature.
+- The body has the same contract: `rollBodyGenes(type, P)` rolls every per-seed body choice
+  (leg family and pose, attachment, ratios, armature, abdomen profile, tip, markings, terminalia)
+  right after the proportions, and `meta.bodySig` (`B.sig` joined) is held to the same 10% / 50%
+  rule. Drawing blocks read `B`, never roll their own literals; push every new discrete choice
+  onto `B.sig`. The wing family is rolled in the proportions switch as `P.fam` so body and wings
+  share it; wing blocks read it, they do not roll it. Leg poses are validated against the body
+  in the legs block (`legsOk`: ordering, mirror line, abdomen outline, pair clearance, fit) and
+  re-rolled; `tests/check.js` asserts the result on `meta.legs[i].pts`, so a new pose or family
+  range must keep those invariants rather than relax the test.
 - Terminal veins must end on the outline: use `marginTargets`, `tipPoint`, or evaluate
   `topAt`/`botAt` at the same x as the endpoint. Only anatomically open cells may stop short.
 - Venation follows `docs/wing-venation-spec.md` and the references in `docs/ref/`. New wing

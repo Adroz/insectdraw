@@ -1,7 +1,37 @@
 # Plan: per-seed variation for legs, body, head, eyes and antennae
 
-Status: proposed, 2026-10-02. Follows the wing-genes work (see README "Venation" and
-`meta.wingSig`). Nothing here is implemented yet.
+Status: steps 1–3 implemented, 2026-10-02 (plumbing, legs, abdomen); steps 4–7 (thorax, head,
+antennae, mirror skew) still open. Follows the wing-genes work (see README "Venation" and
+`meta.wingSig`).
+
+### Status detail
+
+- **Step 1, done.** `rollBodyGenes(type, P)` runs right after the proportions switch and returns
+  `B` (`legs[pair]`, `abd`, `thorax`, `head`, `ant`, `sig`); every drawing block reads from it.
+  `meta.bodySig` joins `B.sig`; `tests/check.js` prints the table and applies the 10% / 50% rule.
+  The wing-family pick is hoisted into the proportions switch as `P.fam` (the wing blocks read it);
+  beetles roll `ground / rove / scarab / longhorn / weevil`, grasshoppers `acridid / tettigoniid /
+  tetrigid`. `meta.recipe` is now `P.fam` for every order.
+- **Step 2, done.** Leg family ranges (`LEG_FAMS` in `rollBodyGenes`), pose families (`LEG_POSES`
+  in the legs block: `spread`, `walking`, `tucked`, `raised`, odonate `basket`), per-pair
+  attachment and inset, segment ratios, thickness / swelling / flare, armature, tarsomeres, curl.
+  Joint angles are rolled in the legs block and validated against the body (ordering, mirror
+  line, abdomen outline, pair clearance, fit) with re-roll → spread → old fixed angles as
+  fallbacks; `meta.legRoll` records what happened. Tibia directions are absolute ranges (`tib`)
+  rather than folds, otherwise a steep femur swings the tibia across the body. Invariants are
+  asserted in `tests/check.js` on `meta.legs[i].pts` and `meta.abdomen.profile`.
+  Deviation from the text above: "saltatorial hind femur 1.8–2.4× tibia" is anatomically off
+  (a grasshopper hind tibia is about as long as its femur); implemented as hind femur
+  1.6–2.1× the mid femur with tibia 0.9–1.05× femur. The per-pair mirror skew (step 7) is not
+  done.
+- **Step 3, done.** Abdomen profile from the order's anchors with the widest point slid, a tip
+  shape enum, petiole width / length, width factor; segmentation (count, start, bow, weight,
+  doubled lines); markings families; terminalia (ovipositor by family, cerci, valves, mayfly
+  filaments 2–3, odonate appendages); keel and side ticks. Lateral bulge and overlapping
+  tergite arcs were not added.
+- **Known, outside this plan:** the cicada wing span (`abdomen length / sin(theta) × 1.0–1.12`
+  in the wing block) pushes ~0.4% of cicadas below plate scale 0.55 on the baseline engine as
+  well; which seeds hit it moves with the rng stream, so `check.js 3000` can show one to three.
 
 ## Goal
 

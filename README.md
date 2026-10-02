@@ -138,6 +138,34 @@ margin-terminating vein ends on an outline sample.
 - **Mayfly** — triangular forewing with 10–14 fanning longitudinals and dense
   crossveins, vestigial hindwing, three tail filaments.
 
+## Body
+
+The insect under the wings rolls a set of **body genes** per seed too
+(`rollBodyGenes`, right after the proportions). The family is shared with the
+wings where the order has one (an ichneumonid gets long slender legs and a long
+sheathed ovipositor with its ichneumonid wing; a chalcid short legs with swollen
+hind femora; an apid hairy legs and a corbicula), and beetles and grasshoppers
+roll body families of their own (ground / rove / scarab / longhorn / weevil;
+acridid / tettigoniid / tetrigid). **Legs**: a pose family rolled once per
+insect (spread, walking, tucked, raised mantid-like forelegs, the odonate prey
+basket), per-pair attachment and coxa inset, joint-angle ranges per pair and
+pose, femur : tibia : tarsus ratios, overall length and thickness, femur
+swelling and tibial flare, tarsomere count, tarsus curl, and armature rolled
+as presence and density separately (spine rows, apical spurs, hair fringes,
+pads, claw length). A pose is checked against the body before it is drawn:
+femur tips ordered along the axis, nothing on the mirror line, no leg inside
+the abdomen outline, no two legs touching, and the legs alone never push the
+plate scale under 0.62; a bad pose is re-rolled. **Abdomen**: the order's
+profile with the widest point slid along the axis, a tip shape (pointed,
+rounded, truncate, clubbed), petiole width and length, width factor,
+segmentation (count, start, bow, weight, doubled lines), a markings family
+(plain, banded, spotted, striped, tip-dark, hairy) and terminalia by family
+(ovipositor length, curvature and sheath; cerci; mayfly filaments two or
+three; odonate appendages). The discrete part is exposed as `meta.bodySig`,
+held to the same 10% / 50% rule as `wingSig` by `tests/check.js`, which also
+asserts the leg invariants above on `meta.legs[i].pts`. Thorax, head and
+antenna genes are still the plan in `docs/plan-body-variation.md`.
+
 ## Legs, eyes, antennae
 
 Drawn from the morphology notes in `docs/research-legs-eyes-antennae.md`:
@@ -157,7 +185,7 @@ from a drawn antennal socket.
 ## Dev
 
 ```
-node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-attachment/determinism/wing-uniqueness checks
+node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks
 node tests/sheet.js out.png 3 wasp:6         # contact sheet PNG via headless Chromium (first 6 wasp seeds, 3 columns)
 node tests/sheet.js out.png 3 1,2,3,4,5,6    # ... or explicit seeds; set CHROMIUM=/path/to/chrome if it is not found
 node tests/sheet.js out.png 4 random:12 --part wings --type wasp   # one part only, 12 random seeds all forced to wasps
