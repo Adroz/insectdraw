@@ -100,11 +100,47 @@ Observed:
   grows toward the hind margin and base; smallest along the costa and at the tip.
 - Damselfly (Ris 2): petiolate, almost every cell a quadrilateral in neat rows.
 
-Rules: nodus and stigma positions as now; longitudinals as chains with a sinusoidal undulation
-of amplitude 1–2% of span and period one cell; ladder regime for every strip narrower than
-1.3× cell size (costal, subcostal, R1–R2, damselfly everything), reticulation elsewhere with
-`cells` gene; arculus, triangle/quadrilateral, bridge, subnodus as heavier edges; stigma per R5
-(odonate variant) with end crossveins.
+Rules (implemented 2026-10-02 on `growVeins` v2, after Hoffmann et al. 2018; see
+`research-vein-branching.md`):
+
+- **Primaries** are built once as smooth curves and handed to `growVeins` as pre-built lanes.
+  Sc and R1 are offsets from the costa with the nodal notch smoothed out (C–Sc and Sc–R1 each
+  ~5% of the chord before the nodus, C–R1 ~7% after it, as on Ris plate 1), Sc ending on the
+  costa at the nodus and R1 just under the apex. R2 runs one cell under R1 (an absolute gap, so
+  that strip is a one-row ladder to the tip); R3..A1 are laid out as fractions of the depth from
+  R1 to the hind margin, so every primary bows with the outline, and each eases to the margin
+  by a power curve that is steeper for the upper veins. Targets: R1 at the outline sample before
+  the apex, the fan evenly by arc length from the apex back along the hind margin to 42% span.
+  Undulation genes (`und`, `period`, `wig`) as before; no primary has a kink. A damselfly's fan
+  leaves the end of the petiole from two fused stems (Sc+R+M above, Cu+A below).
+- **Wall lanes**: the costa and the trailing edge, 0.3 inside the outline and ending at the apex,
+  are lanes that are never drawn (`noDraw`), so the costal strips and the anal field are strips
+  like any other and every cell closes against a vein or the margin.
+- **Named crossveins** through `place` (angle rule, slide, no dangling): the antenodals as aligned
+  C–Sc–R1 pairs (`then` chains the Sc–R1 segment at the same lean; the first two heavier), the
+  subnodus (C–R1 at the nodus, O), the two pterostigma end crossveins (lean gene 18–38° from
+  perpendicular, O, lower end distal; the strip under the stigma is a `gap` with no other
+  crossvein), the arculus stepping from R2 through the fan to the median lane (O), the discoidal
+  triangle (two rungs from one point, the long side with a relaxed band) or the damselfly
+  quadrilateral (two rungs), and the bridge (a short oblique R1–R2 behind the subnodus).
+- **Secondaries, regime per strip segment**: cell size `cell(u, s)` = 0.03 Lw × `cells` gene
+  (libellulid 0.7 .. aeshnid 1.3; damselfly 1.0–1.5) × (1 − 0.3 u) × (1 − 0.25 s), floored at
+  3.2 units; the postnodal ladder uses its own `postStep`. Along every strip, where
+  width / cell < 1.6 the segment is a **ladder**: evenly spaced sites, each rung the bisector of
+  two neighbours clipped to the two primaries and slid until both junctions lie in 105–140°
+  (target gene 108–124°, `lean` gene), rungs 0.8–1.25 cells apart. Where width / cell ≥ 1.6 it
+  is a **mesh**: rows = round(width / cell) of sites on a staggered lattice (hexagonal packing;
+  the outer rows zigzag across by the `zig` gene so their bisectors lean on the primaries),
+  thinned by a Poisson test, and the Voronoi of them clipped to the region. A mesh region is
+  closed on both ends by real crossveins (named walls, or rungs placed at the regime
+  transitions) or by the outline at the tip, so no edge ends in space; edges ending on a
+  primary are slid along it within 0.3 cell toward the band where possible, never dropped.
+  Result: ladders of quadrilaterals in the costal strips, R1–R2 and the damselfly nearly
+  everywhere; two or more rows of pentagons and hexagons in the MP–CuA–CuP region, the
+  hindwing anal field and toward the tip; neighbours similar in size; every junction three-way
+  except the aligned antenodals and the arculus, which cross their intermediate vein by design.
+- `meta.wingStats` carries joins, dropped, rungs, min / max / mean rung angle, and the counts
+  of ladder and mesh segments; `tests/check.js` asserts the rung band (mesh edges exempt).
 
 ### Hemiptera, Cicadidae (ref: cic-cicada)
 
@@ -239,9 +275,10 @@ to its `deflect` step:
   and separated by `minSep`, inhibitory sites walk along the strip at spacing = local strip width
   × `k` (family gene; apid 2.0–2.8, vespid 1.8–2.6, ichneumonid 1.5–2.2, sawfly 0.9–1.4), restarting
   from every wall (the strip's ends and its named crossveins). Each crossvein is the bisector of two
-  consecutive sites clipped to the two lane curves, so a cell is 0.85–1.8 spacings long. Where a
-  strip is wider than 2.2 spacings a second row of sites and a 2-D Voronoi take over (`rows2`; a hook
-  for mesh-veined orders, unused by Hymenoptera).
+  consecutive sites clipped to the two lane curves, so a cell is 0.85–1.8 spacings long. Mesh-veined
+  orders (Odonata) pass `rows2` with an absolute `cell` size: each strip is then cut into segments
+  that are one-row ladders where width / cell < 1.6 and rows of Voronoi cells where it is wider,
+  every mesh segment closed by crossveins or the margin (see the Odonata rules above).
 - **Junction angle** (R-D): the near end is fixed; the far end slides along its lane within one
   spacing until the obtuse angle between crossvein and lane lies in [105°, 140°] at both ends
   (target `angle` gene 112–128°, `lean` gene preferring the costal end distal as in the references);
@@ -315,7 +352,12 @@ the references, seeds listed per order) and what it changed:
   oblique; the muscid M1 bend reads as a curve. No change needed. Pass.
 - Neuroptera (neu-nothochrysa; seeds 1, 16, 22): gradates read as one oblique line; now true zigzags;
   a branch could double back to the costal side at the apex (fixed); twigs now end on the outline. Pass.
-- Ephemeroptera (seeds 4, 36) and Odonata (18, 27, 30): quick check, unchanged. Pass.
+- Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass.
+- Odonata, second audit (odo-anax-ris1921, odo-damsel-ris1921; dragonfly 18, 27, 49, damselfly 30, 41)
+  after moving the secondaries onto `growVeins` v2: R1 used to end on the costa at 62% span and the
+  damselfly's fan overlapped itself in the petiole (both fixed); rungs now lean 105–140° (mean
+  112–121° over the audited seeds, none square), mesh regions of similar-sized pentagons / hexagons
+  close against rungs or the margin with no free end, R1 is smooth across the nodus. Pass.
 - Orthoptera (orth-grasshopper; seeds 14, 21): archedictyon rungs were near-square; lean raised. Pass.
 
 ## Sequencing

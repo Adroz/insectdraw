@@ -84,13 +84,17 @@ signature covers more than a tenth of a body plan's plates. Every
 margin-terminating vein ends on an outline sample.
 
 
-- **Dragonfly** — primary longitudinals (Sc to the nodus, R1 under the costa to
-  the tip, then R2–R4 / MA / MP / CuA / CuP fanning to the margin, undulating
-  with the cell rows), aligned antenodal and postnodal crossveins, arculus,
-  discoidal triangle, bridge vein, a pterostigma between C and R1 with
-  thickened end crossveins, and secondary venation generated as a Voronoi
-  tessellation of a row lattice in each inter-vein strip (one row = a ladder of
-  quadrilaterals, several rows = hexagonal mesh), after
+- **Dragonfly** — smooth primaries (Sc to the nodus, R1 under the costa to the
+  apex, R2 one cell below it, then R3 / MA / MP / CuA / CuP / A1 bowing with the
+  outline to the apex and hind margin, undulating with the cell rows) handed to
+  the same growth engine as the bees: aligned antenodals, subnodus, pterostigma
+  end crossveins, arculus, discoidal triangle and bridge are named crossveins;
+  every strip between two primaries is a ladder of quadrilaterals whose rungs
+  meet them at 105–140° where it is narrower than 1.6 cells, and rows of
+  pentagons / hexagons from a Voronoi of Poisson-spaced sites where it is wider
+  (hindwing anal field, the cubital region, the tip), cells shrinking toward the
+  tip and trailing edge, no free ends; libellulid-small to aeshnid-large by the
+  `cells` gene; after
   [Hoffmann et al. 2018, PNAS](https://www.pnas.org/doi/10.1073/pnas.1721248115).
 - **Butterfly / moth** — Comstock–Needham layout: closed discal cell with a bent
   discocellular, Sc+R1 along the costa, R2 from the cell's upper corner and R3–R5
@@ -120,7 +124,9 @@ margin-terminating vein ends on an outline sample.
 - **Cicada** — Sc+R, M, CuA, CuP heavy and undulating to a slanted zigzag nodal
   line (M and CuA on a short common stem), apical veins forking as trees to the
   ambient vein, peripheral membrane left blank, anal veins to the clavus.
-- **Damselfly** — the dragonfly model on petiolate (stalked) wings.
+- **Damselfly** — the dragonfly model on petiolate (stalked) wings: the fan
+  leaves the end of the petiole from two fused stems, a quadrilateral below the
+  arculus, and ladders nearly everywhere with a two-row mesh only at the tip.
 - **Mayfly** — triangular forewing with 10–14 fanning longitudinals and dense
   crossveins, vestigial hindwing, three tail filaments.
 
