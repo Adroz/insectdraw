@@ -17,6 +17,7 @@ const N = Number(process.argv[2] || 3000);
 const failures = [];
 const typeCount = {};
 const wingSigs = {};   // type -> Map(structural wing signature -> count)
+const bodySigs = {};   // type -> Map(structural body signature -> count)
 let elTotal = 0;
 
 for (let seed = 1; seed <= N; seed++) {
@@ -25,6 +26,8 @@ for (let seed = 1; seed <= N; seed++) {
   typeCount[key] = (typeCount[key] || 0) + 1;
   const fail = msg => failures.push({ seed, type: key, msg });
   if (meta.wingSig) { const m = wingSigs[key] ||= new Map(); m.set(meta.wingSig, (m.get(meta.wingSig) || 0) + 1); }
+  if (!meta.bodySig) fail('no bodySig');
+  else { const m = bodySigs[key] ||= new Map(); m.set(meta.bodySig, (m.get(meta.bodySig) || 0) + 1); }
 
   if (/NaN|Infinity|undefined|null/.test(svg)) fail('bad number in svg');
   if (E.generateInsect(seed) !== svg) fail('non-deterministic');
@@ -71,20 +74,27 @@ for (let seed = 1; seed <= N; seed++) {
 // Wing uniqueness: every winged type exposes meta.wingSig, a discrete signature of its outline and
 // vein plan (counts, cell plan, apex shape ...). Within a type no signature may dominate, otherwise
 // plates start to read as repeats when cycling through random seeds.
-const sigReport = {};
-for (const key in wingSigs) {
-  const m = wingSigs[key], n = [...m.values()].reduce((a, b) => a + b, 0);
-  const top = Math.max(...m.values());
-  sigReport[key] = { seeds: n, distinct: m.size, topShare: Math.round(top / n * 1000) / 10 + '%' };
-  if (n >= 40) {
-    if (top / n > 0.1) failures.push({ seed: 0, type: key, msg: 'wing signature repeats: one layout covers ' + Math.round(top / n * 100) + '% of ' + key + ' plates' });
-    if (m.size < n * 0.5) failures.push({ seed: 0, type: key, msg: 'wing signature repeats: only ' + m.size + ' distinct layouts in ' + n + ' ' + key + ' plates' });
+// Body uniqueness: every plate exposes meta.bodySig (pose family, leg family, attachment, joint angles, armature,
+// segment counts ...), held to the same rule so the insect under the wings varies as much as the wings do.
+const sigRule = (sigs, what) => {
+  const report = {};
+  for (const key in sigs) {
+    const m = sigs[key], n = [...m.values()].reduce((a, b) => a + b, 0);
+    const top = Math.max(...m.values());
+    report[key] = { seeds: n, distinct: m.size, topShare: Math.round(top / n * 1000) / 10 + '%' };
+    if (n >= 40) {
+      if (top / n > 0.1) failures.push({ seed: 0, type: key, msg: what + ' signature repeats: one layout covers ' + Math.round(top / n * 100) + '% of ' + key + ' plates' });
+      if (m.size < n * 0.5) failures.push({ seed: 0, type: key, msg: what + ' signature repeats: only ' + m.size + ' distinct layouts in ' + n + ' ' + key + ' plates' });
+    }
   }
-}
+  return report;
+};
+const sigReport = sigRule(wingSigs, 'wing'), bodyReport = sigRule(bodySigs, 'body');
 
 console.log('seeds checked:', N);
 console.log('type distribution:', typeCount);
 console.log('wing signatures:', sigReport);
+console.log('body signatures:', bodyReport);
 console.log('avg elements:', Math.round(elTotal / N));
 console.log('daily seed today:', E.dailySeed());
 if (failures.length) {
