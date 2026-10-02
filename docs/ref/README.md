@@ -26,3 +26,16 @@ Reproduce with attribution where the licence asks for it.
 | neu-chrysoperla.jpg | Chrysoperla wing photo | [Chrysoperla.carnea.wing.detail.jpg](https://commons.wikimedia.org/wiki/File:Chrysoperla.carnea.wing.detail.jpg) | CC BY-SA 3.0 |
 | eph-mayfly-1956.jpg | Mayfly adult with venation, Aquatic insects of California 1956 | [Aquatic insects of California ... (19747552885).jpg](https://commons.wikimedia.org/wiki/File:Aquatic_insects_of_California,_with_keys_to_North_American_genera_and_California_species_(1956)_(19747552885).jpg) | No known restrictions |
 | orth-grasshopper.jpg | Grasshopper tegmen and hindwing fan, veins labelled | [Grasshopper wing structure.png](https://commons.wikimedia.org/wiki/File:Grasshopper_wing_structure.png) | CC BY-SA 3.0 |
+
+## Head references
+
+Dorsal-view head references for `../research-head-eyes.md` (step 5 of the body plan).
+
+| file | subject | source | licence |
+|---|---|---|---|
+| head-odo-tillyard1917.jpg | Libellulid head in dorsal (A), frontal (D, E) and lateral (F) view, ocelli and frons labelled; line-engraving convention for eyes | [The biology of dragonflies (1917) (20388381761).jpg](https://commons.wikimedia.org/wiki/File:The_biology_of_dragonflies_(Odonata_or_Paraneuroptera)_(1917)_(20388381761).jpg) | No known restrictions (Tillyard 1917) |
+| head-odo-damselfly.jpg | Zygoptera head, dorsal: dumbbell bar, eyes at the ends, ocelli triangle, 1 mm scale bar | [Damselfly head dorsal on grey (9422738255).jpg](https://commons.wikimedia.org/wiki/File:Damselfly_head_dorsal_on_grey_(9422738255).jpg) | CC BY 2.0 |
+| head-dip-musca.jpg | *Musca domestica* head at 10×: hexagonal facet lattice, frons, bristles, proboscis below | [Portrait of the Housefly (Musca domestica) at 10x.jpg](https://commons.wikimedia.org/wiki/File:Portrait_of_the_Housefly_(Musca_domestica)_at_10x.jpg) | CC BY-SA 4.0 |
+| head-cic-stagira.jpg | Cicada (*Stagira*) head outlines in dorsal view: eyes bulging at the corners, ocelli, rounded vs pointed postclypeus | [Stagira (10.3897-afrinvertebr.60.35130) Figure 25.jpg](https://commons.wikimedia.org/wiki/File:Stagira_(10.3897-afrinvertebr.60.35130)_Figure_25.jpg) | CC BY 4.0 |
+| head-col-carabus.jpg | *Carabus irregularis* head from above: prognathous, long crossing mandibles, labrum, palps, small eyes at the rear corners | [Carabus irregularis heado.jpg](https://commons.wikimedia.org/wiki/File:Carabus_irregularis_heado.jpg) | CC BY-SA 3.0 |
+| head-col-weevil.jpg | *Curculio glandium* female head with rostrum, side and above, geniculate antennae | [Head with rostrum of acorn weevil female ... side view and above view.jpg](https://commons.wikimedia.org/wiki/File:Head_with_rostrum_of_acorn_weevil_female_(Curculio_glandium_Marsham,_1802),_side_view_and_above_view.jpg) | CC BY 4.0 |
