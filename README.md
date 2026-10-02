@@ -179,9 +179,17 @@ rounded, truncate, clubbed), petiole width and length, width factor,
 segmentation (count, start, bow, weight, doubled lines), a markings family
 (plain, banded, spotted, striped, tip-dark, hairy) and terminalia by family
 (ovipositor length, curvature and sheath; cerci; mayfly filaments two or
-three; odonate appendages). The discrete part is exposed as `meta.bodySig`,
-held to the same 10% / 50% rule as `wingSig` by `tests/check.js`, which also
-asserts the leg invariants above on `meta.legs[i].pts`. Thorax, head and
+three; odonate appendages). **Head**: an outline per order (round, transverse
+with the odonate frons bump or the cicada postclypeus, triangular with a
+fastigium, elongate with ground-beetle jaws or a weevil rostrum), eyes rolled
+as ranges with holoptic or dichoptic flies, meeting or separated odonate eyes
+and three engraving styles (hexagonal lattice, stipple, plain with a
+highlight), ocelli 0–3 by order, and the mouthparts that show from above
+(sickle mandibles, mandible tips, palps, a coiled proboscis, clypeus bow),
+from `docs/research-head-eyes.md`. The discrete part is exposed as
+`meta.bodySig`, held to the same 10% / 50% rule as `wingSig` by
+`tests/check.js`, which also asserts the leg invariants above on
+`meta.legs[i].pts` and the eye / ocelli containment on `meta.head`. Thorax and
 antenna genes are still the plan in `docs/plan-body-variation.md`.
 
 ## Legs, eyes, antennae

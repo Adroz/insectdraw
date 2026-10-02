@@ -79,6 +79,23 @@ for (let seed = 1; seed <= N; seed++) {
       if (hit) fail(meta.legs[a].pair + ' and ' + meta.legs[b].pair + ' legs cross');
     }
   }
+  // Head (meta.head, docs/research-head-eyes.md): every compound eye stays inside the head's bounding box with at most
+  // 10% of its extent overhanging on any side (cicada and odonate eyes bulge past the capsule, never past headW), and
+  // every ocellus lies inside the drawn head outline.
+  {
+    const h = meta.head;
+    if (!h || !h.outline || h.outline.length < 8 || !h.eyes.length) fail('no head outline / eyes in meta.head');
+    else {
+      const x0 = -h.W / 2, x1 = h.W / 2, y0 = h.top, y1 = h.top + h.H;
+      for (const e of h.eyes) {
+        const a = (e.rot || 0) * Math.PI / 180, ex = Math.hypot(e.rx * Math.cos(a), e.ry * Math.sin(a)), ey = Math.hypot(e.rx * Math.sin(a), e.ry * Math.cos(a));
+        const overX = Math.max(x0 - (e.cx - ex), (e.cx + ex) - x1) / (2 * ex), overY = Math.max(y0 - (e.cy - ey), (e.cy + ey) - y1) / (2 * ey);
+        if (overX > 0.1 || overY > 0.1) { fail('eye overhangs the head bbox by more than 10%: ' + Math.round(Math.max(overX, overY) * 100) + '%'); break; }
+      }
+      const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
+      for (const o of h.ocelli) if (![[o[0] - o[2], o[1]], [o[0] + o[2], o[1]], [o[0], o[1] - o[2]], [o[0], o[1] + o[2]]].every(p => inPoly(p, h.outline))) { fail('ocellus outside the head outline'); break; }
+    }
+  }
   // stroke widths >= 0.5 after scale
   const sws = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * meta.scale);
   if (sws.some(w => w < 0.49)) fail('stroke width below 0.5 after scale');
@@ -121,6 +138,7 @@ const sigRule = (sigs, what) => {
     if (n >= 40) {
       if (top / n > 0.1) failures.push({ seed: 0, type: key, msg: what + ' signature repeats: one layout covers ' + Math.round(top / n * 100) + '% of ' + key + ' plates' });
       if (m.size < n * 0.5) failures.push({ seed: 0, type: key, msg: what + ' signature repeats: only ' + m.size + ' distinct layouts in ' + n + ' ' + key + ' plates' });
+      if (what === 'body' && m.size < n * 0.98) failures.push({ seed: 0, type: key, msg: 'body signature below 98% distinct: ' + m.size + ' of ' + n + ' ' + key + ' plates' });   // with head genes in B.sig the body should never repeat
     }
   }
   return report;

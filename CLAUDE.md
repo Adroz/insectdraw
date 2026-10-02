@@ -44,6 +44,13 @@ contract for changes.
   in the legs block (`legsOk`: ordering, mirror line, abdomen outline, pair clearance, fit) and
   re-rolled; `tests/check.js` asserts the result on `meta.legs[i].pts`, so a new pose or family
   range must keep those invariants rather than relax the test.
+- The head is drawn from `B.head` (order table `HD` in `rollBodyGenes`, rules in
+  `docs/research-head-eyes.md`). `P.headW` / `P.headH` / `headTop` / `headCy` stay the bounding box
+  and centre of the head; the drawn capsule is `meta.headOutline` (closed polyline, body coords) and
+  `meta.head` carries the eyes, ocelli and rostrum that `tests/check.js` asserts (eyes inside the
+  bbox with ≤ 10 % overhang, ocelli inside the outline). Eye lattice pitch is floored at
+  `1.8 / HEAD_SCALE_P5[type]` so facets never fill in on e-ink; update that table if an order's
+  plate scale changes.
 - Terminal veins must end on the outline: use `marginTargets`, `tipPoint`, or evaluate
   `topAt`/`botAt` at the same x as the endpoint. Only anatomically open cells may stop short.
 - Venation follows `docs/wing-venation-spec.md` and the references in `docs/ref/`. Every winged

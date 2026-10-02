@@ -1,7 +1,7 @@
 # Plan: per-seed variation for legs, body, head, eyes and antennae
 
-Status: steps 1–3 implemented, 2026-10-02 (plumbing, legs, abdomen); steps 4–7 (thorax, head,
-antennae, mirror skew) still open. Follows the wing-genes work (see README "Venation" and
+Status: steps 1–3 and 5 implemented, 2026-10-02 (plumbing, legs, abdomen, head); steps 4, 6, 7
+(thorax, antennae, mirror skew) still open. Follows the wing-genes work (see README "Venation" and
 `meta.wingSig`).
 
 ### Status detail
@@ -29,6 +29,26 @@ antennae, mirror skew) still open. Follows the wing-genes work (see README "Vena
   doubled lines); markings families; terminalia (ovipositor by family, cerci, valves, mayfly
   filaments 2–3, odonate appendages); keel and side ticks. Lateral bulge and overlapping
   tergite arcs were not added.
+- **Step 5, done.** Head genes in `rollBodyGenes` (`B.head`, order table `HD` with family overrides `FO`),
+  grounded in `docs/research-head-eyes.md`: outline enum (`round` / `transverse` / `triangular` /
+  `elongate`) built by `headOutlinePts` from a warped unit circle with a flattened front margin,
+  genal swelling, a front bump (odonate frons, cicada postclypeus rounded or pointed with striae,
+  crane fly snout) and an occipital notch; the W/H ratio roll rewrites `P.headH`, so `headTop`,
+  `headCy`, `P.headW`, `P.headH` keep meaning bounding box and centre. Eyes as ranges (centre,
+  radii, tilt, dent mirrored per side, highlight) with fly holoptic / dichoptic, gomphid-style
+  separated odonate eyes and the male mayfly turban pair; eye style `lattice` / `stipple` / `plain`
+  with a pitch gene floored at `1.8 / p5 plate scale` per order (`HEAD_SCALE_P5`). Ocelli 0–3 with
+  arrangements (triangle / line / odonate frons+seam / grasshopper laterals / moth behind the eyes /
+  rove median). Mouthparts by what shows from above: ground-beetle sickle mandibles (crossing,
+  serrated) with labrum and palps, hymenopteran mandible tips, weevil rostrum, lepidopteran palps
+  and proboscis coil, clypeus bow, asilid dish and mystax. Markings: frontal stripe, hatched
+  vertex, rim hair. Beetle, grasshopper and cicada heads are inserted under the thorax path so
+  the pronotum covers the back of the head. `meta.head` (outline, eyes, ocelli, rostrum) and
+  `meta.headOutline` are exposed; `tests/check.js` asserts eyes inside the head bbox (≤ 10 %
+  overhang), ocelli inside the outline and `bodySig` ≥ 98 % distinct per type.
+  Deviations from the text above: grasshopper mandibles are not drawn (hypognathous, hidden from
+  above; palps and the fastigium furrow instead); the fly proboscis is not drawn (hidden under the
+  head); the antennal socket table `AB` is untouched (step 6 can snap it to `meta.headOutline`).
 - **Known, outside this plan:** the cicada wing span (`abdomen length / sin(theta) × 1.0–1.12`
   in the wing block) pushes ~0.4% of cicadas below plate scale 0.55 on the baseline engine as
   well; which seeds hit it moves with the rng stream, so `check.js 3000` can show one to three.

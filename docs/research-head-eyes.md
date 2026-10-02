@@ -182,9 +182,9 @@ front-to-back extent (our `headH`).
   (Curtis, Wood, Blanchard) as a regular hexagonal or staggered dot lattice over the eye.
 - Tone: stipple (dots denser toward the shaded edge) or the lattice; a clean **unworked
   highlight** crescent toward the light. Plates are lit from the upper left, so the highlight
-  sits upper-left on both eyes; our mirror step makes both eyes symmetric, so the gene is
-  "upper-outer" vs "upper-inner", with upper-outer the default (the left eye of a plate lit
-  from the upper left).
+  sits upper-left on both eyes. The engine draws both eyes individually in the unmirrored
+  `thoraxHead` layer with the same highlight offset, so the plate keeps that upper-left lighting;
+  the gene is the offset and radius of the unworked patch, not its side.
 - Hairs: a bumblebee's eye carries hairs between the facets and the head a fringe; a fly's
   face has bristles (frontal, orbital, mystax). Short ticks around the eye rim or over the
   face read as pile without a fill.
@@ -214,8 +214,10 @@ and `P.headH` keep their meaning: bounding width, bounding depth and centre of t
 
 Common rules:
 
-- **Eye containment**: every eye ellipse stays inside the head bbox with ≤ 10 % of its radius
-  overhanging; ocelli inside the outline. Asserted in `tests/check.js` on `meta.head`.
+- **Eye containment**: every eye ellipse stays inside the head bbox with ≤ 10 % of its extent
+  overhanging on any side; ocelli inside the outline. Asserted in `tests/check.js` on `meta.head`.
+  Where the eyes bulge past the capsule (cicada stalks, ground-beetle corners) the capsule is drawn
+  narrower than W (`capK`) rather than the eyes wider.
 - **Eye style** `lattice` / `stipple` / `plain`: lattice pitch gene 1.8–3.0 px clamped up to
   `1.8 / p5scale(type)`; stipple dots at the same pitch on a staggered grid, denser (two rows
   closer) toward the lower-inner edge, none in the highlight; plain = outline + a highlight

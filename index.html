@@ -313,8 +313,11 @@ function tarsusEls(p, dir0, total, w0, n, curl, opts) {
   return { els, tip: p };
 }
 
-// ---------- eyes: hexagonal ommatidia lattice clipped to the eye outline ----------
-// opts: { rot, dent: [angleDeg, depth], highlight: [dx, dy] (fractions of rx/ry), pitch }
+// ---------- eyes: compound eye outline with the ommatidia shown as a lattice, a stipple or a plain highlight ----------
+// opts: { rot, dent: [angleDeg, depth, width], highlight: [dx, dy] (fractions of rx/ry, eye-local before rot), highlightR,
+//         pitch (body px; the caller applies the e-ink floor), style: 'lattice' | 'stipple' | 'plain' }
+// Engraving convention (docs/research-head-eyes.md): facets are never to scale, the honeycomb or the dot field only says
+// "compound eye"; the highlight is left unworked toward the upper left on both eyes (the plate is lit from the upper left).
 function eyeEls(c, rx, ry, opts) {
   opts = opts || {};
   const rot_ = (opts.rot || 0) * D2R;
@@ -335,6 +338,16 @@ function eyeEls(c, rx, ry, opts) {
   const els = [pathEl(smoothPath(pts.map(T), true, 1), SW.O, '#fff')];
   const hl = opts.highlight || [-0.42, -0.42];
   const hlR = opts.highlightR || 0.36;
+  const style = opts.style || 'lattice';
+  if (style === 'plain') {   // a shaded sphere: one or two inner arcs on the far side of the highlight
+    const aS = Math.atan2(-hl[1], -hl[0]), arcs = Math.min(rx, ry) > 5 ? 2 : 1;
+    for (let k = 0; k < arcs; k++) {
+      const f = k === 0 ? 0.74 : 0.5, span = k === 0 ? 1.15 : 0.7, ap = [];
+      for (let j = 0; j <= 10; j++) { const a = aS - span + 2 * span * j / 10; ap.push(T([Math.cos(a) * rx * f, Math.sin(a) * ry * f])); }
+      els.push(pathEl(smoothPath(ap, false, 1), SW.F));
+    }
+    return els;
+  }
   const pitch = opts.pitch || Math.max(1.9, Math.min(3.2, (rx + ry) / 7.5));
   const R = pitch / Math.sqrt(3) * 0.82;   // hex circumradius, shrunk so the cells separate
   const inset = Math.min(0.88, 1 - pitch * 0.55 / Math.min(rx, ry));
@@ -343,16 +356,53 @@ function eyeEls(c, rx, ry, opts) {
   const rowH = pitch * 0.866;
   let row = 0;
   for (let y = -ry; y <= ry; y += rowH, row++) {
-    for (let x = -rx + (row % 2) * pitch / 2; x <= rx; x += pitch) {
+    let col = 0;
+    for (let x = -rx + (row % 2) * pitch / 2; x <= rx; x += pitch, col++) {
       const q = [x, y];
       if (!pointInPoly([x / inset, y / inset], poly)) continue;
-      const hx = (x - hl[0] * rx) / (hlR * rx), hy = (y - hl[1] * ry) / (hlR * ry);
-      if (hx * hx + hy * hy < 1) continue;
-      els.push(polygonEl(hex.map(h => T(add(q, h))), SW.F));
+      const hx = (x - hl[0] * rx) / (hlR * rx), hy = (y - hl[1] * ry) / (hlR * ry), d2 = hx * hx + hy * hy;
+      if (d2 < 1) continue;
+      if (style === 'stipple') {   // dots, thinned to every other site in a ring around the highlight so the tone grades
+        if (d2 < 2.4 && (row + col) % 2) continue;
+        const p = T(q); els.push(lineEl(p, [p[0] + 0.01, p[1]], SW.D));
+      } else els.push(polygonEl(hex.map(h => T(add(q, h))), SW.F));
     }
   }
   return els;
 }
+
+// ---------- head capsule outline, dorsal view ----------
+// G = B.head. Unit circle warped by the outline enum (round / transverse / triangular / elongate), the flattened front
+// margin, the genal swelling, a front bump (odonate frons, cicada postclypeus, crane fly snout) and the occipital notch.
+// Returns the closed loop of points in body coords (both halves, front at y = top), later smoothed.
+function headOutlinePts(G, W, H, top) {
+  const N = 120, pts = [], cy = top + H / 2, hw = W / 2 * G.capK;
+  for (let i = 0; i < N; i++) {
+    const a = i / N * Math.PI * 2 - Math.PI / 2;        // start at the front
+    let x = Math.cos(a), y = Math.sin(a);
+    const t = (y + 1) / 2;                              // 0 front .. 1 rear
+    if (G.outline === 'triangular') x *= lerp(G.fastigium, 1, Math.pow(t, 0.75));
+    if (G.outline === 'elongate') x *= lerp(G.frontK, 1, Math.pow(t, 0.7));
+    if (G.genal) x *= 1 + G.genal * Math.exp(-Math.pow((t - 0.7) / 0.18, 2));
+    let X = x * hw, Y = cy + y * H / 2;
+    if (G.flat && Y < top + H * G.flat) Y = top + H * G.flat;
+    if (y < 0 && G.bump) { const u = Math.min(1, Math.abs(X) / (G.bump.w * W)), k = G.bump.pointed ? 1 - u : G.bump.striae ? Math.pow(1 - u * u, 0.6) : Math.pow(Math.cos(Math.PI / 2 * u), 2); Y -= G.bump.h * H * k; }   // postclypeus semicircular, frons a soft cos^2
+    if (y < 0 && G.snout) { const u = Math.min(1, Math.abs(X) / (0.22 * W)); Y -= G.snout * W * Math.pow(Math.cos(Math.PI / 2 * u), 2); }
+    if (y > 0 && G.notch) { const k = Math.max(0, Math.cos(Math.PI / 2 * X / (0.22 * W))); Y -= G.notch * H * k * k; }
+    pts.push([X, Y]);
+  }
+  return pts;
+}
+function polyMaxXAt(poly, y) {   // half-width of a closed symmetric loop at y
+  let best = 0;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] <= y && y <= b[1]) || (b[1] <= y && y <= a[1])) { const x = b[1] === a[1] ? Math.max(a[0], b[0]) : a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]); if (x > best) best = x; }
+  }
+  return best;
+}
+// 5th-percentile plate scale per order (docs/research-head-eyes.md): the lattice pitch floor is 1.8 px on the plate
+const HEAD_SCALE_P5 = { bee: 0.85, beetle: 1.3, moth: 1.28, cicada: 0.67, cranefly: 0.87, damselfly: 1.02, dragonfly: 0.99, fly: 0.78, grasshopper: 1.18, lacewing: 0.81, mayfly: 0.92, wasp: 0.75 };
 
 // ---------- antennae (right side) ----------
 function shaftPoints(base, dirDeg, length, curveDeg, n) {
@@ -1626,25 +1676,102 @@ function rollBodyGenes(type, P) {
   if (isOdo) A.appendages = { len: randRange(8, 16), spread: randRange(3, 7) };
   B.sig.push(A.tip, A.mark, Math.round(A.peak * 10), Math.round(A.startT * 10), A.sw === SW.F ? 'f' : 'd', A.double ? 1 : 0, A.ticks ? 1 : 0, A.keel ? 1 : 0, A.waist || 0,
     A.ovipositor ? Math.round(A.ovipositor.len / 10) : '-', A.cerci ? 1 : 0, A.filaments ? A.filaments.n : 0, A.mark === 'banded' ? A.band.period + ':' + A.band.phase : A.mark === 'striped' ? A.stripe.n : A.mark === 'tipdark' ? A.tipDark : 0);
-  // ---- head: [cx/headW, rx/headW, ry/headH, cy offset/headH, opts] -- see docs/research-legs-eyes-antennae.md ----
-  B.head.eye = {
-    beetle: [0.36, 0.12, 0.25, -0.02, { dent: [-125, 0.32, 0.8] }],                 // oval, notched at the antennal socket
-    moth: [0.33, 0.16, 0.27, -0.03, {}],                                            // large and round
-    fly: [0.28, 0.24, 0.42, -0.03, { highlight: [-0.3, -0.5], highlightR: 0.3 }],   // holoptic: nearly meeting on top
-    bee: [0.34, 0.14, 0.4, -0.03, { dent: [180, 0.22, 0.75] }],                      // kidney-shaped
-    wasp: [0.34, 0.13, 0.38, -0.03, { dent: [180, 0.22, 0.75] }],
-    dragonfly: [0.25, 0.25, 0.42, 0.06, { highlight: [-0.25, -0.5], highlightR: 0.3 }], // huge, meeting on the midline
-    damselfly: [0.4, 0.11, 0.44, 0, {}],                                            // dumbbell head: eyes at the ends
-    grasshopper: [0.32, 0.13, 0.3, -0.08, {}],
-    cranefly: [0.33, 0.14, 0.32, -0.03, {}],
-    lacewing: [0.34, 0.15, 0.32, -0.03, {}],
-    cicada: [0.42, 0.09, 0.3, -0.03, {}],                                           // bulging at the head corners
-    mayfly: [0.28, 0.2, 0.4, -0.03, {}],
-  }[type];
-  B.head.ocelli = type === 'beetle' || type === 'moth' ? null
-    : { pos: type === 'fly' || type === 'dragonfly' || type === 'mayfly' ? [[0, -0.42], [0.06, -0.34]] : [[0, -0.18], [0.09, -0.08]], r: type === 'dragonfly' ? 1.1 : 1.3 };
-  B.head.mandibles = type === 'beetle' || type === 'grasshopper';
-  B.head.clypeus = type === 'bee' || type === 'fly';
+  // ---- head: outline, eyes, ocelli, mouthparts, face markings -- see docs/research-head-eyes.md ("Rules derived") ----
+  // Fractions of headW (x) and headH (y) unless px. The order table gives the ranges, the family (P.fam / variant) overrides
+  // some, the seed rolls every value. headW stays the bounding width of the head including the eyes and headH its
+  // front-to-back depth (the ratio roll rewrites P.headH), so the layout and the antennae keep reading them as before.
+  {
+    const HD = {
+      //           outline      W/H ratio     eye cx        rx            ry            cy (off centre) ocelli  mouth                                    styles                           markings
+      dragonfly:   { outline: 'transverse', ratio: [1.55, 1.95], cx: [0.24, 0.27], rx: [0.23, 0.26], ry: [0.38, 0.45], cy: [0.03, 0.08], ocelli: 3, oc: 'odo', bump: [[0.18, 0.24], [0.1, 0.15]], notch: 0.6, ocR: [0.9, 1.3], labrum: [1, 2], styles: { lattice: 3, stipple: 2 }, apart: 0.15, hl: [-0.25, -0.5], hlR: [0.26, 0.34] },
+      damselfly:   { outline: 'transverse', ratio: [2.3, 2.9], cx: [0.36, 0.4], rx: [0.09, 0.11], ry: [0.38, 0.46], cy: [0, 0.04], ocelli: 3, oc: 'triangle', ocY: [0.3, 0.45], styles: { lattice: 3, stipple: 2 } },
+      fly:         { outline: 'round', ratio: [1.2, 1.45], holoptic: 0.55, holo: { cx: [0.24, 0.26], rx: [0.23, 0.26], ry: [0.4, 0.47] }, cx: [0.3, 0.33], rx: [0.15, 0.19], ry: [0.36, 0.45], cy: [-0.04, 0.02], ocelli: 3, oc: 'triangle', clypeus: 0.6, styles: { lattice: 3, stipple: 2, plain: 1 }, hl: [-0.3, -0.5], hlR: [0.26, 0.34], hair: 0.3 },
+      bee:         { outline: 'round', ratio: [1.1, 1.35], flat: 0.5, cx: [0.32, 0.36], rx: [0.12, 0.16], ry: [0.36, 0.44], cy: [-0.05, 0.02], tilt: [-8, 8], dent: [0.15, 0.3], ocelli: 3, oc: 'triangle', ocY: [0.3, 0.5], ocR: [1.2, 1.8], clypeus: 0.9, mandTips: 0.6, styles: { lattice: 3, stipple: 2 }, hair: 0.5, hatch: 0.3 },
+      wasp:        { outline: 'round', ratio: [1.1, 1.35], flat: 0.4, cx: [0.32, 0.36], rx: [0.11, 0.15], ry: [0.34, 0.44], cy: [-0.05, 0.02], tilt: [-8, 8], dent: [0.15, 0.3], ocelli: 3, oc: 'triangle', ocY: [0.3, 0.5], ocR: [1.1, 1.6], clypeus: 0.8, mandTips: 0.7, styles: { lattice: 3, stipple: 2, plain: 1 }, hatch: 0.3 },
+      moth:        { outline: 'round', ratio: [0.95, 1.2], cx: [0.3, 0.35], rx: [0.14, 0.18], ry: [0.24, 0.3], cy: [-0.06, 0.02], ocelli: [0, 2], oc: 'behind', ocR: [0.8, 1.1], palps: 0.8, coil: 0.35, styles: { lattice: 3, stipple: 2 }, hair: 0.7 },
+      beetle:      { outline: 'round', ratio: [1.1, 1.35], flat: 0.5, cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.2, 0.28], cy: [-0.06, 0.02], dent: [0.3, 0.45], dentAt: -125, ocelli: 0, mand: [0.1, 0.2], labrum: [1, 1], styles: { stipple: 2, plain: 2, lattice: 1 }, stripe: 0.4 },
+      grasshopper: { outline: 'triangular', ratio: [0.8, 1.0], fast: [0.35, 0.55], cx: [0.3, 0.34], rx: [0.1, 0.13], ry: [0.24, 0.32], cy: [0.06, 0.16], tilt: [-15, 0], ocelli: 2, oc: 'lateral', palps: 0.5, furrow: 1, styles: { lattice: 3, stipple: 2 } },
+      cicada:      { outline: 'transverse', ratio: [1.9, 2.4], capK: [0.84, 0.9], cx: [0.38, 0.41], rx: [0.08, 0.1], ry: [0.3, 0.4], cy: [0.02, 0.08], ocelli: 3, oc: 'triangle', ocY: [0.38, 0.5], ocDx: [0.05, 0.08], ocDy: [0.05, 0.1], bump: [[0.17, 0.25], [0.12, 0.22]], pointed: 0.4, striae: [3, 6], styles: { lattice: 3, stipple: 2 } },
+      cranefly:    { outline: 'round', ratio: [1.0, 1.2], cx: [0.32, 0.36], rx: [0.13, 0.16], ry: [0.3, 0.36], cy: [-0.04, 0.04], ocelli: 0, snout: [0.1, 0.3], styles: { stipple: 2, plain: 2, lattice: 1 } },
+      lacewing:    { outline: 'round', ratio: [1.05, 1.25], genal: [0.05, 0.15], cx: [0.34, 0.37], rx: [0.11, 0.14], ry: [0.3, 0.36], cy: [-0.04, 0.04], ocelli: 0, mandTips: 0.3, styles: { lattice: 3, stipple: 2 } },
+      mayfly:      { outline: 'transverse', ratio: [1.1, 1.4], cx: [0.26, 0.3], rx: [0.17, 0.21], ry: [0.36, 0.44], cy: [-0.04, 0.04], ocelli: 3, oc: 'triangle', ocY: [0.6, 0.75], turbinate: 0.5, styles: { lattice: 3, stipple: 2 } },
+    }[type];
+    // family / variant overrides
+    const FO = {
+      fly: { asilid: { holoptic: 0, dish: 1, hair: 0.9 }, nemato: { holoptic: 0.3 }, tabanid: { holoptic: 0.8 } },
+      bee: { sawfly: { ratio: [1.15, 1.4], cx: [0.31, 0.34], rx: [0.14, 0.17], dent: [0, 0.1], mandTips: 0.3 } },
+      wasp: { sawfly: { ratio: [1.15, 1.4], cx: [0.31, 0.34], rx: [0.14, 0.17], dent: [0, 0.1] }, ichneumonid: { ratio: [1.2, 1.45] }, chalcid: { ratio: [1.3, 1.5], cx: [0.31, 0.35], rx: [0.13, 0.16] } },
+      beetle: {
+        ground: { outline: 'elongate', ratio: [0.85, 1.05], flat: 0, frontK: [0.75, 0.9], capK: [0.86, 0.93], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.24], cy: [0.08, 0.2], dent: [0, 0], mand: [0.4, 0.6], mandCross: 0.5, serr: 0.3, palps: 0.8, furrow: 1, styles: { plain: 3, stipple: 2 } },
+        rove: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.8, 0.92], capK: [0.88, 0.94], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.22], cy: [0.02, 0.14], dent: [0, 0], mand: [0.3, 0.45], mandCross: 0.4, palps: 0.6, ocelli: [0, 1], oc: 'median', styles: { plain: 3, stipple: 2 } },
+        scarab: { ratio: [1.2, 1.45], flat: 0.7, dent: [0, 0.15], mand: [0.08, 0.15], clypeus: 0.7 },
+        longhorn: { ratio: [1.0, 1.2], flat: 0.3, dent: [0.35, 0.5], dentAt: -105, mand: [0.12, 0.22] },
+        weevil: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.6, 0.75], rostrum: [0.6, 1.8], rostW: [0.15, 0.25], cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.18, 0.26], cy: [-0.02, 0.1], dent: [0, 0], mand: [0.04, 0.06], labrum: [0, 0], stripe: 0 },
+      },
+    }[type];
+    const HF = Object.assign({}, HD, (FO && FO[fam]) || {}, P.variant === 'butterfly' ? { ocelli: 0, coil: 0.5, hair: 0.2, cx: [0.29, 0.33], rx: [0.16, 0.19] } : {});
+    const G = B.head, w01 = weighted;
+    G.outline = HF.outline; G.ratio = rr(HF.ratio); P.headH = P.headW / G.ratio;
+    G.flat = HF.flat && rng() < HF.flat ? randRange(0.04, 0.1) : 0;             // front margin flattened at this fraction of H
+    G.genal = HF.genal ? rr(HF.genal) : 0;
+    G.fastigium = HF.fast ? rr(HF.fast) : 1;                                       // triangular: front width / rear width
+    G.frontK = HF.frontK ? rr(HF.frontK) : 1;                                      // elongate: front width / rear width
+    G.capK = HF.capK ? rr(HF.capK) : 1;                                            // capsule width / headW (cicada eyes bulge past it)
+    G.holoptic = HF.holoptic ? rng() < HF.holoptic : false;
+    G.apart = HF.apart && rng() < HF.apart;                                        // gomphid-style separated odonate eyes
+    {
+      const ER = G.holoptic ? HF.holo : HF;
+      let cx = rr(ER.cx), rx = rr(ER.rx);
+      if (G.apart) { cx += 0.04; rx -= 0.05; }
+      if (G.holoptic || (type === 'dragonfly' && !G.apart)) cx = rx;              // inner margins meet on the midline
+      G.eye = { cx, rx, ry: rr(ER.ry), cy: rr(HF.cy), tilt: HF.tilt ? rr(HF.tilt) : 0,
+        dent: HF.dent && HF.dent[1] > 0 ? [HF.dentAt || 180, rr(HF.dent), randRange(0.7, 0.95)] : null,
+        hl: [(HF.hl ? HF.hl[0] : -0.42) + randRange(-0.08, 0.08), (HF.hl ? HF.hl[1] : -0.42) + randRange(-0.08, 0.08)], hlR: HF.hlR ? rr(HF.hlR) : randRange(0.3, 0.42),
+        style: w01(HF.styles), pitch: randRange(1.8, 3.0) };
+      G.turbinate = HF.turbinate && rng() < HF.turbinate;                          // male mayfly: a second pair of dorsal lobes
+      if (G.turbinate) { G.eye.cx = randRange(0.36, 0.4); G.eye.rx = randRange(0.1, 0.12); G.eye.ry = randRange(0.3, 0.36); G.turban = { cx: randRange(0.16, 0.19), rx: randRange(0.16, 0.19), ry: randRange(0.34, 0.4), cy: randRange(-0.1, -0.02) }; G.turban.cx = G.turban.rx; }
+    }
+    G.bump = HF.bump ? { w: rr(HF.bump[0]), h: rr(HF.bump[1]), pointed: HF.pointed ? rng() < HF.pointed : false, striae: HF.striae ? randInt(HF.striae[0], HF.striae[1]) : 0 } : null;   // frons (odonate) / postclypeus (cicada)
+    // ocelli: count and arrangement; positions in head fractions (y from headTop)
+    {
+      const n = Array.isArray(HF.ocelli) ? randInt(HF.ocelli[0], HF.ocelli[1]) : HF.ocelli;
+      const r = HF.ocR ? rr(HF.ocR) : randRange(0.9, 1.4), pos = [];
+      if (n) {
+        if (HF.oc === 'odo') { pos.push([0, -G.bump.h * randRange(0.2, 0.35)]); pos.push([randRange(0.07, 0.1), randRange(0.1, 0.16)], null); }   // median on the frons bump, laterals at the seam front
+        else if (HF.oc === 'behind') { pos.push(null, [G.eye.cx * randRange(0.7, 0.8), Math.min(0.82, 0.5 + G.eye.cy + G.eye.ry + 0.06)], null); }     // moth: one behind each eye
+        else if (HF.oc === 'lateral') { pos.push(null, [randRange(0.09, 0.13), randRange(0.16, 0.24)], null); }                            // grasshopper: beside the antennal bases
+        else if (HF.oc === 'median') pos.push([0, randRange(0.55, 0.7)]);
+        else {
+          const y0 = HF.ocY ? rr(HF.ocY) : G.holoptic ? randRange(0.76, 0.82) : randRange(0.55, 0.66);
+          const dx = HF.ocDx ? rr(HF.ocDx) : G.holoptic ? randRange(0.04, 0.06) : randRange(0.07, 0.1), dy = HF.ocDy ? rr(HF.ocDy) : randRange(0.06, 0.12);
+          const line = rng() < 0.2;
+          pos.push([0, y0], [dx, line ? y0 : y0 + dy], line ? 'line' : null);
+        }
+        if (n === 2) pos[0] = null;
+        if (n === 1 && HF.oc !== 'median') pos[1] = null;
+      }
+      G.ocelli = n ? { n, r, median: pos[0], lateral: pos[1], arr: pos[2] || 'triangle' } : null;
+    }
+    // mouthparts seen from above
+    G.mand = HF.mand ? { len: rr(HF.mand), curve: randRange(0.4, 1), cross: HF.mandCross ? rng() < HF.mandCross : false, serr: HF.serr ? rng() < HF.serr : false, w: randRange(0.06, 0.09) } : null;
+    G.mandTips = HF.mandTips && rng() < HF.mandTips ? randRange(0.1, 0.2) : 0;
+    G.labrum = HF.labrum ? randInt(HF.labrum[0], HF.labrum[1]) : 0;
+    G.clypeus = HF.clypeus && rng() < HF.clypeus ? randRange(0.05, 0.12) : 0;      // bow depth / H
+    G.palps = HF.palps && rng() < HF.palps ? { len: randRange(0.1, 0.2), segs: randInt(2, 3) } : null;
+    G.coil = HF.coil && rng() < HF.coil ? { r: randRange(0.1, 0.16), turns: randRange(1.5, 2.5) } : null;
+    G.rostrum = HF.rostrum ? { len: rr(HF.rostrum), w: rr(HF.rostW), curve: randRange(0, 0.25) } : null;
+    G.snout = HF.snout ? rr(HF.snout) : 0;
+    G.notch = HF.notch && rng() < HF.notch ? randRange(0.06, 0.12) : 0;            // occipital notch at the rear
+    G.dish = !!HF.dish;
+    // face markings
+    G.stripe = HF.stripe ? rng() < HF.stripe : false;
+    G.hatch = HF.hatch ? rng() < HF.hatch : false;
+    G.hair = HF.hair && rng() < HF.hair ? { spacing: randRange(2.5, 4), len: randRange(2, 3.5) } : null;
+    G.furrow = !!HF.furrow;
+    B.sig.push('h' + G.outline[0] + Math.round(G.ratio * 4) + (G.holoptic ? 'H' : '') + (G.apart ? 'A' : '') + (G.turbinate ? 'T' : '') + (G.flat ? 'f' : '') + G.eye.style[0] + Math.round(G.eye.rx * 20) + Math.round(G.eye.pitch * 2) + (G.eye.dent ? 'd' : '') + 'o' + (G.ocelli ? G.ocelli.n + G.ocelli.arr[0] : 0)
+      + (G.mand ? (G.mand.cross ? 'X' : 'M') + Math.round(G.mand.len * 10) : G.mandTips ? 'm' : '') + (G.palps ? 'p' : '') + (G.coil ? 'c' : '') + (G.rostrum ? 'r' + Math.round(G.rostrum.len * 4) : '') + (G.snout ? 's' : '') + (G.bump && G.bump.pointed ? 'P' : '') + (G.notch ? 'n' : '')
+      + (G.stripe ? 'S' : '') + (G.hatch ? 'V' : '') + (G.hair ? 'h' : '') + (G.clypeus ? 'y' : '') + G.labrum);
+  }
   // ---- antennae: kind and length come from the proportions; the socket sits on the front of the head between the eyes ----
   B.ant = { kind: P.antenna, len: P.antLen,
     socket: { dragonfly: [0.14, 0.12], damselfly: [0.12, 0.25], fly: [0.055, 0.2], bee: [0.16, 0.3], wasp: [0.16, 0.3], moth: [0.16, 0.3], beetle: [0.2, 0.3], grasshopper: [0.13, 0.24], mayfly: [0.08, 0.2], cicada: [0.22, 0.3] }[type] || [0.18, 0.28] };
@@ -1969,24 +2096,103 @@ function generateInsectDetailed(seed, opts) {
       L.thoraxHead.push(pathEl(cubicBezierPath([[-7, thorax.yBot - 3], [-3, thorax.yBot + 9], [3, thorax.yBot + 9], [7, thorax.yBot - 3], [4, thorax.yBot - 4], [-4, thorax.yBot - 4], [-7, thorax.yBot - 3]], true), SW.D, '#fff'));
     }
   }
-  // head
-  const hr = { x: P.headW / 2, y: P.headH / 2 };
-  L.thoraxHead.push(pathEl(ellipsePath([0, headCy], hr.x, hr.y, 0), SW.O, '#fff'));
+  // head: capsule outline from B.head (docs/research-head-eyes.md), mouthparts that show from above drawn first so the
+  // capsule covers their roots, then the eyes, ocelli and face markings. Orders whose pronotum overlaps the back of the
+  // head (beetle, grasshopper, cicada) get the head inserted under the thorax path.
   {
-    const E = B.head.eye;   // [cx/headW, rx/headW, ry/headH, cy offset/headH, opts]
-    for (const s of [-1, 1]) L.thoraxHead.push(...eyeEls([s * P.headW * E[0], headCy + P.headH * E[3]], P.headW * E[1], P.headH * E[2], E[4]));
-    if (B.head.ocelli) {   // ocelli
-      const oc = B.head.ocelli.pos, r = B.head.ocelli.r;
-      L.thoraxHead.push(circleEl([0, headCy + P.headH * oc[0][1]], r, SW.D));
-      L.thoraxHead.push(circleEl([-P.headW * oc[1][0], headCy + P.headH * oc[1][1]], r, SW.D));
-      L.thoraxHead.push(circleEl([P.headW * oc[1][0], headCy + P.headH * oc[1][1]], r, SW.D));
+    const G = B.head, W = P.headW, H = P.headH, HE = [];
+    const outline = headOutlinePts(G, W, H, headTop);
+    const outlinePl = sampleSmooth(outline, true, 1, 3);
+    const hwAt = y => polyMaxXAt(outlinePl, y);
+    const yFrontAt = x => { const r = outlineYRange(outlinePl, x); return r ? r[0] : headTop; };
+    // --- mouthparts and projections in front of the capsule ---
+    if (G.rostrum) {   // weevil: a tube from the front of the capsule, tiny mandibles at its tip
+      const len = G.rostrum.len * W, w = G.rostrum.w * W / 2, y0 = headTop + H * 0.3, tip = headTop - len, bend = G.rostrum.curve * len;
+      HE.push(pathEl(cubicBezierPath([[w, y0], [w * 0.9, headTop - len * 0.45], [w * 0.8 + bend, tip + len * 0.3], [w * 0.7 + bend, tip], [w * 0.3 + bend, tip - w * 0.4], [-w * 0.3 + bend, tip - w * 0.4], [-w * 0.7 + bend, tip],
+        [-w * 0.8 + bend, tip + len * 0.3], [-w * 0.9, headTop - len * 0.45], [-w, y0]], false), SW.O, '#fff'));
+      HE.push(pathEl(cubicBezierPath([[0, headTop - len * 0.3], [bend * 0.25, tip + len * 0.5], [bend * 0.75, tip + len * 0.28], [bend, tip + len * 0.12]], false), SW.F));   // dorsal carina along the curve
+      for (const s of [-1, 1]) HE.push(lineEl([s * w * 0.35 + bend, tip - w * 0.3], [s * w * 0.15 + bend, tip - w * 0.3 - G.mand.len * W], SW.D));
     }
-    if (B.head.mandibles) {   // mandibles
-      for (const s of [-1, 1]) L.thoraxHead.push(pathEl(cubicBezierPath([[s * P.headW * 0.16, headTop + 2], [s * P.headW * 0.14, headTop - 4], [s * P.headW * 0.07, headTop - 7], [s * P.headW * 0.02, headTop - 6]], false), SW.D));
+    if (G.mand && !G.rostrum) {   // prognathous mandibles: closed sickles from the front corners, curving inward, tips crossing on some ground beetles
+      const len = G.mand.len * W, mw = G.mand.w * W, bx = hwAt(headTop + H * 0.1) * 0.78, by = headTop + H * 0.12;
+      for (const s of [-1, 1]) {
+        const tipX = s * (G.mand.cross ? -0.05 * W : bx * (1 - G.mand.curve) * 0.5), tipY = headTop - len * (G.mand.cross ? 0.75 : 0.95);
+        const outer = [[s * (bx + mw * 0.5), by], [s * (bx + mw * 0.5), headTop - len * 0.45], [tipX + s * mw * 0.4, tipY + len * 0.2], [tipX, tipY]];
+        const inner = [[tipX, tipY], [tipX - s * mw * 0.1, tipY + len * 0.15], [s * (bx - mw * 0.5) * 0.85, headTop - len * 0.3], [s * (bx - mw * 0.5), by]];
+        HE.push(pathEl(cubicBezierPath(outer.concat(inner.slice(1)), false), SW.D, '#fff'));
+        if (G.mand.serr) { const sp = sampleBezier(inner, 6); for (let k = 1; k < 5; k += 1) { const p = sp[k], q = sp[k + 1], d = sub(q, p), n = perp(d); HE.push(lineEl(p, add(p, mul(n, -s * 0.9 / (vlen(n) || 1) * mw * 0.35)), SW.F)); } }
+      }
+      if (G.labrum) HE.push(pathEl(cubicBezierPath([[-W * 0.1, headTop + 1], [-W * 0.08, headTop - W * 0.05], [W * 0.08, headTop - W * 0.05], [W * 0.1, headTop + 1]], false), SW.D, '#fff'));   // labrum between the jaws
     }
-    if (B.head.clypeus) {   // clypeus line
-      L.thoraxHead.push(bowLine(headCy - P.headH * 0.28, P.headW * 0.16, -P.headH * 0.08, SW.F));
+    if (G.mandTips) {   // hypognathous head: only the jaw tips show below the clypeus
+      for (const s of [-1, 1]) HE.push(pathEl(cubicBezierPath([[s * W * 0.14, headTop + 1.5], [s * W * 0.13, headTop - G.mandTips * W * 0.5], [s * W * 0.07, headTop - G.mandTips * W], [s * W * 0.02, headTop - G.mandTips * W * 0.9]], false), SW.D));
     }
+    if (G.palps) {   // maxillary / labial palps: beaded rods sticking forward beside the mouth
+      for (const s of [-1, 1]) {
+        const x0 = s * W * (G.mand ? 0.2 : 0.11), y0 = yFrontAt(x0) + 1, L0 = G.palps.len * W, dir = s * 12;
+        let p = [x0, y0];
+        for (let k = 0; k < G.palps.segs; k++) { const q = add(p, mul(dirv(-90 + dir), L0 / G.palps.segs)); HE.push(lineEl(p, q, SW.D)); if (k < G.palps.segs - 1) HE.push(circleEl(q, 0.6, SW.F, '#fff')); p = q; }
+      }
+    }
+    if (G.coil) {   // lepidopteran proboscis coiled under the head, shown as a spiral below the front margin
+      const r0 = G.coil.r * W, c = [0, headTop - r0 - 1], sp = [], n = Math.round(G.coil.turns * 14);
+      for (let k = 0; k <= n; k++) { const a = k / 14 * Math.PI * 2 + Math.PI / 2, r = r0 * (1 - 0.65 * k / n); sp.push(add(c, [Math.cos(a) * r, Math.sin(a) * r])); }
+      HE.push(pathEl(smoothPath(sp, false, 1), SW.D));
+    }
+    // --- capsule ---
+    HE.push(pathEl(smoothPath(outline, true, 1), SW.O, '#fff'));
+    if (G.bump && G.bump.striae) {   // cicada postclypeus: transverse muscle ridges
+      const yTip = yFrontAt(0);
+      for (let k = 1; k <= G.bump.striae; k++) { const y = yTip + (headTop + H * 0.08 - yTip) * k / (G.bump.striae + 1); HE.push(bowLine(y, Math.max(2, hwAt(y) * 0.8), -(headTop - y) * 0.25, SW.F)); }
+    }
+    if (G.labrum && !G.mand) {   // odonate frons / clypeus / labrum bands under the frons bump
+      const bw = G.bump ? G.bump.w * W * 0.6 : W * 0.15;
+      for (let k = 1; k <= G.labrum; k++) { const y = headTop + H * (0.02 + 0.06 * k); HE.push(bowLine(y, bw * (1 - 0.15 * k), H * 0.025, SW.F)); }
+    }
+    if (G.furrow) {   // frontal furrows (ground beetle) or the fastigium furrow (grasshopper)
+      if (G.outline === 'triangular') HE.push(lineEl([0, headTop + H * 0.02], [0, headTop + H * 0.2], SW.F));
+      else for (const s of [-1, 1]) { const x = s * hwAt(headTop + H * 0.2) * 0.55; HE.push(pathEl(cubicBezierPath([[x, headTop + H * 0.04], [x * 1.05, headTop + H * 0.15], [x * 0.95, headTop + H * 0.25], [x * 0.9, headTop + H * 0.34]], false), SW.F)); }
+    }
+    if (G.clypeus) HE.push(bowLine(headTop + H * 0.18, hwAt(headTop + H * 0.18) * 0.45, -H * G.clypeus, SW.F));   // clypeus bow
+    if (G.stripe) HE.push(lineEl([0, headTop + H * 0.1], [0, headTop + H * 0.55], SW.F));   // frontal stripe
+    // --- eyes ---
+    const eyes = [];
+    const pitch = Math.max(G.eye.pitch, 1.8 / (HEAD_SCALE_P5[type] || 0.8));
+    const drawEyes = E => {
+      for (const s of [-1, 1]) {
+        const c = [s * W * E.cx, headCy + H * E.cy], rx = W * E.rx, ry = H * E.ry, rot = s * (E.tilt || 0);
+        const dent = E.dent ? [s > 0 ? E.dent[0] : 180 - E.dent[0], E.dent[1], E.dent[2]] : null;   // the notch faces the antennal socket on both sides
+        HE.push(...eyeEls(c, rx, ry, { rot, dent, highlight: G.eye.hl, highlightR: G.eye.hlR, pitch, style: G.eye.style }));
+        eyes.push({ cx: c[0], cy: c[1], rx, ry, rot });
+      }
+    };
+    drawEyes(G.eye);
+    if (G.turban) drawEyes(Object.assign({ tilt: 0, dent: null }, G.turban));
+    if (G.dish) HE.push(bowLine(headTop + H * 0.5, W * 0.12, H * 0.08, SW.F));   // asilid: the vertex dished between the raised eyes
+    // --- ocelli ---
+    const ocelli = [];
+    if (G.ocelli) {
+      const O = G.ocelli;
+      if (O.median) ocelli.push([0, headTop + H * O.median[1]]);
+      if (O.lateral) for (const s of [-1, 1]) ocelli.push([s * W * O.lateral[0], headTop + H * O.lateral[1]]);
+      for (const p of ocelli) HE.push(circleEl(p, O.r, SW.D, '#fff'));
+    }
+    // --- face markings ---
+    if (G.hatch) {   // hatched vertex: fine bows between the ocelli and the rear margin
+      const y0 = headTop + H * 0.62, y1 = headTop + H * 0.8, n = Math.max(2, Math.min(4, Math.round((y1 - y0) / 3)));
+      for (let k = 0; k <= n; k++) { const y = y0 + (y1 - y0) * k / n; HE.push(bowLine(y, Math.max(2, Math.min(hwAt(y) * 0.9, W * G.eye.cx - W * G.eye.rx - 1.5)), H * 0.03, SW.F)); }
+    }
+    if (G.hair) {   // pile: short ticks outward around the capsule rim, leaving the eyes alone
+      for (let k = 0; k < outlinePl.length; k += Math.max(1, Math.round(G.hair.spacing / (Math.PI * (W + H) / 2 / outlinePl.length)))) {
+        const p = outlinePl[k], d = sub(p, [0, headCy]), L0 = vlen(d) || 1;
+        if (eyes.some(e => Math.hypot((p[0] - e.cx) / (e.rx + 1.5), (p[1] - e.cy) / (e.ry + 1.5)) < 1)) continue;
+        if (p[1] > headTop + H * 0.85) continue;   // nothing where the head meets the thorax
+        HE.push(lineEl(p, add(p, mul(d, G.hair.len / L0)), SW.F));
+      }
+    }
+    if (type === 'beetle' || type === 'grasshopper' || type === 'cicada') L.thoraxHead.unshift(...HE); else L.thoraxHead.push(...HE);
+    meta.headOutline = outlinePl;
+    meta.head = { W, H, top: headTop, cy: headCy, outline: outlinePl, eyes, ocelli: ocelli.map(p => [p[0], p[1], G.ocelli.r]), rostrum: G.rostrum ? { len: G.rostrum.len * W, w: G.rostrum.w * W } : null };
   }
 
   partEnd('head');
