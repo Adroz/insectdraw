@@ -976,7 +976,7 @@ function bowVein(p, q, k, n) { const c = lerpP(p, q, 0.5), nn = perp(norm(sub(q,
 function wingGraph(wing, Lw) {
   const N = new Map(), chains = [], edges = [], extra = [], plCache = new Map();
   const g = {
-    wing, N,
+    wing, N, Lw,
     P(u, s) { const x = u * Lw, r = wing.yRange(x) || [0, 0]; return [x, lerp(r[0], r[1], s)]; },
     node(id, u, s) { N.set(id, g.P(u, s)); return id; },
     nodeAt(id, p) { N.set(id, p); return id; },
@@ -1002,6 +1002,8 @@ function wingGraph(wing, Lw) {
     edge(a, b, o) { o = o || {}; edges.push({ a: Array.isArray(a) ? a : g.at(a), b: Array.isArray(b) ? b : g.at(b), sw: o.sw || SW.F, bow: o.bow === undefined ? randRange(-0.05, 0.05) : o.bow }); },
     // crossvein between two chains at parameters ta / tb (tb defaults to ta shifted by `tilt`)
     cross(veinA, ta, veinB, tb, o) { o = o || {}; const b = tb === undefined ? ta + (o.tilt === undefined ? randRange(-0.04, 0.04) : o.tilt) : tb; g.edge(g.on(veinA, ta), g.on(veinB, Math.max(0, Math.min(1, b))), o); },
+    // a ready-made local polyline (growVeins lanes and crossveins), emitted as is
+    poly(pl, sw) { if (pl.length > 1) extra.push(emitLocalPolyline(wing, pl, sw)); },
     // vein running from a node into open membrane and fading: drawn at a lighter weight, bowed
     stub(id, dirDeg, len, sw) { const p = Array.isArray(id) ? id : g.at(id), d = dirv(dirDeg), q = add(p, mul(d, len)); extra.push(emitLocalPolyline(wing, vein([p, add(lerpP(p, q, 0.5), mul(perp(d), len * randRange(-0.06, 0.06))), q]), sw || SW.F)); },
     // ladder regime: n rungs between two chains over t in [t0, t1], each tilted by `tilt` (in t)
@@ -1049,73 +1051,197 @@ function wingGraph(wing, Lw) {
   return g;
 }
 
-// ---------- vein growth: trunks that fork and join ----------
-// Instead of a fixed template with jittered corners, a wing's venation is grown. A few trunks leave the base
-// in lanes across the chord (s = 0 costa .. 1 hind margin), each heading for its own stretch of margin; a
-// lane may fork into a child lane; neighbouring lanes are joined by crossveins laid in a brick pattern with
-// a density that peaks mid-wing and stops at u = uOpen; every junction deflects the lane a little so veins
-// zigzag through the cells as in the reference plates; past the last join a lane reaches the margin, ends on
-// a pinned node, or fades as a stub into open membrane. Returns { lanes, joins } for the signature.
+// ---------- vein growth v2: smooth lanes, crossveins from inhibitory sites (docs/research-vein-branching.md, R-A..R-H) ----------
+// Lanes are the Comstock-Needham trunks of the order (R-A): each is one smooth curve built once from its base, one or two
+// interior control points (bow gene) and its target, and is never moved afterwards (R-B). A fork starts a child lane on
+// the parent's curve. Crossveins are the 1-D Voronoi of sites laid along every strip between adjacent lanes, spaced by the
+// local strip width x k (R-C): each is the bisector between consecutive sites clipped to the two lane curves; its far end
+// then slides along its lane until both junction angles (the obtuse angle between crossvein and lane) lie in [105, 140]
+// degrees, else the crossvein is dropped (R-D), so no end ever dangles (R-E). Named crossveins (basal vein, recurrents,
+// r-m ...) go through the same clip-and-slide at their table positions first; sites keep clear of them. Joins stop at
+// uOpen and stub lanes fade past their last junction (R-F). Weights follow Murray from the tips back: a stem is one level
+// above its children (capped at O), a crossvein one below its lighter lane (R-G). Site spacing shrinks toward the tip and
+// trailing edge by G.grad (R-H). Returns { lanes, joins, forks, stats } for the signature and the angle assertions.
+const SW_LV = [SW.F, SW.D, SW.O, SW.H];
+const swLevel = sw => Math.max(0, SW_LV.indexOf(sw));
+const swBelow = sw => SW_LV[Math.max(0, swLevel(sw) - 1)];
+const swAbove = sw => SW_LV[Math.min(2, swLevel(sw) + 1)];
 function growVeins(g, G) {
-  const poly = g.wing.localPoly;
-  const lanes = G.lanes.map((l, i) => ({ id: l.id || 'L' + i, s0: l.s0, s1: l.s1, u0: l.u0 === undefined ? 0.02 : l.u0, uEnd: l.uEnd === undefined ? 0.96 : l.uEnd,
-    sw: l.sw || SW.D, start: l.start, end: l.end, off: 0, offU: l.u0 === undefined ? 0.02 : l.u0, nodes: [], uLast: l.u0 || 0, noFork: !!l.noFork, noJoin: !!l.noJoin, fork: l.fork, stub: l.stub }));
-  const ss = t => t * t * (3 - 2 * t);
-  const track = (l, u) => { const t = Math.max(0, Math.min(1, (u - l.u0) / Math.max(0.05, l.uEnd - l.u0))); return lerp(l.s0, l.s1, ss(t)) + l.off * Math.max(0, Math.min(1, (u - l.offU) / 0.06)); };
-  const addNode = (l, u, s) => { const id = l.id + 'n' + l.nodes.length; g.nodeAt(id, g.P(u, s)); l.nodes.push({ u, id }); l.uLast = Math.max(l.uLast, u); return id; };
-  const fork = (par, uf, s1, sw) => {
-    const child = { id: par.id + 'f' + lanes.length, s0: track(par, uf), s1, u0: uf, uEnd: par.uEnd, sw: sw || SW.D, off: 0, offU: uf, nodes: [], uLast: uf, noFork: true, parent: par };
-    child.start = addNode(par, uf, child.s0);
-    lanes.push(child);
-    return child;
+  const wing = g.wing, poly = wing.localPoly, Lw = g.Lw;
+  const uOpen = G.uOpen, k = G.k === undefined ? 1.1 : G.k, minSep = G.minSep === undefined ? 0.07 : G.minSep;
+  const angLo = 105, angHi = 140, angT = G.angle === undefined ? 120 : G.angle, lean = G.lean === undefined ? -1 : G.lean;
+  const bowAmt = G.bowAmt === undefined ? 0.02 : G.bowAmt, stubLen = G.stubLen === undefined ? 0.08 : G.stubLen;
+  const stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0 };
+  const joins = [], lanes = [], laneOf = {};
+  let forks = 0;
+  const sAt = p => { const r = wing.yRange(p[0]); return r && r[1] > r[0] ? (p[1] - r[0]) / (r[1] - r[0]) : 0.5; };
+  const chord = u => { const r = wing.yRange(u * Lw); return r ? Math.max(1, r[1] - r[0]) : 1; };
+  // point and unit tangent of a lane curve at span position x (curves run base -> apex and are monotone in x)
+  const atX = (pl, x) => {
+    for (let i = 0; i + 1 < pl.length; i++) {
+      const a = pl[i], b = pl[i + 1];
+      if (x >= Math.min(a[0], b[0]) && x <= Math.max(a[0], b[0])) { const t = b[0] === a[0] ? 0 : (x - a[0]) / (b[0] - a[0]); return { p: lerpP(a, b, t), d: norm(sub(b, a)) }; }
+    }
+    return null;
   };
-  // deterministic forks (the stems a family always has) then random ones
-  for (const l of lanes.slice()) if (l.fork) fork(l, l.fork.u * jitter(0.1), l.fork.s1, l.fork.sw);
-  for (let f = 0; f < G.forks; f++) {
-    const cands = lanes.filter(l => !l.noFork && !l.start && l.uEnd > 0.6);
+  const hitPl = (pl, P, d) => {   // where the line P + t d crosses a lane curve, nearest to P
+    let best = null;
+    for (let i = 0; i + 1 < pl.length; i++) { const t = lineSegT(P, d, pl[i], pl[i + 1]); if (t !== null && (!best || Math.abs(t) < Math.abs(best.t))) best = { t, p: add(P, mul(d, t)), d: norm(sub(pl[i + 1], pl[i])) }; }
+    return best;
+  };
+  const cutX = (pl, xa, xb) => {   // the part of a curve between x = xa and x = xb
+    const out = [], h0 = atX(pl, xa), h1 = atX(pl, xb);
+    if (h0) out.push(h0.p);
+    for (const p of pl) if (p[0] > xa && p[0] < xb) out.push(p);
+    if (h1) out.push(h1.p);
+    return out;
+  };
+  const obtuse = (d1, d2) => 180 - Math.acos(Math.min(1, Math.abs(dot(d1, d2)))) / D2R;
+  const build = l => {   // R-B: one curve per lane, built once
+    const P0 = l.startPt || (l.start ? g.at(l.start) : g.P(l.u0, l.s0));
+    if (l.startPt || l.start) { l.u0 = P0[0] / Lw; l.s0 = sAt(P0); }
+    const PT = l.end ? g.at(l.end) : l.stub ? g.P(l.uEnd, l.s1) : nearestOutlinePoint(poly, g.P(l.uEnd, l.s1));
+    const uT = l.end ? PT[0] / Lw : l.uEnd;
+    const ease = l.ease === 'out' ? t => 1 - (1 - t) * (1 - t) : t => t * t * (3 - 2 * t);
+    const pts = [P0], nC = l.ctrl || 2;
+    for (let i = 1; i <= nC; i++) { const t = i / (nC + 1); pts.push(g.P(lerp(l.u0, uT, t), lerp(l.s0, l.s1, ease(t)) + l.bow * Math.sin(Math.PI * t))); }
+    pts.push(PT);
+    l.pl = vein(pts, 12); l.x0 = l.pl[0][0]; l.x1 = l.pl[l.pl.length - 1][0]; l.uLast = 0; l.junc = [];
+  };
+  const addLane = (spec, extra) => {
+    const l = Object.assign({ u0: 0.02, uEnd: 0.96, sw: SW.D, ctrl: 2 }, spec, extra || {});
+    l.id = spec.id || 'L' + lanes.length; l.noFork = !!spec.noFork; l.noJoin = !!spec.noJoin;
+    l.stub = spec.stub === true || (spec.stub !== false && !spec.end && rng() < (G.stubProb || 0));
+    l.bow = spec.bow === undefined ? randRange(-bowAmt, bowAmt) : spec.bow;
+    build(l); lanes.push(l); laneOf[l.id] = l;
+    return l;
+  };
+  const fork = (par, uf, spec) => {   // a child lane leaving the parent's curve at u = uf (R-A dichotomy)
+    const h = atX(par.pl, uf * Lw); if (!h) return null;
+    const c = addLane(Object.assign({ uEnd: par.uEnd, ease: 'out', noFork: true }, spec), { startPt: h.p, parent: par.id });
+    c.junc.push(h.p[0]);   // the fork point is a junction on both lanes: no crossvein may land next to it
+    par.forkU = par.forkU === undefined ? uf : Math.min(par.forkU, uf); par.uLast = Math.max(par.uLast, uf); par.junc.push(h.p[0]);
+    forks++;
+    return c;
+  };
+  for (const spec of G.lanes) addLane(spec);
+  for (const l of lanes.slice()) if (l.fork) fork(l, l.fork.u, l.fork);   // the forks a family always has (M+Cu at the basal vein)
+  const joinSw = (a, b) => swBelow(swLevel(a.sw) < swLevel(b.sw) ? a.sw : b.sw);
+  const junctionOK = (l, x, gap) => l.junc.every(j => Math.abs(j - x) >= gap);
+  const crossesOther = (A, B, la, lb) => {   // would the chord A-B pass through a third lane? (crossveins never cross a longitudinal)
+    const d = sub(B, A);
+    for (const l of lanes) { if (l === la || l === lb) continue; for (let i = 0; i + 1 < l.pl.length; i++) { const t = lineSegT(A, d, l.pl[i], l.pl[i + 1]); if (t !== null && t > 0.03 && t < 0.97) return true; } }
+    return false;
+  };
+  // one crossvein: near end A on lane la (tangent dA); far end on lane lb near x = xb, slid within +-reach so that both
+  // junction angles fall in [angLo, angHi] (R-D); dropped when no position on lb does. The lean gene prefers the costal
+  // end to be the more distal one, as in the references.
+  const place = (la, A, dA, lb, xb, reach, o) => {
+    const bow = o.bow === undefined ? randRange(-0.03, 0.03) : o.bow;
+    const h0 = atX(lb.pl, xb), ln = h0 && sAt(A) < sAt(h0.p) ? lean : -lean;
+    let best = null;
+    for (let j = -16; j <= 16; j++) {
+      const x = xb + j / 16 * reach, h = atX(lb.pl, x);
+      if (!h || (o.xMax !== undefined && x > o.xMax) || (o.xMin !== undefined && x < o.xMin)) continue;
+      if (o.gap && !junctionOK(lb, x, o.gap)) continue;
+      if (crossesOther(A, h.p, la, lb)) continue;
+      const pl = bowVein(A, h.p, bow, 6);
+      const aA = obtuse(dA, norm(sub(pl[1], pl[0]))), aB = obtuse(h.d, norm(sub(pl[pl.length - 1], pl[pl.length - 2])));
+      if (aA < angLo || aA > angHi || aB < angLo || aB > angHi) continue;
+      const score = Math.abs(aA - angT) + Math.abs(aB - angT) + Math.abs(j) / 16 * 6 + (Math.sign(h.p[0] - A[0]) === ln ? 0 : 12);
+      if (!best || score < best.score) best = { score, p: h.p, pl, aA, aB };
+    }
+    if (!best) { stats.dropped++; return null; }
+    g.poly(best.pl, o.sw);
+    stats.joins++; stats.minAngle = Math.min(stats.minAngle, best.aA, best.aB); stats.maxAngle = Math.max(stats.maxAngle, best.aA, best.aB);
+    const uA = A[0] / Lw, uB = best.p[0] / Lw;
+    la.uLast = Math.max(la.uLast, uA); lb.uLast = Math.max(lb.uLast, uB); la.junc.push(A[0]); lb.junc.push(best.p[0]);
+    joins.push([la.id, lb.id, (uA + uB) / 2]);
+    return best.p;
+  };
+  const pairKey = (a, b) => a.id + '|' + b.id;
+  const named = {};   // pair key -> u of each named crossvein's middle: walls the site walk restarts from
+  // named crossveins (and the forks that hang off them, e.g. Rs leaving Sc+R at the top of the basal vein), in table
+  // order; entries marked `early` are structural (they create lanes) and go before the random forks, the rest after,
+  // so no lane is ever grown across an existing crossvein
+  const placeNamed = nv => {
+    if (nv.forkOn) { const l = laneOf[nv.forkOn]; if (l) fork(l, nv.u, nv.spec); return; }
+    const la = laneOf[nv.a], lb = laneOf[nv.b]; if (!la || !lb) return;
+    const h = atX(la.pl, nv.ua * Lw); if (!h) return;
+    const xb = (nv.ub === undefined ? nv.ua : nv.ub) * Lw;
+    const p = place(la, h.p, h.d, lb, xb, (nv.reach === undefined ? 0.05 : nv.reach) * Lw, { sw: nv.sw || joinSw(la, lb), bow: nv.bow });
+    if (p) { const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um); }
+    if (nv.forkB) fork(lb, (p ? p[0] : xb) / Lw, nv.forkB);
+  };
+  for (const nv of G.named || []) if (nv.early) placeNamed(nv);
+  // random forks: a lane splits toward the gap between its own target and its neighbour's
+  for (let f = 0; f < (G.forks || 0); f++) {
+    const uMax = Math.min(0.62, uOpen - 0.12);
+    const cands = lanes.filter(l => !l.noFork && !l.forkedRandom && (l.end || l.uEnd > 0.6) && Math.max(0.3, l.u0 + 0.12, (l.forkU || 0) + 0.12) < uMax);
     if (!cands.length) break;
-    const par = pick(cands), uf = randRange(0.25, Math.min(0.6, G.uOpen - 0.12));
-    const sorted = lanes.slice().sort((a, b) => a.s1 - b.s1), k = sorted.indexOf(par);
-    const dir = k === 0 ? 1 : k === sorted.length - 1 ? -1 : (rng() < 0.5 ? -1 : 1);
-    const nb = sorted[k + dir];
-    fork(par, uf, nb ? lerp(par.s1, nb.s1, randRange(0.4, 0.6)) : Math.max(0.03, Math.min(0.97, par.s1 + dir * 0.2)));
-    par.noFork = true;
+    const par = pick(cands), uf = randRange(Math.max(0.3, par.u0 + 0.12, (par.forkU || 0) + 0.12), uMax);
+    const sorted = lanes.filter(l => !l.noJoin).map(l => ({ l, s: l.s1 })).sort((p, q) => p.s - q.s), ki = sorted.findIndex(x => x.l === par);
+    const dir = ki === 0 ? 1 : ki === sorted.length - 1 ? -1 : (rng() < 0.5 ? -1 : 1), nb = sorted[ki + dir];
+    fork(par, uf, { s1: nb ? lerp(par.s1, nb.l.s1, randRange(0.4, 0.6)) : Math.max(0.03, Math.min(0.97, par.s1 + dir * 0.2)), uEnd: Math.max(par.uEnd, 0.9), sw: swBelow(par.sw) === SW.F && par.sw === SW.F ? SW.F : par.sw, stub: par.stub ? true : undefined });
+    par.forkedRandom = true;
   }
-  // crossveins: walk the span; at each step join adjacent live lanes with probability p(u), bricked
-  const joins = [];
-  const alive = u => lanes.filter(l => u > l.u0 + 0.04 && u < Math.min(l.uEnd, G.uOpen) - 0.01 && !l.noJoin).sort((a, b) => track(a, u) - track(b, u));
-  const lastJoin = {};
-  const minSep = G.minSep === undefined ? 0.07 : G.minSep;
-  for (let u = G.uStart === undefined ? 0.16 : G.uStart, k = 0; u < G.uOpen; u += G.step, k++) {
-    const live = alive(u);
-    for (let i = 0; i + 1 < live.length; i++) {
-      const a = live[i], b = live[i + 1], key = a.id + '|' + b.id;
-      if (track(b, u) - track(a, u) < minSep) continue;                       // lanes still fused: no cell to close yet
-      const p = G.density(u) * (i % 2 === k % 2 ? 1 : 0.6);                   // brick offset: alternate pairs favour alternate steps
-      if ((lastJoin[key] !== undefined && u - lastJoin[key] < G.minGap) || rng() > p) continue;
-      const ua = u + randRange(-0.2, 0.2) * G.step, ub = Math.min(G.uOpen, ua + G.tilt * randRange(0.5, 1.5) * (rng() < 0.7 ? 1 : -1));
-      const na = addNode(a, ua, track(a, ua)), nb = addNode(b, ub, track(b, ub));
-      const d = G.deflect * (rng() < 0.5 ? -1 : 1);
-      a.off += d; a.offU = ua; b.off -= d * 0.6; b.offU = ub;                  // the junction kinks both veins
-      g.edge(na, nb, { sw: G.joinSw || SW.F, bow: randRange(-0.05, 0.05) });
-      joins.push([a.id, b.id, ua]);
-      lastJoin[key] = u;
+  for (const nv of G.named || []) if (!nv.early) placeNamed(nv);
+  // R-C: for every strip between adjacent lanes, the u-interval where both are alive and separated by minSep
+  const live = u => { const x = u * Lw, out = []; for (const l of lanes) { if (l.noJoin || x < l.x0 + 0.3 || x > l.x1 - 0.3) continue; const h = atX(l.pl, x); if (h) out.push({ l, y: h.p[1] }); } return out.sort((p, q) => p.y - q.y); };
+  const noPair = new Set((G.noPair || []).flatMap(p => [p[0] + '|' + p[1], p[1] + '|' + p[0]]));
+  const runs = {};
+  if (!G.noSites) for (let u = 0.04; u < uOpen; u += 0.01) {
+    const lv = live(u);
+    for (let i = 0; i + 1 < lv.length; i++) {
+      const a = lv[i].l, b = lv[i + 1].l, key = pairKey(a, b);
+      if (noPair.has(key) || (lv[i + 1].y - lv[i].y) / chord(u) < minSep) continue;
+      const r = runs[key] ||= { a, b, u0: u, u1: u, closed: false };
+      if (r.closed) continue;
+      if (u - r.u1 > 0.015) r.closed = true; else r.u1 = u;
     }
   }
-  // ends and chains
-  for (const l of lanes) {
-    l.nodes.sort((p, q) => p.u - q.u);
-    const ids = [l.start || g.nodeAt(l.id + 's', g.P(l.u0, l.s0)), ...l.nodes.map(n => n.id)];
-    let tail = null;
-    if (l.end) ids.push(l.end);
-    else if (l.stub === true || (l.stub !== false && l.nodes.length && rng() < G.stubProb)) {
-      const uS = Math.min(0.97, l.uLast + G.stubLen * jitter(0.3));
-      tail = g.nodeAt(l.id + 'e', g.P(uS, track(l, uS)));
-    } else ids.push(g.nodeAt(l.id + 'e', nearestOutlinePoint(poly, g.P(l.uEnd, l.s1))));
-    if (ids.length > 1) g.chain(ids, { vein: l.id, sw: l.sw, bows: ids.slice(1).map((_, i) => (i % 2 ? -1 : 1) * randRange(0.01, 0.04)) });
-    if (tail) g.chain([ids[ids.length - 1], tail], { vein: l.id + 'stub', sw: SW.F, bow: randRange(-0.03, 0.03) });
+  for (const key in runs) {
+    const r = runs[key], a = r.a, b = r.b, u1 = Math.min(r.u1, uOpen);
+    const at2 = u => { const ha = atX(a.pl, u * Lw), hb = atX(b.pl, u * Lw); return ha && hb ? { ha, hb, w: vlen(sub(hb.p, ha.p)) } : null; };
+    const sp = u => { const t = at2(u); if (!t) return 1e9; const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * k * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid))); };   // R-H, floored so cells never get tiny
+    const t0 = at2(r.u0); if (!t0) continue;
+    if (G.rows2 && t0.w > 2.2 * sp(r.u0)) {   // wide strip: two rows of sites, 2-D Voronoi (hook for orders with mesh venation)
+      const strip = cutX(a.pl, r.u0 * Lw, u1 * Lw).concat(cutX(b.pl, r.u0 * Lw, u1 * Lw).reverse());
+      if (strip.length > 2) { const edges = voronoiEdges(poissonInPoly(strip, p => sp(p[0] / Lw) * 0.5, 400), strip); for (const e of edges) g.poly(e, joinSw(a, b)); stats.joins += edges.length; joins.push([a.id, b.id, -1]); }
+      continue;
+    }
+    // walls = the strip's ends and its named crossveins; between consecutive walls, sites walk from the wall at the
+    // local spacing (first site half a cell in) and a crossvein is the bisector of each consecutive pair, so every cell
+    // is 0.85-1.8 spacings long and a gap shorter than ~1.5 spacings stays one cell
+    const walls = [r.u0].concat((named[key] || []).filter(u => u > r.u0 && u < u1).sort((p, q) => p - q), [u1]);
+    for (let wI = 0; wI + 1 < walls.length; wI++) {
+      const ua = walls[wI], ub = walls[wI + 1], sites = [];
+      for (let u = ua + 0.5 * sp(ua) / Lw * jitter(0.3); u < ub - 0.35 * sp(u) / Lw; u += sp(u) / Lw * jitter(0.25)) sites.push(u);
+      for (let i = 0; i + 1 < sites.length; i++) {   // the Voronoi edge between two consecutive sites, clipped to the lanes
+        const um = (sites[i] + sites[i + 1]) / 2, spx = sp(um), t = at2(um);
+        if (!t) continue;
+        const P = lerpP(t.ha.p, t.hb.p, 0.5), dir = perp(norm(add(t.ha.d, t.hb.d)));
+        const hA = hitPl(a.pl, P, dir) || t.ha, hB = hitPl(b.pl, P, dir) || t.hb;
+        if (!junctionOK(a, hA.p[0], 0.35 * spx)) continue;
+        place(a, hA.p, hA.d, b, hB.p[0], spx, { sw: joinSw(a, b), gap: 0.35 * spx, xMin: ua * Lw, xMax: ub * Lw });
+      }
+    }
   }
-  return { lanes, joins };
+  // ends: a lane reaches its target, or fades as a stub past its last junction (R-F); stems heavier than branches (R-G)
+  for (const l of lanes) {
+    let xEnd = l.x1;
+    if (l.stub) { if (!(l.uLast > l.u0)) l.uLast = Math.max(l.u0 + 0.12, uOpen - 0.15); xEnd = Math.min(l.x1, (l.uLast + stubLen * jitter(0.3)) * Lw); }
+    const cuts = [l.x0];
+    const xF = l.forkU === undefined ? null : l.forkU * Lw, xS = l.stub ? l.uLast * Lw : null;
+    if (xF !== null && xF > l.x0 + 1 && xF < xEnd - 1) cuts.push(xF);
+    if (xS !== null && xS > cuts[cuts.length - 1] + 1 && xS < xEnd - 1) cuts.push(xS);
+    cuts.push(xEnd);
+    for (let i = 0; i + 1 < cuts.length; i++) {
+      const sw = (xF !== null && cuts[i + 1] <= xF + 0.01) ? (l.swStem || swAbove(l.sw)) : (xS !== null && cuts[i] >= xS - 0.01) ? SW.F : l.sw;
+      g.poly(cutX(l.pl, cuts[i], cuts[i + 1]), sw);
+    }
+  }
+  return { lanes, joins, forks, stats };
 }
 
 // ============================================================
@@ -2197,30 +2323,39 @@ function generateInsectDetailed(seed, opts) {
   }
 
   if (type === 'bee' || type === 'wasp') {
-    // ---- Hymenoptera, grown (docs/wing-venation-spec.md; refs hym-apis, hym-bombus, hym-ross, hym-colletes,
-    // hym-ichneumonidae-diagram). The family sets growth parameters, not a cell template: how many trunks leave
-    // the base, how often they fork, how densely neighbours are joined and where the joins stop. What is fixed
-    // by anatomy: Sc+R runs into the pterostigma, R1 leaves it and closes the marginal cell with Rs, M+Cu is
-    // one stem that forks at the basal vein, A runs along the hind edge. ----
+    // ---- Hymenoptera, grown by growVeins v2 (docs/research-vein-branching.md R-A..R-H; refs hym-apis, hym-bombus, hym-ross,
+    // hym-colletes, hym-ichneumonidae-diagram). The family picks which lanes and named crossveins exist, where Rs leaves
+    // Sc+R and how far apart the inhibitory sites sit; the seed rolls their positions, every lane's bow, the stigma, the
+    // open line and the posture. Fixed by anatomy: Sc+R runs into the pterostigma, R1 leaves its tip and closes the
+    // marginal cell with Rs, M+Cu is one stem forking at the basal vein (which climbs back to Sc+R), A runs along the hind
+    // edge; M and Cu fade as stubs into the open apex. ----
     const fam = type === 'bee' ? pick(['apid', 'apid', 'apid', 'sawfly', 'vespid']) : pick(['vespid', 'vespid', 'ichneumonid', 'ichneumonid', 'sawfly', 'apid', 'chalcid']);
-    const F = {   // w breadth/Lw; stig styles; density [peak u, peak p]; forks [min,max]; uOpen [min,max]; stubProb; extra trunks (anal / 2nd cubital) odds
-      apid:        { w: [0.26, 0.34], stig: ['solid', 'cross', 'axis'], stigL: [0.03, 0.07], stigD: [0.06, 0.1], xStig: [0.44, 0.52], xMarg: [0.9, 0.97], margOpen: 0.05, dens: [0.45, 0.85], forks: [0, 1], uOpen: [0.72, 0.8], stub: 0.8, anal: 0.5, extra: 0.3, hind: [0.58, 0.72], heavyBase: 1 },
-      vespid:      { w: [0.2, 0.26], stig: ['axis', 'stipple', 'none', 'solid'], stigL: [0.03, 0.05], stigD: [0.04, 0.06], xStig: [0.46, 0.54], xMarg: [0.94, 0.99], margOpen: 0.15, dens: [0.55, 0.6], forks: [0, 1], uOpen: [0.78, 0.86], stub: 0.7, anal: 0.3, extra: 0.2, hind: [0.5, 0.66], heavyBase: 0 },
-      ichneumonid: { w: [0.22, 0.3], stig: ['solid', 'solid', 'cross'], stigL: [0.09, 0.14], stigD: [0.1, 0.16], xStig: [0.48, 0.56], xMarg: [0.94, 0.99], margOpen: 0, dens: [0.5, 0.75], forks: [0, 2], uOpen: [0.74, 0.84], stub: 0.6, anal: 0.4, extra: 0.3, hind: [0.52, 0.68], heavyBase: 0 },
-      sawfly:      { w: [0.3, 0.37], stig: ['solid', 'cross'], stigL: [0.08, 0.12], stigD: [0.08, 0.12], xStig: [0.42, 0.5], xMarg: [0.88, 0.95], margOpen: 0, dens: [0.45, 1.0], forks: [1, 3], uOpen: [0.8, 0.9], stub: 0.3, anal: 1, extra: 0.8, hind: [0.7, 0.84], heavyBase: 1 },
-      chalcid:     { w: [0.26, 0.34], stig: ['solid', 'cross'], stigL: [0.03, 0.06], stigD: [0.04, 0.07], xStig: [0.5, 0.62], xMarg: [0.7, 0.8], margOpen: 1, dens: [0.5, 0], forks: [0, 0], uOpen: [0.3, 0.3], stub: 1, anal: 0, extra: 0, hind: [0.5, 0.62], heavyBase: 0 },
+    const F = {   // w breadth/Lw; stig styles; k site spacing / strip width; forks [min,max]; uOpen [min,max]; stub odds; anal / extra lane odds;
+      // basalSw basal vein weight; rsAt where Rs leaves Sc+R; rm = r-m crossvein u's (submarginals); mcu = recurrents; aEnd where A meets the margin; cuS / mS Cu and M target chord fractions
+      apid:        { w: [0.26, 0.34], stig: ['solid', 'cross', 'axis'], stigL: [0.03, 0.07], stigD: [0.06, 0.1], xStig: [0.44, 0.52], xMarg: [0.9, 0.97], margOpen: 0.05, k: [2.0, 2.8], forks: [0, 1], uOpen: [0.74, 0.82], stub: 0.85, anal: 0.3, extra: 0.3, hind: [0.58, 0.72],
+                     basalSw: SW.O, rsAt: 'basal', rm: [[0.55, 0.67, 0.8], [0.55, 0.67, 0.8], [0.58, 0.76]], mcu: [[0.45, 0.62]], aEnd: [0.46, 0.56], cuS: [0.62, 0.7], mS: 0.36 },
+      vespid:      { w: [0.2, 0.26], stig: ['axis', 'stipple', 'none', 'solid'], stigL: [0.03, 0.05], stigD: [0.04, 0.06], xStig: [0.46, 0.54], xMarg: [0.94, 0.99], margOpen: 0.15, k: [1.8, 2.6], forks: [0, 1], uOpen: [0.78, 0.86], stub: 0.7, anal: 0.2, extra: 0.2, hind: [0.5, 0.66],
+                     basalSw: SW.D, rsAt: 'basal', rm: [[0.52, 0.66, 0.8], [0.56, 0.74]], mcu: [[0.58, 0.72]], aEnd: [0.44, 0.54], cuS: [0.56, 0.64], mS: 0.32 },
+      ichneumonid: { w: [0.22, 0.3], stig: ['solid', 'solid', 'cross'], stigL: [0.09, 0.14], stigD: [0.1, 0.16], xStig: [0.48, 0.56], xMarg: [0.94, 0.99], margOpen: 0, k: [1.5, 2.2], forks: [0, 2], uOpen: [0.74, 0.84], stub: 0.6, anal: 0.3, extra: 0.3, hind: [0.52, 0.68],
+                     basalSw: SW.D, rsAt: 'stigma', rm: 'areolet', mcu: [[0.4, 0.6]], aEnd: [0.44, 0.56], cuS: [0.6, 0.68], mS: 0.27 },
+      sawfly:      { w: [0.3, 0.37], stig: ['solid', 'cross'], stigL: [0.08, 0.12], stigD: [0.08, 0.12], xStig: [0.42, 0.5], xMarg: [0.88, 0.95], margOpen: 0, k: [0.9, 1.4], forks: [1, 3], uOpen: [0.8, 0.9], stub: 0.3, anal: 1, extra: 0.8, hind: [0.7, 0.84],
+                     basalSw: SW.D, rsAt: 'mid', rm: [[0.5, 0.64, 0.78]], mcu: [[0.42, 0.6]], aEnd: [0.5, 0.6], cuS: [0.64, 0.72], mS: 0.36 },
+      chalcid:     { w: [0.26, 0.34], stig: ['solid', 'cross'], stigL: [0.03, 0.06], stigD: [0.04, 0.07], xStig: [0.5, 0.62], xMarg: [0.7, 0.8], margOpen: 1, k: [9, 9], forks: [0, 0], uOpen: [0.3, 0.3], stub: 1, anal: 0, extra: 0, hind: [0.5, 0.62],
+                     basalSw: SW.F, rsAt: 'basal', rm: [[]], mcu: [[]], aEnd: [0.3, 0.4], cuS: [0.66, 0.74], mS: 0.36, bare: true },
     }[fam];
     const ri = r => randInt(r[0], r[1]), rr = r => randRange(r[0], r[1]);
     const G = {
       fam, theta: randRange(28, 58), spread: randRange(6, 24), len: randRange(0.85, 1.08),
       w: rr(F.w), tipY: randRange(-0.14, 0.2), sharp: randRange(0, 1), bulge: randRange(0.38, 0.62), costaPeak: randRange(0.55, 0.78),
-      hindL: rr(F.hind), hindW: randRange(0.62, 0.9), nh: randInt(3, 9), hForks: randInt(0, 1), hDens: randRange(0.3, 0.8),
+      hindL: rr(F.hind), hindW: randRange(0.62, 0.9), nh: randInt(3, 9), hForks: randInt(0, 1), hK: randRange(2.2, 3.2),
       stig: pick(F.stig), stigL: rr(F.stigL), stigD: rr(F.stigD), stigPeak: randRange(0.3, 0.48), xStig: rr(F.xStig), xMarg: rr(F.xMarg), margOpen: rng() < F.margOpen,
-      forks: ri(F.forks), uOpen: rr(F.uOpen), densP: F.dens[1] * randRange(0.8, 1.2), densU: F.dens[0] * jitter(0.15), densW: randRange(0.25, 0.4),
-      step: randRange(0.055, 0.085), minGap: randRange(0.08, 0.16), deflect: randRange(0.008, 0.03), tilt: randRange(0.01, 0.05), stubProb: F.stub, stubLen: randRange(0.04, 0.1),
-      anal: rng() < F.anal, extra: rng() < F.extra, basalU: randRange(0.22, 0.34), heavy: rng() < 0.4, heavyBase: !!F.heavyBase,
+      forks: ri(F.forks), uOpen: rr(F.uOpen), k: rr(F.k), minGap: randRange(0.06, 0.12), angle: randRange(112, 128), lean: rng() < 0.8 ? -1 : 1, bow: randRange(0.01, 0.035), grad: randRange(0, 0.2),
+      stubProb: F.stub, stubLen: randRange(0.06, 0.14),
+      anal: rng() < F.anal, extra: rng() < F.extra, basalU: randRange(0.22, 0.34), basalLean: randRange(0.02, 0.06), heavy: rng() < 0.4,
+      rm: F.rm === 'areolet' ? null : pick(F.rm).map(u => u * jitter(0.05)), mcu: pick(F.mcu).map(u => u * jitter(0.06)), cuS: rr(F.cuS), aEnd: rr(F.aEnd),
     };
-    const LV = [SW.F, SW.D, SW.O], wgt = k => LV[Math.min(2, k + (G.heavy ? 1 : 0))];
+    if (!G.rm) G.rm = [G.xStig + 0.02, G.xStig + randRange(0.07, 0.11)];   // ichneumonid areolet: a tiny cell under the stigma
+    const LV = [SW.F, SW.D, SW.O], wgt = k => LV[Math.min(2, k + (G.heavy ? 1 : 0))];   // the heavy gene promotes a weight one level (R-G cap: O)
     const theta = G.theta;
     const by = thorax.yAt(0.4), bx = thorax.hwAt(by) * 0.72;
     const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(0.92, 1.0) * G.len;
@@ -2232,16 +2367,15 @@ function generateInsectDetailed(seed, opts) {
     const Lh = Lw * G.hindL, wh = w * G.hindW;
     const hPts = [[0, 0], [Lh * 0.3, -wh * 0.35], [Lh * 0.7, -wh * 0.45], [Lh, wh * randRange(-0.12, 0.08)], [Lh * 0.8, wh * G.bulge * 0.85], [Lh * 0.45, wh * G.bulge], [Lh * 0.12, wh * 0.25]];
     const hind = makeWing([hx, hy], theta + G.spread, hPts, 1);
-    const density = (u, peakU, peakP, width) => peakP * Math.exp(-Math.pow((u - peakU) / width, 2));
 
-    // ---- hindwing: R, M (+Cu) trunks, grown with a sparse join density; hamuli on the leading edge ----
+    // ---- hindwing: R, M (+Cu) lanes with sparse sites; hamuli on the leading edge ----
     L.wings.push(pathEl(hind.path, SW.O, '#fff'));
     let hGrown;
     {
       const h = wingGraph(hind, Lh);
-      const lanes = [{ id: 'R', s0: 0.4, s1: 0.08, sw: wgt(1), uEnd: randRange(0.82, 0.96), stub: false }, { id: 'M', s0: 0.5, s1: 0.5, sw: SW.D, stub: false }];
-      if (rng() < 0.7) lanes.push({ id: 'Cu', s0: 0.6, s1: 0.85, sw: SW.F, uEnd: randRange(0.45, 0.7), stub: false });
-      hGrown = growVeins(h, { lanes, forks: G.hForks, uOpen: 0.75, step: 0.1, minGap: 0.2, density: u => density(u, 0.5, G.hDens, 0.3), deflect: G.deflect, tilt: G.tilt, stubProb: 0, stubLen: 0.05 });
+      const lanes = [{ id: 'R', s0: 0.4, s1: 0.08, sw: wgt(1), uEnd: randRange(0.82, 0.96), stub: false, noFork: true }, { id: 'M', s0: 0.5, s1: 0.5, sw: SW.D, stub: rng() < 0.5 }];
+      if (rng() < 0.7) lanes.push({ id: 'Cu', s0: 0.6, s1: 0.85, sw: SW.F, uEnd: randRange(0.45, 0.7), stub: false, noFork: true });
+      hGrown = growVeins(h, { lanes, forks: G.hForks, uOpen: 0.75, k: G.hK, minGap: 0.15, angle: G.angle, lean: G.lean, bowAmt: G.bow, stubProb: 0, stubLen: 0.08 });
       L.wings.push(...h.emit());
       const hx0 = Lh * randRange(0.36, 0.5), hsp = Lh * randRange(0.03, 0.05);
       for (let k = 0; k < G.nh; k++) { const x = hx0 + k * hsp; const p = [x, topAt(hind, x, 0.3)]; L.wings.push(lineEl(hind.T(p), hind.T([p[0] + 1.2, p[1] - 2.2]), SW.D)); }
@@ -2254,26 +2388,39 @@ function generateInsectDetailed(seed, opts) {
     const stigBot = G.stig !== 'none' ? g.stigma(xStig, xStig1, w * G.stigD, G.stigPeak, G.stig) : null;
     const S0 = stigBot ? stigBot[0] : [xStig, topAt(fore, xStig, 0.6)], S1 = stigBot ? stigBot[stigBot.length - 1] : S0;
     g.nodeAt('S0', S0); g.nodeAt('S1', S1); g.margin('MA', G.xMarg, 'top');
-    const uS1 = G.xStig + G.stigL;
+    const bare = !!F.bare, openMarg = G.margOpen || bare;
+    const branchSw = bare ? SW.F : SW.D, armSw = bare ? SW.F : wgt(1);   // R-G: stems O, named branches D; heavy plates promote M and Cu to O
+    const rsSpec = { id: 'Rs', s1: fam === 'sawfly' ? 0.2 : 0.16, uEnd: G.xMarg, end: openMarg ? undefined : 'MA', stub: openMarg, sw: branchSw, noFork: false };   // Rs closes the marginal cell against R1
     const lanes = [
-      { id: 'ScR', s0: 0.34, s1: 0.1, uEnd: G.xStig, end: 'S0', sw: wgt(1), noFork: true },                                             // Sc+R into the stigma
-      { id: 'R1', s0: 0.06, s1: 0.1, u0: uS1, uEnd: G.xMarg, start: 'S1', end: G.margOpen ? undefined : 'MA', stub: G.margOpen, sw: SW.D, noFork: true },   // R1 closes the marginal cell
-      { id: 'Rs', s0: 0.42, s1: 0.16, uEnd: G.xMarg, end: G.margOpen || fam === 'chalcid' ? undefined : 'MA', stub: fam === 'chalcid' ? true : undefined, sw: fam === 'chalcid' ? SW.F : SW.D },
-      { id: 'MCu', s0: 0.54, s1: 0.4, sw: wgt(1), fork: { u: G.basalU, s1: randRange(0.56, 0.68), sw: fam === 'chalcid' ? SW.F : SW.D }, noFork: true, stub: fam === 'chalcid' ? true : undefined },   // M+Cu stem forking at the basal vein
-      { id: 'A', s0: 0.72, s1: 0.82, uEnd: randRange(0.4, 0.55), sw: SW.F, noFork: true, stub: false },
+      { id: 'ScR', s0: 0.34, s1: 0.1, uEnd: G.xStig, end: 'S0', sw: bare ? SW.D : SW.O, noFork: true, ctrl: 1 },                          // Sc+R into the stigma (a stem: O all the way)
+      { id: 'R1', s0: 0.06, s1: 0.1, uEnd: G.xMarg, start: 'S1', end: G.margOpen ? undefined : 'MA', stub: G.margOpen, sw: SW.D, noFork: true, ctrl: 1 },   // R1 from the stigma tip
+      { id: 'MCu', s0: 0.54, s1: F.mS, sw: armSw, swStem: bare ? SW.D : SW.O, stub: bare ? true : undefined, fork: { id: 'Cu', u: G.basalU, s1: G.cuS, sw: armSw, stub: bare ? true : undefined, noFork: false } },   // M+Cu stem (O), M and Cu leaving at the basal vein
+      { id: 'A', s0: 0.72, s1: 0.84, uEnd: G.aEnd, sw: SW.F, noFork: true, stub: false },
     ];
-    if (G.extra && fam !== 'chalcid') lanes.push({ id: 'Cu2', s0: 0.64, s1: 0.74, uEnd: randRange(0.5, 0.7), sw: SW.F, noFork: true, stub: rng() < 0.5 });
-    if (G.anal) lanes.push({ id: 'A2', s0: 0.84, s1: 0.93, uEnd: randRange(0.2, 0.35), sw: SW.F, noFork: true, noJoin: rng() < 0.5, stub: false });
+    if (G.anal) lanes.push({ id: 'A2', s0: 0.84, s1: 0.94, uEnd: randRange(0.2, 0.32), sw: SW.F, noFork: true, stub: false });
+    const named = [];
+    if (!bare) {
+      // basal vein: from the M+Cu fork back up to Sc+R, top end more distal; in apids Rs leaves Sc+R from its top
+      named.push({ early: true, a: 'MCu', ua: G.basalU, b: 'ScR', ub: G.basalU + G.basalLean, reach: 0.05, sw: G.heavy ? swAbove(F.basalSw) : F.basalSw, bow: randRange(-0.02, 0.02), forkB: F.rsAt === 'basal' ? rsSpec : undefined });
+      if (F.rsAt !== 'basal') named.push({ early: true, forkOn: 'ScR', u: F.rsAt === 'stigma' ? G.xStig - randRange(0.04, 0.08) : randRange(0.3, 0.38), spec: rsSpec });
+      for (const u of G.rm) named.push({ a: 'Rs', ua: u, b: 'MCu', reach: 0.05 });            // r-m crossveins: submarginal cells (or the areolet)
+      for (const u of G.mcu) named.push({ a: 'MCu', ua: u, b: 'Cu', reach: 0.05 });           // recurrent veins 1m-cu, 2m-cu: discoidal cells
+      named.push({ a: 'Cu', ua: G.basalU + 0.05, b: 'A', ub: G.basalU + 0.03, reach: 0.04 });   // cu-a: the first cubital cell
+      if (G.anal) named.push({ a: 'A', ua: 0.16, b: 'A2', reach: 0.04 });                      // closed anal cell
+      if (G.extra) named.push({ early: true, forkOn: 'Cu', u: randRange(0.48, 0.6), spec: { id: 'Cu1b', s1: 0.9, uEnd: randRange(0.72, 0.85), sw: SW.F, stub: false, noFork: true } });   // Cu1b to the hind margin
+    } else named.push({ early: true, forkOn: 'ScR', u: G.basalU, spec: rsSpec });
     const grown = growVeins(g, {
-      lanes, forks: G.forks, uOpen: G.uOpen, step: G.step, minGap: G.minGap, deflect: G.deflect, tilt: G.tilt, stubProb: G.stubProb, stubLen: G.stubLen,
-      density: u => density(u, G.densU, G.densP, G.densW) + (u < 0.3 && G.heavyBase ? 0.5 : 0), joinSw: SW.D,
+      lanes, named, forks: G.forks, uOpen: G.uOpen, k: G.k, minGap: G.minGap, angle: G.angle, lean: G.lean, bowAmt: G.bow, grad: G.grad, stubProb: G.stubProb, stubLen: G.stubLen,
+      noPair: [['ScR', 'MCu'], ['R1', 'Rs']].concat(fam === 'sawfly' ? [] : [['ScR', 'Rs'], ['MCu', 'A']]), noSites: bare,   // the basal R wedge and the marginal cell never carry crossveins; the first cubital cell only in sawflies
     });
-    if (fam === 'chalcid') {   // the stigmal hook and postmarginal vein
+    if (bare) {   // chalcid: the stigmal hook and postmarginal vein
       const p0 = plAt(stigBot, 0.7); g.stub(p0, 60 + randRange(-15, 15), w * randRange(0.16, 0.26), SW.D);
     }
     L.wings.push(...g.emit());
     L.wings.push(...costaEls(fore, 0, G.stig !== 'none' ? xStig : Lw * 0.5));
-    meta.wingSig = ['hym', fam, grown.lanes.length, grown.joins.length, hGrown.lanes.length + hGrown.joins.length, G.stig, G.margOpen ? 1 : 0, G.anal ? 1 : 0, G.extra ? 1 : 0, G.heavy ? 1 : 0,
+    const fs = grown.stats, hs = hGrown.stats;
+    meta.wingStats = { joins: fs.joins + hs.joins, dropped: fs.dropped + hs.dropped, minAngle: Math.min(fs.minAngle, hs.minAngle), maxAngle: Math.max(fs.maxAngle, hs.maxAngle) };
+    meta.wingSig = ['hym', fam, grown.lanes.length, grown.joins.length, grown.forks, hGrown.lanes.length + hGrown.joins.length, G.stig, G.margOpen ? 1 : 0, G.anal ? 1 : 0, G.extra ? 1 : 0, G.heavy ? 1 : 0,
       Math.round(G.uOpen * 10), Math.round(G.theta / 6), Math.round(G.spread / 6), Math.round(G.tipY * 6), Math.round(G.sharp * 2), Math.round(G.bulge * 10), Math.round(G.xStig * 10), Math.round(G.xMarg * 20), Math.round(G.len * 10)].join(',');
   }
 
