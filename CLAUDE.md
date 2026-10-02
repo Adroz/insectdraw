@@ -46,11 +46,14 @@ contract for changes.
   range must keep those invariants rather than relax the test.
 - Terminal veins must end on the outline: use `marginTargets`, `tipPoint`, or evaluate
   `topAt`/`botAt` at the same x as the endpoint. Only anatomically open cells may stop short.
-- Venation follows `docs/wing-venation-spec.md` and the references in `docs/ref/`. New wing
-  code goes on the `wingGraph` helper (nodes, chains, edges, stubs, ladders, stigma) and, where the
-  order's cells vary between species, on `growVeins` (trunks that fork and join; see the spec): no
-  straight full-span veins, no 90° junctions, closed cells where the reference has them.
-  Before calling a wing done, put a 4× zoom next to its reference image and compare.
+- Venation follows `docs/wing-venation-spec.md` and the references in `docs/ref/`. Every winged
+  order is on `growVeins` (lanes that fork, named crossveins and site rungs placed by the angle
+  rule, ladder / mesh regimes; see the spec's Growth section), with `wingGraph` underneath for
+  nodes, margins, the stigma and emission. New wing code goes the same way: lanes for the order's
+  trunks, `named` entries for its anatomical crossveins, `wingStats` exposed and asserted by
+  `tests/check.js`: no straight full-span veins, no 90° junctions, closed cells where the
+  reference has them, nothing dangling. Before calling a wing done, put a 4× zoom next to its
+  reference image and compare.
 
 ## Verify before claiming done
 

@@ -54,13 +54,16 @@ a wasp anyway.
 
 Wings are drawn from real vein layouts rather than generic radiating lines,
 following the rules in `docs/wing-venation-spec.md`, which were derived from
-the reference plates and photographs in `docs/ref/`. Most orders build their
-venation on a small **wing graph**: named nodes in outline-relative
-coordinates, longitudinal veins as chains of nodes emitted as one undulating
-curve, crossveins as tilted bowed edges between chains, closed cells in the
-basal two-thirds of the wing, and stubs fading into open membrane at the apex.
-Nothing runs straight across the wing and junctions are Y-shaped, not right
-angles. Pterostigmata are lenses on the costa (solid, cross-hatched, axis-
+the reference plates and photographs in `docs/ref/`. Every winged order is
+**grown** by one engine (`growVeins`, after Hoffmann et al. 2018): the order's
+Comstock–Needham trunks are smooth lanes built once, branches fork off them,
+the named crossveins of the order (basal vein, nodal line, discocellular,
+gradates, antenodals ...) and the secondaries grown from inhibitory sites
+along each strip are all clipped to their two lanes and slid until they meet
+them at 105–140°, so no junction is square and nothing dangles; the strips
+are ladders of quadrilaterals where narrow and Voronoi meshes where wide,
+cells shrinking toward the tip and trailing edge. Closed cells sit where the
+reference has them and open membrane where it does not. Pterostigmata are lenses on the costa (solid, cross-hatched, axis-
 shaded or stippled), tapering into Sc+R and R1. Vein weight follows anatomy
 (heavy costa, basal stems, light crossveins and apical stubs), and most wings
 carry a marginal fringe.
@@ -96,10 +99,12 @@ margin-terminating vein ends on an outline sample.
   tip and trailing edge, no free ends; libellulid-small to aeshnid-large by the
   `cells` gene; after
   [Hoffmann et al. 2018, PNAS](https://www.pnas.org/doi/10.1073/pnas.1721248115).
-- **Butterfly / moth** — Comstock–Needham layout: closed discal cell with a bent
-  discocellular, Sc+R1 along the costa, R2 from the cell's upper corner and R3–R5
-  stalked on a common stem, M1–M3 off the discocellular, Cu1/Cu2 off the lower
-  edge, 2A to the tornus and a short 3A; hindwing with a hooked humeral vein.
+- **Butterfly / moth** — Comstock–Needham layout grown as lanes: closed discal
+  cell whose discocellular is three crossveins placed by the angle rule (a soft
+  chevron pointing at the base, M1 and M2 leaving its bends), Sc+R1 along the
+  costa, R2 from the cell's upper corner and R3–R5 stalked on a common stem,
+  M3 and Cu1 off the lower corner, Cu2 off the lower edge, 2A to the tornus and
+  a short 3A; no other crossveins; hindwing with a hooked humeral vein.
 - **Fly** — grown like the bee and wasp wings: smooth lanes for Sc and R1 (to
   the costa), Rs forking off R1 and again into R2+3 (costa) and R4+5 (apex), M,
   CuA1, CuA2 bending back onto A1 to close cup, A1 (+ A2), with the named
@@ -124,19 +129,32 @@ margin-terminating vein ends on an outline sample.
   and R1 running far out under the costa, a late Rs fork, forked M with M3, cup
   open (CuA2, A1 and A2 each to the hind margin), denser inhibitory sites so a
   few extra cells appear.
-- **Grasshopper** — tegmina with near-parallel longitudinals and an archedictyon
-  grid of leaning rungs between them.
-- **Lacewing** — Sc and R1 hugging the costa with a ladder of costal crossveins,
-  the intramedian cell at the root of Rs, 8–14 curved pectinate Rs branches
-  with twigged ends, 1–3 zigzag gradate series.
-- **Cicada** — Sc+R, M, CuA, CuP heavy and undulating to a slanted zigzag nodal
-  line (M and CuA on a short common stem), apical veins forking as trees to the
-  ambient vein, peripheral membrane left blank, anal veins to the clavus.
+- **Grasshopper** — the tegmen as its own wing frame: Sc, R, M and Cu as
+  near-parallel lanes (Cu forking near the base, R near the tip, an optional
+  light intercalated vein), the archedictyon grown as one row of leaning rungs
+  where a strip is narrow and rows of near-rectangular polygons where it is
+  wider, finer toward the apex; the folded hindwing fan as radiating lanes with
+  ladder rungs.
+- **Lacewing** — Sc, R1 and Rs as smooth offsets under the costa (Rs rooted on
+  R1 near the base), a costal ladder of 20–35 placed crossveins, the intramedian
+  cell closed by two rungs at the root of Rs, 8–14 pectinate branches forking
+  off Rs toward the hind margin with twigged ends, 1–3 gradate series stepping
+  through the branches as zigzag staircases, sparse grown rungs in between, M
+  and Cu short to the hind margin.
+- **Cicada** — Sc+R, M, CuA, CuP as bowed lanes (M and CuA on a short common
+  stem) to a nodal line that is one chain of crossveins at a single slant, the
+  apical veins leaving the nodal nodes through short stems and ending on the
+  ambient vein (a lane along the inset outline), the optional ulnar row across
+  them, peripheral membrane left blank, anal veins to the clavus.
 - **Damselfly** — the dragonfly model on petiolate (stalked) wings: the fan
   leaves the end of the petiole from two fused stems, a quadrilateral below the
   arculus, and ladders nearly everywhere with a two-row mesh only at the tip.
-- **Mayfly** — triangular forewing with 10–14 fanning longitudinals and dense
-  crossveins, vestigial hindwing, three tail filaments.
+- **Mayfly** — triangular forewing with Sc and R1 under the costa and 7–13
+  longitudinals radiating from the root (each bent by a fading share of the
+  costa's bow), intercalaries starting free in mid-wing, every strip a one-row
+  ladder of leaning rungs with cells shrinking toward the tip and trailing edge
+  and the costal ladder densest; small sparse hindwing, often lost; three tail
+  filaments.
 
 ## Body
 

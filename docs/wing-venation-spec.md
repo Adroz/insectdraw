@@ -1,6 +1,6 @@
 # Wing venation: what the references show and how we generate it
 
-Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera) and audited at 4x against the references the same day; see Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
+Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera), all eight grown by `growVeins` v2 since the same day, and audited at 4x against the references; see Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
 are in `ref/` with sources and licences in `ref/README.md`. `research-lepidoptera-wings.md`
 still covers lepidopteran *patterns* (tone, hatching); this document covers veins and cells
 for every order.
@@ -155,12 +155,27 @@ Observed:
 - Anal veins A1–A3 short, to the hind margin near the base; clavus with A1 fold.
 - Hindwing: same plan at half size, ambient vein too.
 
-Rules: graph with the basal cells closed by the nodal line; each basal vein a three-segment chain
-with alternating bows (R1); M and CuA leave a short common stem (`mcuFork` gene) as in the photo;
-the nodal line slants back toward the base and zigzags (`zig` gene: N1 a little distal, N2 a little
-basal) so every crossvein meets its veins obliquely (R2); apical veins as chains with two offset
-nodes ending on the ambient vein, never on the margin; ambient vein as an inset copy of the outline
-from costa-apex round to the clavus; peripheral membrane left blank; 6–9 apical cells.
+Rules: grown by `growVeins` v2. Lane plan (u = span fraction, s = chord fraction from the costa):
+
+| lane | from (u, s) | to | notes |
+|---|---|---|---|
+| Sc+R | (0.02, 0.3) | nodal node N0 (u `nx0` 0.46–0.6, s 0.14) | O (H with the heavy gene); bow −`bow` (0.015–0.04) |
+| M+CuA | (0.02, 0.44) | `mcu` (u 0.1–0.2) | the common stem (`mcuFork` odds 0.7); CuA forks off it |
+| M | `mcu` (or the base) | N1 (u nx0 − slant/3, s 0.33) | O / H; bow −0.8 `bow` |
+| CuA | fork off M+CuA | N2 (s 0.53) | O; bow +`bow` |
+| CuP | (0.02, 0.62) | N3 (u nx0 − slant, s 0.72) | D |
+| apical stems | N0 / N1 / N2 | 20–45% of the way to their targets' mean | D; one stem per nodal node that carries 2+ branches, two sub-stems when M carries 3–4 |
+| RA, RP, M1–M4, CuA1, CuA2 | the stems' ends | nodes on the ambient vein's apical arc (x > 0.68) | D; lanes sharing nodes, common `apBow` ±0.03 |
+| ambient vein | pre-built: the outline inset by `inset` × 1.6, costa → apex → clavus, as two monotone lanes | – | D, `noJoin` |
+| A1–A3 | `wingGraph` chains | clavus | D / F |
+
+Named crossveins, all through `place`: the **nodal line** as one `then` chain Sc+R → M → CuA → CuP so
+its four pieces keep one slant (`slant` 0.04–0.14 of the span back toward the base); 1–3 **m-cua**
+rungs in the median cell; the optional Sc+R–M rung in the radial cell (`scr` 0.5); the **ulnar row**
+(`ulnar` 0.6) across the apical lanes at 45–60% of their length. `noSites`: a cicada has no other
+crossveins, and `uOpen` is the nodal line. The hindwing is the same plan at half size with one apical
+branch per nodal node. `meta.wingStats` carries the placed joins; 14 per plate on average, under 1%
+dropped.
 
 ### Diptera (ref: dip-eristalis, dip-asilid-photo, dip-limonia)
 
@@ -244,11 +259,23 @@ Observed:
 - Hindwing: humeral vein, Sc+R1 along the costa, Rs, M1–M3, Cu1–2, 2A, 3A; cell shorter.
 - Papilio: veins thicker and the margin scalloped between vein ends.
 
-Rules: keep the Comstock–Needham graph; dcv as a 2–3 node chain with bends; R2 from the cell corner,
-R3–R5 leaving one bowed stem one after another (`stalk` gene = how many steps before the last two fork);
-humeral vein hooked from the root of Sc+R1 to the hindwing costa (`hum` gene, its reach); 3A; bows per R1
-signed by vein (R convex to the costa, Cu / 2A convex to the hind margin, M nearly straight); weight per R7
-(cell edges and stems `SW.O`, branches `SW.D`, 3A / humeral `SW.F`).
+Rules: grown by `growVeins` v2 (`lepVeins`), with no site rungs because a lepidopteran wing has none.
+Every vein is a pre-built bowed lane (chord-fraction control points dip toward the tornus on these
+outlines, so the arcs are absolute): the discal cell's top edge (b → U, convex to the costa, O) and
+bottom edge (b → D, O), Sc (Sc+R1 on the hindwing, O), the R stalk from U (O) with R3–R5 rooted on it
+(`parent`) one after another and the last two at its end (`stalk` gene), R2 from U, M1 and M2 from the
+discocellular bends, M3 and Cu1 from the lower corner D, Cu2 rooted on the lower edge at 55–75%, 2A to
+the tornus, 3A short (odds 0.6, F); all branches D (O with the heavy gene). The **discocellular** is
+three named crossveins placed independently by the angle rule: U → M1 just past its root, M1's root →
+M2 just past its root, M2's root → the lower edge at D. The bends are measured against the cell's
+chord U → D: the upper piece leans back from it by 34–46°, the middle piece runs parallel to it (its
+own band 90–152°, since M2 leaves it nearly square on the references), the lower piece leans forward
+by 29–41°, the back offsets capped at 4.5% / 3.5% of the span, so the dcv is a soft chevron pointing
+at the base on every family's cell; M1 and M2 are trimmed to start where their piece lands. A piece
+the rule cannot place (1.6 of 6 per plate) is drawn straight between its nodes so the cell always
+closes. The humeral vein is a hooked `bowed` arc from the root of Sc+R1 (`hum` gene). The veins array
+keeps the shape the pattern code reads: [cellTop, cellBot, dcv, Sc, (humeral), (stalk)] then the
+marginal veins apex → inner margin, each with `.sw`; `meta.wingStats` sums both wings' pieces.
 
 ### Neuroptera, Chrysopidae (ref: neu-nothochrysa, neu-chrysoperla)
 
@@ -263,12 +290,26 @@ Observed:
   (inner at ~50%, outer at ~75% of the branch length).
 - Cells are lozenges: the branches and gradates cross at ~60°.
 
-Rules: branches as chains with one mid node (bow outward); gradates as zigzag staircases: each
-rung leans outward by `zig` (7–12% of a branch) from branch i to i+1 and the next rung leaves
-branch i+1 behind where the last one landed (`drift`), so rung / riser / rung alternate; branch
-targets only on the hind margin and apex (never the costal side, so no branch doubles back);
-twigs fork at 90% of the branch and end on the outline; im cell as a 4-node rhombus; costal
-ladder rung spacing gene.
+Rules: grown by `growVeins` v2. Lane plan:
+
+| lane | built as | notes |
+|---|---|---|
+| C | wall lane 0.3 inside the costa, `noDraw` | the outline draws it |
+| Sc | pre-built offset under the costa: depth 0.025 + `costal` (0.07–0.11) × sin^0.7 of the span, ending on the costa at 0.965 | O |
+| R1 | the same offset plus `sub` (0.04–0.06 of the chord), ending on the costa at 0.978 | D (O when heavy) |
+| Rs | pre-built: rooted on R1 at `rsFork` (0.07–0.12) through `parent` (the root is a junction on both), one cell under R1 (`rsGap` × the Sc–R1 gap, absolute) to the apex | D / O |
+| B0..Bn | forks off Rs at u from rsFork + 0.12 to `rsEnd` (0.78–0.88), aimed at outline nodes along the hind margin from M's end to just short of the apex, trailing edge first; one bowed arc each (`bowB` 0.03–0.09, leaving Rs at a shallow angle) | D; 8–14 (5–11 on the hindwing) |
+| M, Mf | (0.02, 0.36) to the hind margin at `mX` 0.28–0.4, bow −0.06..−0.12; Mf forks off M (odds 0.5) | D |
+| Cu | (0.02, 0.5) to the hind margin at `cuX` 0.16–0.26 | F |
+
+Named crossveins through `place`: the **costal ladder** C–Sc every `ladder` (0.022–0.038) of the span,
+leaning toward the apex (20–35 rungs); the **intramedian cell** as two Rs–M rungs at rsFork + 0.03 and
++ 0.12; the **gradate series** (1–3 at 42–78% of the branches): each rung leaves branch i at t and is
+aimed at branch i+1 at t − `zig` (7–12%), with its own target angle `gradAng` 108–116° (`angT`) so it
+leans more than the ladders and the series reads as a staircase, the next rung leaving branch i+1 at t
+again (`drift`); 1–4 **m-cu** rungs. Sites (`k` 1.4–2.2, `minSep` 0.05) fill the R1–Rs strip and the
+outer parts of the inter-branch strips; `uOpen` 1.0; the subcostal strip and M–Cu are `noPair`. Every
+branch, Rs, M and Cu end-twig on the outline. 137 joins per plate, 3 dropped, mean angle 117°.
 
 ### Ephemeroptera (ref: eph-mayfly-1956)
 
@@ -281,8 +322,22 @@ Observed:
 - Longitudinals bow toward the trailing edge and undulate.
 - Hindwing small and rounded, often lost.
 
-Rules: longitudinal chains per R1; ladder regime everywhere, rung tilt 10–25°; intercalary
-gene; hindwing presence gene (already).
+Rules: grown by `growVeins` v2, the ladder regime everywhere. The forewing is a triangle with the apex at
+the top corner (a domed outline sent Rs diving away from R1 and no rung could bridge them). Lanes: C and
+the trailing edge as `noDraw` walls; Sc and R1 as pre-built offsets under the costa (`sub` 0.035–0.055 of
+the chord each, Sc ending on the costa at 0.9, R1 at the apex, O / D); 7–13 fan lanes (`nV` − 2: Rs, M,
+Cu1, Cu2, 1A..) as rays from the root to targets spaced by arc length along the hind margin from the
+apex back to 22% span, each bent by a share of the costa's convexity that fades toward the trailing
+edge (`pow0` 0.8–1.0 × (1 − f)^1.2, measured against the ray's own chord) and undulating (`und`); the
+first three D, the rest F; intercalaries (`inter` 0.6) between alternate pairs as free lanes from `u0i`
+0.4–0.5 to the margin (F). No named crossveins: every strip is a one-row ladder of sites at the local
+spacing (`evenSites`, `k` 1.0–1.4) with an absolute cell `cells` × 0.035 span × (1 − 0.3 u)(1 − 0.25 s),
+the costal ladder on its own `costStep` (0.022–0.034); `uOpen` 1.0. Two `growVeins` knobs were added
+for this order (defaults keep every other order byte-identical): `gapNear` 0.2 (a lane shared by two
+ladders cannot keep half a spacing clear of the junctions the first one left) and `reachW` 0.7 (a rung
+across a wide apical strip must slide further than one spacing to lean into the band). Hindwing: the
+same with 3 fan lanes and a 1.6× coarser cell, present with odds 0.8. 220 rungs per plate, mean angle
+117°, 17 dropped.
 
 ### Orthoptera, tegmen (ref: orth-grasshopper)
 
@@ -294,9 +349,20 @@ Observed:
   rows along the veins, finer toward the apex.
 - Hindwing is a fan of anal veins with ladder crossveins.
 
-Rules: longitudinals as near-parallel chains; grid regime (rows of rungs between consecutive
-longitudinals, rung spacing ≈ strip width, rungs leaning 15–45% of a cell so the grid is rhombic
-rather than square) instead of Voronoi; fan hindwing ladder spacing gene.
+Rules: grown by `growVeins` v2 on a wing frame of its own. The tegmen was drawn in body coordinates;
+it is now a `makeWing` frame pointing down the body (`frame`: local x along the tegmen, local −y toward
+its outer edge, which is the costa; the straight inner edge on the midline is the hind margin), so
+`wingGraph`, `topAt` / `botAt` and the strip loop apply unchanged. Lanes: C and the inner margin as
+`noDraw` walls; Sc (s 0.1 → the costa at `scEnd` 0.68–0.82, O), R (s 0.24 → the apex, D / O) with Rs
+forking off at `rFork` 0.58–0.72 to the inner margin at 0.96, M (s 0.42 → 0.9), Cu (s 0.6 → 0.8)
+forking at `cuFork` 0.1–0.2 into CuP (→ 0.62), an anal vein (odds 0.6, F) and a light intercalated vein
+between R and M from u 0.3 (`subRow` 0.6, F). The **archedictyon** is the mesh regime (`rows2`, `rowsAt`
+1.4) with an absolute cell of `cell` 0.11–0.16 × the tegmen's width (6–9 cells across, 0.8× in the costal
+row, × (1 − 0.3 u) toward the apex) and a low `zig` 0.04–0.1, so a narrow strip is one row of leaning
+rungs and a wider one rows of near-rectangular polygons rather than hexagons; `uOpen` 1.0. The folded
+hindwing fan (odds 0.7) is a second frame: 5–9 anal lanes radiating from the root to targets by arc
+length along the outer margin, each a one-row ladder of rungs at `fanCell` 0.05–0.08 of the tegmen
+length. Both frames draw into `covers`, the fan first. 360 joins per plate, mean angle 117°.
 
 ## Generation model
 
@@ -344,12 +410,21 @@ to its `deflect` step:
   a crossvein is one level below its lighter lane. The basal vein is O in bees, D in wasps.
 - **Density gradient** (R-H): site spacing shrinks toward the tip and trailing edge by `grad`.
 
-`growVeins` returns `{ lanes, joins, forks, stats }`; `stats = { joins, dropped, minAngle, maxAngle }`
-is exposed as `meta.wingStats` for bee, wasp, fly and cranefly and asserted by `tests/check.js`. The
-family only sets which lanes, forks and named crossveins exist and the site spacing, so two wasps
-differ in topology, not only in node positions; lane, join and fork counts and the hindwing size go
-into `meta.wingSig`. Hymenoptera (fore and hind) and Diptera use this now; the orders below still
-use explicit templates and are candidates to move. Diptera showed two things Hymenoptera did not:
+`growVeins` returns `{ lanes, joins, forks, stats }`; `stats = { joins, dropped, minAngle, maxAngle,
+rungs, angSum, ladders, multi }` is exposed as `meta.wingStats` by every winged order and asserted by
+`tests/check.js` (the 105–140 band on slide-placed rungs; mesh edges and structural obliques with their
+own band are exempt). Each join also carries its polyline (`joins[i][3]`) so an order can assemble a
+chain from placed pieces (the lepidopteran discocellular). The family only sets which lanes, forks and
+named crossveins exist and the site spacing, so two wasps differ in topology, not only in node
+positions; lane, join and fork counts and the hindwing size go into `meta.wingSig`. All eight orders
+use this now: Hymenoptera and Diptera (closed named cells, open apex), Odonata, Ephemeroptera and
+Orthoptera (`uOpen` 1.0, ladders and meshes to the margin), Neuroptera (named ladder, im cell and
+gradates plus sparse sites), Cicadidae and Lepidoptera (named crossveins only, `noSites`). Later orders
+added a few general knobs, each defaulting to the previous behaviour: a pre-built lane may name a
+`parent` so its root is a junction on both (lacewing Rs on R1); a named crossvein may carry its own
+target angle `angT` inside the band (gradates); a `then` step may be `{ b, ub, reach, ang }` to aim its
+own far end; `gapNear` and `reachW` for ladder-everywhere orders (see Ephemeroptera). Diptera showed two
+things Hymenoptera did not:
 a lane that is already diving where a named crossvein lands (CuA1 under dm-cu, M under r-m in the
 forked families) makes the two junction angles differ by the lanes' divergence and the crossvein is
 dropped, so the dive starts at a junction node (`cuK`, `mE` / `mF`) as it does in the references;
@@ -424,6 +499,32 @@ the references, seeds listed per order) and what it changed:
   112–121° over the audited seeds, none square), mesh regions of similar-sized pentagons / hexagons
   close against rungs or the margin with no free end, R1 is smooth across the nodus. Pass.
 - Orthoptera (orth-grasshopper; seeds 14, 21): archedictyon rungs were near-square; lean raised. Pass.
+
+Audit of 2026-10-02, after the last five orders moved onto `growVeins` v2 (sheets of nine random seeds per
+body plan, 4× zooms beside the references, `check.js 3000` with the angle band asserted on every winged
+type; bee / wasp / fly / cranefly / dragonfly / damselfly byte-identical to before for seeds 12, 20, 24,
+60, 70, 124, 18, 27, 30, 9, 15, 6):
+
+- Neuroptera (neu-nothochrysa, neu-chrysoperla; seeds 1, 16, 22, 36): the first grown version had the
+  branches leaving Rs toward the costal side and the gradates leaning with the ladders so no staircase
+  showed; branches now bend down from a shallow start and the gradates carry their own target angle.
+  Costal ladder, im cell, 1–3 staircases, twigged ends, 105–140° everywhere, mean 117°. Pass.
+- Ephemeroptera (eph-mayfly-1956; seeds 4, 7, 13, 36): the domed outline sent Rs diving from R1 so the
+  R1–Rs strip had no rungs, and chord-fraction fan lanes bunched toward the costa; the forewing is now a
+  triangle with the apex at the top corner, the fan radiates from the root, `gapNear` / `reachW` let the
+  ladders fill every strip. A trial of the mesh regime in the apical strips was dropped: the reference
+  is one-row ladders to the margin. Pass.
+- Orthoptera (orth-grasshopper; seeds 14, 21): the first cell size (a fraction of the tegmen length)
+  gave ladders only; sized from the width it gives 6–9 cells across with rows of near-square polygons in
+  the wider strips, finer at the apex, as in the photo. Pass.
+- Cicadidae (cic-cicada; seeds 2, 3): the nodal line is one slanted chain, every basal cell closes, the
+  apical veins leave the nodal nodes through short stems and end on the ambient vein, the peripheral
+  membrane is blank. Pass.
+- Lepidoptera (lep-agrotis, lep-papilio; seeds 8, 239, 3908901906): the first grown discocellular
+  folded into a deep V on broad pierid cells because the back offsets compounded the chord's own slant,
+  and a dropped upper piece silently ended the chain; the leans are now measured against the chord with
+  the middle piece parallel to it, and the pieces are placed independently. The patterns (bands, ocelli,
+  stigmata, fringe) render unchanged on butterfly and moth sheets. Pass.
 
 ## Sequencing
 
