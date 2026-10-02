@@ -100,12 +100,17 @@ margin-terminating vein ends on an outline sample.
   (muscid), forked (nematoceran) or straight (asilid), tabanid R4 fork, the
   closed cells br / bm / dm / cup, a small stigma where Sc ends, syrphid vena
   spuria.
-- **Bee / wasp** — grown rather than templated: trunks (Sc+R into the stigma,
-  R1 closing the marginal cell, Rs, an M+Cu stem forking at the basal vein, A)
-  fork and are joined by crossveins at a family-specific density, every
-  junction kinking the veins, so cell topology differs per seed; sawflies
-  dense and many-celled, chalcids bare; hindwing grown the same way, with
-  hamuli.
+- **Bee / wasp** — grown rather than templated: smooth longitudinal lanes
+  (Sc+R into the stigma, R1 closing the marginal cell, Rs forking off Sc+R, an
+  M+Cu stem forking at the basal vein, A) carry the family's named crossveins
+  (basal vein, r-m submarginals or the ichneumonid areolet, recurrents, cu-a)
+  plus crossveins grown from inhibitory sites along each strip, every one
+  clipped to its two lanes and slid until it meets them at 105–140°, so no
+  junction is square and nothing dangles; the apex past the last cell is open
+  membrane with M and Cu fading into it. Apids three submarginals and a heavy
+  basal vein, vespids a long narrow first discoidal, ichneumonids a big stigma
+  and a tiny areolet, sawflies dense with closed anal cells, chalcids bare;
+  hindwing grown the same way, with hamuli.
 - **Crane fly** — the Nematoceran plan: forked M, discal cell, narrow stalked wings.
 - **Grasshopper** — tegmina with near-parallel longitudinals and an archedictyon
   grid of leaning rungs between them.

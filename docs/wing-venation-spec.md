@@ -221,26 +221,52 @@ cells; Runions 2005 growth toward sources with anastomosis; junction angles ~110
 ### Growth, not templates
 
 A fixed cell template with jittered corners always reads as the same wing. The references read as
-a growth process, so `growVeins(g, G)` grows the venation:
+a growth process, so `growVeins(g, G)` grows the venation. The current engine is **v2, site-based**,
+written to the rules R-A..R-H of `research-vein-branching.md` after v1's junction jogs were traced
+to its `deflect` step:
 
-- **Trunks** leave the base in lanes across the chord (s = 0 costa .. 1 hind margin), each heading
-  for its own stretch of margin along a smooth track. Anatomy pins a few: Sc+R ends in the
-  pterostigma, R1 leaves it and closes the marginal cell with Rs, M+Cu is one stem.
-- **Forks**: a lane may fork into a child lane aimed between its own target and its neighbour's.
-  Deterministic forks (the M+Cu split at the basal vein) plus `forks` random ones per seed.
-- **Joins**: walking the span in steps, adjacent live lanes are joined by a crossvein with a
-  probability from a density profile (peak position, height and width are genes) in a brick
-  pattern, only once the lanes have separated by `minSep`, never within `minGap` of the last
-  join on that pair, and never past `uOpen`.
-- **Deflection**: every junction shifts both lanes a little (`deflect`), so veins zigzag through
-  the cells instead of passing straight through them.
-- **Ends**: past the last join a lane reaches the margin, ends on its pinned node, or fades as a
-  stub into open membrane (`stubProb`, `stubLen`).
+- **Lanes** (R-A, R-B) are the Comstock–Needham trunks of the order, each one smooth curve built
+  once from its base, one or two interior control points (a per-lane `bow` gene) and its target,
+  and never moved afterwards. Anatomy pins a few: Sc+R ends in the pterostigma, R1 leaves its tip
+  and closes the marginal cell with Rs, M+Cu is one stem. A **fork** starts a child lane on the
+  parent's curve: the ones a family always has (Cu at the basal vein, Rs off Sc+R) plus `forks`
+  random ones per seed aimed between the parent's target and its neighbour's.
+- **Named crossveins** (basal vein, r-m for the submarginals or the areolet, the recurrents
+  1m-cu / 2m-cu, cu-a, the anal crossvein) are placed first at the family table's u positions by the
+  same clip-and-slide code as everything else. Structural ones (the basal vein, which Rs forks from
+  in apids; the Cu1b fork) go before the random forks so no lane is ever grown across a crossvein.
+- **Sites** (R-C): in every strip between adjacent lanes, over the u-interval where both are alive
+  and separated by `minSep`, inhibitory sites walk along the strip at spacing = local strip width
+  × `k` (family gene; apid 2.0–2.8, vespid 1.8–2.6, ichneumonid 1.5–2.2, sawfly 0.9–1.4), restarting
+  from every wall (the strip's ends and its named crossveins). Each crossvein is the bisector of two
+  consecutive sites clipped to the two lane curves, so a cell is 0.85–1.8 spacings long. Where a
+  strip is wider than 2.2 spacings a second row of sites and a 2-D Voronoi take over (`rows2`; a hook
+  for mesh-veined orders, unused by Hymenoptera).
+- **Junction angle** (R-D): the near end is fixed; the far end slides along its lane within one
+  spacing until the obtuse angle between crossvein and lane lies in [105°, 140°] at both ends
+  (target `angle` gene 112–128°, `lean` gene preferring the costal end distal as in the references);
+  a crossvein that cannot satisfy both, or that would land next to another junction or cross a third
+  lane, is dropped. Nothing dangles (R-E): a crossvein exists only with both ends on lanes.
+- **Open apex** (R-F): joins stop at `uOpen`; a stub lane is cut `stubLen` past its last junction and
+  drawn at `SW.F` from there.
+- **Weight** (R-G): stems `SW.O` (Sc+R, M+Cu to its fork), named branches `SW.D`, A and
+  crossveins `SW.F`; a lane that forks is one level above its branch before the fork (capped at O);
+  a crossvein is one level below its lighter lane. The basal vein is O in bees, D in wasps.
+- **Density gradient** (R-H): site spacing shrinks toward the tip and trailing edge by `grad`.
 
-Family parameters are growth parameters (how many trunks, how often they fork, how dense the
-joins, where they stop), so two wasps differ in topology, not only in node positions. The lane
-count, join count and hindwing graph size go into `meta.wingSig`. Hymenoptera use this now; the
-orders below still use explicit templates and are candidates to move.
+`growVeins` returns `{ lanes, joins, forks, stats }`; `stats = { joins, dropped, minAngle, maxAngle }`
+is exposed as `meta.wingStats` for bee and wasp and asserted by `tests/check.js`. The family only
+sets which lanes, forks and named crossveins exist and the site spacing, so two wasps differ in
+topology, not only in node positions; lane, join and fork counts and the hindwing size go into
+`meta.wingSig`. Hymenoptera (fore and hind) use this now; the orders below still use explicit
+templates and are candidates to move.
+
+What changed from v1: lanes are no longer `wingGraph` chains with a node per junction (that is what
+kinked them) and the `off` / `deflect` machinery is gone; crossveins come from sites rather than a
+per-step probability; junction angles are measured and enforced instead of approximated by a fixed
+`tilt`; the first cubital cell, the basal R wedge and the marginal cell are never crossed; and
+cells are 1.5–3× longer than wide as in `ref/hym-apis.png` (the research note's k ≈ 0.9–1.3 is right
+for odonate-style meshes, not for hymenopteran ladders).
 
 
 A small planar-graph engine added to the engine script, used by every wing block:
@@ -281,6 +307,10 @@ the references, seeds listed per order) and what it changed:
 - Hymenoptera (hym-apis, hym-ross, hym-ichneumonidae-diagram; bee 12, 24, 60, wasp 20, 69, 124):
   submarginals close, basal vein slants back, costa stops at the stigma; r-m and recurrent crossveins
   now carry an explicit lean so none sits square. Pass.
+- Hymenoptera, second audit (same refs; bee 12, 24, 60, wasp 20, 70, 124) after `growVeins` v2: no
+  jog at any junction, every junction 105–140° over 3000 seeds (`wingStats`), named cells closed with
+  no dangling ends, M and Cu fade past `uOpen`, ichneumonid areolet now a small cell under the
+  stigma, stems O / branches D / crossveins F. Pass.
 - Diptera (dip-eristalis, dip-asilid-photo; fly 9, 15, 29, 75): br, bm, dm, cup close; r-m and dm-cu
   oblique; the muscid M1 bend reads as a curve. No change needed. Pass.
 - Neuroptera (neu-nothochrysa; seeds 1, 16, 22): gradates read as one oblique line; now true zigzags;
