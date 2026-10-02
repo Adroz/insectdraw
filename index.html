@@ -299,7 +299,7 @@ function tarsusEls(p, dir0, total, w0, n, curl, opts) {
     }
   }
   // pretarsus: two curved claws, and an arolium pad (flies: paired pulvilli)
-  const d = dirv(a), n_ = perp(d), cl = Math.max(3, w0 * 1.3);
+  const d = dirv(a), n_ = perp(d), cl = Math.max(3, w0 * 1.3) * ((opts && opts.clawK) || 1), pk = (opts && opts.padK) || 1;
   for (const s of [-1, 1]) {
     const tip = add(p, add(mul(d, cl * 0.8), mul(n_, s * cl * 0.7)));
     els.push(pathEl(cubicBezierPath([p, add(p, mul(d, cl * 0.6)), add(tip, mul(n_, -s * cl * 0.15)), tip], false), SW.D));
@@ -308,7 +308,7 @@ function tarsusEls(p, dir0, total, w0, n, curl, opts) {
     for (const s of [-1, 1]) els.push(pathEl(ellipsePath(add(p, add(mul(d, cl * 0.45), mul(n_, s * cl * 0.38))), cl * 0.32, cl * 0.2, Math.atan2(d[1], d[0]) / D2R + s * 30), SW.F, '#fff'));
     els.push(lineEl(p, add(p, mul(d, cl * 0.9)), SW.F));   // empodium bristle
   } else {
-    els.push(pathEl(cubicBezierPath([add(p, mul(n_, -cl * 0.22)), add(p, add(mul(d, cl * 0.55), mul(n_, -cl * 0.25))), add(p, add(mul(d, cl * 0.55), mul(n_, cl * 0.25))), add(p, mul(n_, cl * 0.22))], false), SW.F));
+    els.push(pathEl(cubicBezierPath([add(p, mul(n_, -cl * 0.22 * pk)), add(p, add(mul(d, cl * 0.55 * pk), mul(n_, -cl * 0.25 * pk))), add(p, add(mul(d, cl * 0.55 * pk), mul(n_, cl * 0.25 * pk))), add(p, mul(n_, cl * 0.22 * pk))], false), SW.F));
   }
   return { els, tip: p };
 }
@@ -579,6 +579,14 @@ function legEls(attach, spec, meta) {
         }
       }
     }
+    if (spec.fringe && ((k === 1 && spec.fringe.femur) || (k === 2 && spec.fringe.tibia))) {   // hair fringe along the outer edge (bee, moth, fly)
+      const fr = spec.fringe, side = outer;
+      for (let s = 0.15; s <= 0.95; s += fr.spacing / g.L) {
+        const b = bez3(side > 0 ? g.e1 : g.e2, s);
+        const dir = norm(add(mul(g.n, side), mul(g.d, 0.45)));
+        els.push(pathEl(cubicBezierPath([b, add(b, mul(dir, fr.len * 0.4)), add(b, mul(dir, fr.len * 0.7)), add(b, add(mul(dir, fr.len), mul(g.d, fr.len * 0.2)))], false), SW.F));
+      }
+    }
     if (k === 2 && spec.corbicula) {   // bee hind tibia: fringe of long hairs round the pollen basket
       const side = outer;
       for (let s = 0.25; s <= 0.95; s += 0.07) {
@@ -603,10 +611,38 @@ function legEls(attach, spec, meta) {
       }
     }
   }
-  const tr_ = tarsusEls(p, dirs[3], lens[3], ws[3][0], spec.tarsomeres || 5, spec.curl, { pulvilli: spec.pulvilli, basitarsus: spec.basitarsus });
+  const tr_ = tarsusEls(p, dirs[3], lens[3], ws[3][0], spec.tarsomeres || 5, spec.curl, { pulvilli: spec.pulvilli, basitarsus: spec.basitarsus, clawK: spec.clawK, padK: spec.padK });
   els.push(...tr_.els);
   if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip });
   return els;
+}
+// The joint polyline legEls would draw, without drawing it: attach, coxa, trochanter, femur tip (index 3), tibia tip,
+// every tarsomere, claw tip. Used to validate a pose against the body before anything is emitted, and exposed on
+// meta.legs so tests can sample it.
+function legJoints(attach, spec) {
+  const dirs = spec.dirs, lens = spec.lens, pts = [attach];
+  let p = add(attach, mul(dirv(dirs[0]), lens[0] * 0.8)); pts.push(p);
+  p = add(p, mul(dirv(lerp(dirs[0], dirs[1], 0.5)), lens[0] * 0.5)); pts.push(p);
+  p = add(p, mul(dirv(dirs[1]), lens[1])); pts.push(p);
+  p = add(p, mul(dirv(dirs[2]), lens[2])); pts.push(p);
+  const n = spec.tarsomeres || 5, fr = { 3: [0.45, 0.3, 0.25], 4: [0.36, 0.24, 0.21, 0.19], 5: [0.34, 0.2, 0.17, 0.15, 0.14] }[n];
+  let a = dirs[3];
+  if (spec.basitarsus) {
+    p = add(p, mul(dirv(a), lens[3] * 0.42)); pts.push(p); a += spec.curl;
+    for (let k = 1; k < n; k++) { p = add(p, mul(dirv(a), lens[3] * fr[k] * 0.9)); pts.push(p); a += spec.curl; }
+  } else {
+    for (let k = 0; k < n; k++) { p = add(p, mul(dirv(a), lens[3] * fr[k])); pts.push(p); a += spec.curl; }
+  }
+  const cl = Math.max(3, spec.widths[3][0] * 1.3) * (spec.clawK || 1);
+  pts.push(add(p, mul(dirv(a), cl * 0.8)));
+  return pts;
+}
+function segDist(a, b, c, d) {   // shortest distance between segments ab and cd
+  const ptSeg = (p, u, v) => { const w = sub(v, u), l2 = w[0] * w[0] + w[1] * w[1]; const t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * w[0] + (p[1] - u[1]) * w[1]) / l2)) : 0; return vlen(sub(p, add(u, mul(w, t)))); };
+  const cross = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+  const d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
+  if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
+  return Math.min(ptSeg(a, c, d), ptSeg(b, c, d), ptSeg(c, a, b), ptSeg(d, a, b));
 }
 
 // ---------- wings ----------
@@ -1552,23 +1588,86 @@ function rollBodyGenes(type, P) {
   B.ant = { kind: P.antenna, len: P.antLen,
     socket: { dragonfly: [0.14, 0.12], damselfly: [0.12, 0.25], fly: [0.055, 0.2], bee: [0.16, 0.3], wasp: [0.16, 0.3], moth: [0.16, 0.3], beetle: [0.2, 0.3], grasshopper: [0.13, 0.24], mayfly: [0.08, 0.2], cicada: [0.22, 0.3] }[type] || [0.18, 0.28] };
   // ---- legs ----
+  // The leg family (the wing family where the order has one, else the body family) sets the ranges: overall length
+  // and thickness, femur swelling and tibial flare, segment ratios (saltatorial hind femur, reduced nymphalid
+  // forelegs, long mayfly forelegs), armature odds and the pose weights. Everything is still rolled per seed, per pair.
+  // Joint angles are rolled later, in the legs block, where the pose can be checked against the body and re-rolled.
+  const LD = { lenK: [0.92, 1.08], wk: [0.92, 1.08], swell: [1.0, 1.25], flare: [1.0, 1.3], tibR: [0.88, 1.08], tarR: [0.42, 0.6], frontK: [0.8, 0.95], hindK: [1.08, 1.25],
+    spines: 0.3, spineSeg: 'tibia', spineSide: 'outer', spineLen: [0.4, 0.8], spineSp: [5, 9], spurs: [1, 2], fringe: 0.1, pads: 0, clawK: [0.8, 1.4],
+    poses: { spread: 3, walking: 2, tucked: 1, raised: 0.4 }, tarsomeres: [5, 5] };
+  const odo = { spines: 1, spineSeg: 'both', spineSide: 'inner', spineLen: [0.8, 1.2], spineSp: [3.5, 5.5], spurs: [0, 0], tarsomeres: [3, 3], tibR: [0.92, 1.08], hindK: [1.2, 1.4], poses: { basket: 1 } };
+  const LEG_FAMS = {
+    beetle: { base: { tarsomeres: [4, 5], spines: 0.4, spurs: [1, 2] },
+      ground: { lenK: [1.0, 1.2], wk: [1.0, 1.15], poses: { spread: 3, walking: 3, tucked: 0.5 } },
+      rove: { lenK: [0.75, 0.9], poses: { walking: 3, spread: 2, tucked: 1 } },
+      scarab: { lenK: [0.8, 1.0], wk: [1.2, 1.4], flare: [1.3, 1.6], spines: 0.85, spineLen: [0.7, 1.1], spineSp: [7, 11], poses: { tucked: 2, spread: 2, walking: 1 } },
+      longhorn: { lenK: [1.2, 1.45], wk: [0.8, 0.95], tibR: [1.0, 1.2], tarR: [0.5, 0.7], spines: 0.15, poses: { spread: 3, walking: 2, raised: 0.5 } },
+      weevil: { lenK: [0.75, 0.95], wk: [1.0, 1.2], swell: [1.35, 1.7], tibR: [0.8, 0.95], poses: { tucked: 3, spread: 2 } } },
+    grasshopper: { base: { tarsomeres: [3, 4], spines: 0.5, spurs: [1, 2], poses: { spread: 3, walking: 2, tucked: 2 } },
+      acridid: { hindK: [1.75, 2.1] }, tettigoniid: { lenK: [1.15, 1.4], wk: [0.8, 0.9], hindK: [1.6, 1.9] }, tetrigid: { lenK: [0.8, 0.95], wk: [1.0, 1.1], hindK: [1.6, 1.9] } },
+    bee: { base: { spurs: [1, 1], fringe: 0.5, swell: [1.05, 1.35], poses: { spread: 3, walking: 2, tucked: 1.5 } },
+      apid: { wk: [1.0, 1.2], fringe: 0.9, hindK: [1.25, 1.45] }, sawfly: { lenK: [0.85, 1.0], wk: [1.0, 1.15], fringe: 0.2, spines: 0.2 }, vespid: { spines: 0.7, spineLen: [0.35, 0.55], fringe: 0.1 } },
+    wasp: { base: { spines: 0.7, spineLen: [0.35, 0.6], spineSp: [6, 9], poses: { spread: 3, walking: 2, tucked: 1, raised: 0.6 } },
+      vespid: { lenK: [1.0, 1.2] }, ichneumonid: { lenK: [1.25, 1.5], wk: [0.75, 0.9], tibR: [1.0, 1.15], tarR: [0.55, 0.7], spines: 0.2 }, sawfly: { lenK: [0.85, 1.0], wk: [1.0, 1.15], spines: 0.3 },
+      apid: { fringe: 0.6, spines: 0.3 }, chalcid: { lenK: [0.8, 0.95], swell: [1.4, 1.7], spurs: [1, 1], spines: 0.1 } },
+    fly: { base: { spurs: [0, 0], pads: 0.85, spines: 0.9, spineSeg: 'both', spineLen: [0.4, 0.7], spineSp: [6, 9], poses: { spread: 3, walking: 2, tucked: 1, raised: 0.5 } },
+      muscid: {}, nemato: { lenK: [1.2, 1.5], wk: [0.65, 0.8], spines: 0.25 }, syrphid: { lenK: [0.95, 1.1], wk: [0.8, 0.95], spines: 0.3 }, tabanid: { wk: [1.0, 1.15], spines: 0.5 },
+      asilid: { lenK: [1.1, 1.3], wk: [1.0, 1.15], spines: 0.95, spineLen: [0.7, 1.1], poses: { raised: 2, spread: 2, walking: 2 } } },
+    cranefly: { base: { spurs: [1, 1], spines: 0.1, swell: [1, 1.1], poses: { spread: 3, walking: 2 } } },
+    moth: { base: { fringe: 0.6, spurs: [1, 2], spines: 0.1, poses: { spread: 3, tucked: 2, walking: 1 } },
+      nymphalid: { frontK: [0.4, 0.55], fringe: 0.2, wk: [0.8, 0.95] }, satyrine: { frontK: [0.45, 0.6], fringe: 0.2, wk: [0.8, 0.95] }, pierid: { fringe: 0.2, wk: [0.8, 0.95], lenK: [1.0, 1.2] },
+      lycaenid: { fringe: 0.2, wk: [0.8, 0.95] }, papilionid: { fringe: 0.2, lenK: [1.0, 1.2] }, sphingid: { fringe: 0.4, lenK: [1.0, 1.15] }, saturniid: { fringe: 0.9 } },
+    dragonfly: { base: odo }, damselfly: { base: odo },
+    lacewing: { base: { spurs: [0, 1], poses: { spread: 3, walking: 2, raised: 1 } } },
+    cicada: { base: { tarsomeres: [3, 3], wk: [1.0, 1.2], poses: { spread: 3, tucked: 2, walking: 1 } } },
+    mayfly: { base: { spurs: [0, 0], tarsomeres: [4, 4], frontK: [1.4, 1.8], poses: { raised: 3, spread: 1, walking: 1 } } },
+  };
+  const LT = LEG_FAMS[type] || {}, F = Object.assign({}, LD, LT.base || {}, LT[fam] || {});
+  const rr = r => randRange(r[0], r[1]);
+  const poseNames = Object.keys(F.poses), poseW = poseNames.map(k => F.poses[k]), wTot = poseW.reduce((a, b) => a + b, 0);
+  let x = rng() * wTot; B.pose = poseNames[poseNames.length - 1];
+  for (let k = 0; k < poseNames.length; k++) { x -= poseW[k]; if (x < 0) { B.pose = poseNames[k]; break; } }
   const u = P.legScale * (P.thoraxLen / 60);
-  const tarsomeres = { dragonfly: 3, damselfly: 3, grasshopper: 3, cicada: 3, mayfly: 4, beetle: rng() < 0.3 ? 4 : 5 }[type] || 5;
-  const base = isOdo ? [
-      { t: 0.16, dirs: [-60, -55, -120, -130], lens: [8, 36, 36, 18] },
-      { t: 0.3, dirs: [-30, -25, -95, -105], lens: [8, 42, 42, 20] },
-      { t: 0.44, dirs: [-12, -8, -75, -90], lens: [8, 48, 48, 22] },
-    ] : [
-      { t: 0.25, dirs: [-50, -45, -105, -120], lens: [10, 42, 40, 22] },
-      { t: 0.55, dirs: [-10, -5, 50, 70], lens: [10, 48, 46, 24] },
-      type === 'grasshopper' ? { t: 0.85, dirs: [30, 55, 92, 100], lens: [12, 95, 95, 30] } : { t: 0.85, dirs: [25, 35, 85, 100], lens: [10, 55, 55, 26] },
-    ];
-  B.pose = isOdo ? 'basket' : 'spread';
-  for (let i = 2; i >= 0; i--) {     // hind first, as the legs are drawn
-    const b = base[i], dirJ = randRange(-6, 6);
-    B.legs[i] = { t: b.t, inset: 5, dirJ, dirs: b.dirs.map(d => d + dirJ), lens: b.lens.map((l, k) => l * (k === 0 ? 1 : u) * jitter(0.08)), curl: randRange(8, 14), tarsomeres, wk: 1 };
+  const lenK = rr(F.lenK), wkF = rr(F.wk), tarsomeres = randInt(F.tarsomeres[0], F.tarsomeres[1]);
+  const midFem = (isOdo ? 42 : 48) * u * lenK;
+  const tRanges = isOdo ? [[0.08, 0.2], [0.27, 0.37], [0.44, 0.54]] : [[0.12, 0.32], [0.42, 0.62], [0.72, 0.92]];   // odonate legs cluster forward on the thorax
+  const pairWk = [[0.85, 1.0], [0.9, 1.05], [1.0, 1.2]];
+  const saltatorial = type === 'grasshopper', corbicula = type === 'bee' && fam === 'apid' && rng() < 0.85;
+  for (let i = 0; i < 3; i++) {
+    const femK = i === 0 ? rr(F.frontK) : i === 2 ? rr(F.hindK) : 1;
+    const fem = midFem * femK * jitter(0.05);
+    const tib = fem * (saltatorial && i === 2 ? randRange(0.9, 1.05) : rr(F.tibR));
+    const tar = fem * (saltatorial && i === 2 ? randRange(0.28, 0.36) : rr(F.tarR));
+    const g = {
+      t: rr(tRanges[i]), inset: randRange(3, 8), wk: wkF * rr(pairWk[i]),
+      lens: [(saltatorial && i === 2 ? 12 : isOdo ? 8 : 10) * jitter(0.1), fem, tib, tar],
+      swell: i === 2 ? rr(F.swell) : lerp(1, rr(F.swell), 0.5), flare: rr(F.flare), curl: randRange(4, 20), tarsomeres,
+      bowSign: B.pose === 'walking' ? (i % 2 ? -1 : 1) : 1,
+      spines: null, spurs: randInt(F.spurs[0], F.spurs[1]), spurLen: randRange(0.8, 1.6), fringe: null, pads: rng() < F.pads, padK: randRange(1, 1.5), clawK: rr(F.clawK),
+      ang: null,
+    };
+    if (rng() < F.spines) {
+      const seg = F.spineSeg === 'both' ? (rng() < 0.6 ? 'both' : 'tibia') : F.spineSeg;
+      g.spines = { femur: seg !== 'tibia', tibia: seg !== 'femur', side: F.spineSide, spacing: rr(F.spineSp), len: rr(F.spineLen) };
+      g.spines.sw = g.spines.len > 0.75 ? SW.D : SW.F;
+    }
+    if (rng() < F.fringe) g.fringe = { spacing: randRange(2.6, 4.5), len: randRange(3, 7), tibia: true, femur: rng() < 0.5 };
+    // order specifics
+    if (saltatorial && i === 2) {   // saltatorial: huge femur with chevron muscles, serrated tibia, two pairs of apical spurs
+      g.herringbone = true; g.bowSign = -1; g.femW = randRange(13, 17); g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);
+      g.spines = { tibia: true, femur: false, side: 'outer', double: true, spacing: randRange(4, 6.5), len: randRange(0.6, 0.9) };
+      g.ang = B.pose === 'tucked' ? { F: [40, 62], fold: [24, 40], T: [5, 18] } : { F: [40, 65], fold: [30, 52], T: [5, 20] };
+    }
+    if (saltatorial && i === 1 && B.pose === 'tucked') g.ang = { F: [-20, 5], tib: [35, 70], T: [10, 25] };   // the mid leg keeps clear of the big hind femur
+    if (corbicula && i === 2) { g.corbicula = true; g.basitarsus = true; g.spurs = 0; g.ang = { F: [40, 62], tib: [85, 112], T: [8, 22] }; }   // corbicula + flat basitarsus, swung outward
+    if (type === 'mayfly' && i === 0 && B.pose === 'raised') g.ang = { F: [-88, -68], tib: [-100, -70], T: [-10, 10] };   // forelegs held straight out ahead
+    if (type === 'cicada' && i === 0 && rng() < 0.9) { g.femurTeeth = randInt(2, 3); g.femW = randRange(8.5, 10.5); }   // fore femora armed beneath with strong teeth
+    if (type === 'cranefly') g.shade = false;
+    if (type === 'fly') g.pulvilli = g.pads;
+    B.legs[i] = g;
   }
-  B.sig.push(B.pose, tarsomeres, B.thorax.subSeg, B.abd.seg, B.abd.ovipositor ? 1 : 0, ...B.legs.map(g => Math.round(g.dirJ / 3) + ':' + Math.round(g.curl / 2)));
+  B.sig.push(B.pose, fam || type, tarsomeres, Math.round(lenK * 5), B.thorax.subSeg, B.abd.seg, B.abd.ovipositor ? 1 : 0,
+    ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4)].join('')));
   return B;
 }
 
@@ -1833,61 +1932,91 @@ function generateInsectDetailed(seed, opts) {
   {
     // leg thickness follows body size, with slender-legged orders thinned further
     const wk0 = Math.sqrt(thorax.length / 60) * ({ beetle: 1.15, fly: 0.85, cranefly: 0.42, dragonfly: 0.8, damselfly: 0.62, mayfly: 0.72, moth: 0.85, lacewing: 0.8, grasshopper: 0.95 }[type] || 1);
+    const isOdo = type === 'dragonfly' || type === 'damselfly';
+    // Pose families: femur direction F, fold (tibia relative to the femur) and tarsus bend T per pair; 0 points
+    // outward, negative toward the head. spread is the classic plate; walking strides front forward / hind back;
+    // tucked folds the tibiae tight under the femora; raised lifts the forelegs toward the head (mantid-like);
+    // basket is the odonate prey basket, all legs forward.
+    // tib is the tibia's absolute direction (so it can never swing in across the body); fold is relative to the femur.
+    const LEG_POSES = {
+      spread:  [{ F: [-62, -32], tib: [-118, -82], T: [-22, -6] }, { F: [-15, 8], tib: [35, 70], T: [10, 28] }, { F: [22, 48], tib: [75, 105], T: [8, 22] }],
+      walking: [{ F: [-75, -48], tib: [-115, -88], T: [-18, -4] }, { F: [-5, 18], tib: [55, 88], T: [8, 25] }, { F: [45, 65], tib: [72, 105], T: [5, 20] }],
+      tucked:  [{ F: [-50, -28], tib: [-130, -100], T: [-22, -8] }, { F: [-12, 10], tib: [60, 95], T: [12, 30] }, { F: [35, 65], tib: [80, 110], T: [10, 28] }],
+      raised:  [{ F: [-88, -64], fold: [125, 160], T: [5, 25] }, { F: [-15, 8], tib: [35, 70], T: [10, 28] }, { F: [22, 48], tib: [75, 105], T: [8, 22] }],   // mantid fold: tibia back along the femur
+      basket:  [{ F: [-66, -45], tib: [-128, -100], T: [-15, -4] }, { F: [-35, -15], tib: [-110, -85], T: [-15, -4] }, { F: [-16, 2], tib: [-95, -70], T: [-18, -6] }],
+    };
+    const safeDirs = isOdo ? [[-60, -55, -120, -130], [-30, -25, -95, -105], [-12, -8, -75, -90]] : [[-50, -45, -105, -120], [-10, -5, 50, 70], [25, 35, 85, 100]];
+    const attachOf = g => { const y = thorax.yAt(g.t), hw = thorax.hwAt(y); return { y, hw, p: [hw - Math.min(g.inset, hw * 0.45), y] }; };
+    const makeSpec = (i, dirs, lenK) => {
+      const g = B.legs[i], wk = wk0 * g.wk;
+      const spec = {
+        dirs, lens: g.lens.map((l, k) => k === 0 ? l : l * lenK),
+        widths: [[6, 5], [7 * g.swell, 5], [5, 3.2 * g.flare], [3, 1.8]].map(w => [w[0] * wk, w[1] * wk]),
+        curl: g.curl, tarsomeres: g.tarsomeres, bowSign: g.bowSign, spines: g.spines, spurs: g.spurs, spurLen: g.spurLen, spursOuter: g.spursOuter,
+        fringe: g.fringe, pulvilli: g.pulvilli, padK: g.padK, clawK: g.clawK, herringbone: g.herringbone, femurTeeth: g.femurTeeth, shade: g.shade, corbicula: g.corbicula,
+      };
+      if (g.femW) spec.widths[1] = [g.femW * wk, 6 * wk];
+      if (g.herringbone) spec.widths[2] = [5.5 * wk, 3.2 * g.flare * wk];
+      if (g.corbicula) { spec.widths[2] = [4.5 * wk, 9.5 * wk]; spec.basitarsus = [7 * wk, 6 * wk]; }
+      return spec;
+    };
+    const rollDirs = (i, pose) => {
+      const g = B.legs[i], R = (pose === B.pose && g.ang) || LEG_POSES[pose][i];
+      const F = randRange(R.F[0], R.F[1]), tib = R.tib ? randRange(R.tib[0], R.tib[1]) : F + randRange(R.fold[0], R.fold[1]), T = randRange(R.T[0], R.T[1]);
+      return [F + randRange(-12, -2), F, tib, tib + T];
+    };
+    // Validate a pose against the body: femur tips ordered front < mid < hind along the axis, nothing on the mirror
+    // line, no femur tip / tibia / tarsus inside the abdomen outline below the thorax, no two legs within a femur
+    // width of each other, and the legs alone must not push the plate scale under 0.62 (wings come later).
+    const halfW = (sp, k) => (k <= 1 ? sp.widths[0][0] : k === 2 ? sp.widths[1][0] : k === 3 ? Math.max(sp.widths[2][0], sp.widths[2][1]) : sp.widths[3][0]) / 2;   // half width of joint segment k
+    const legsOk = (joints, specs) => {
+      const fy = joints.map(j => j[3][1]);
+      if (!(fy[0] < fy[1] && fy[1] < fy[2])) return 'order';
+      let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+      for (const j of joints) for (const p of j) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
+      for (let i = 0; i < 3; i++) for (let k = 0; k < joints[i].length; k++) {   // nothing on the mirror line; forelegs stay apart in front of the head
+        const p = joints[i][k], need = halfW(specs[i], Math.max(1, k)) + 2;
+        if (p[0] < (p[1] < 0 && !isOdo ? Math.max(need, P.headW * 0.3) : need)) return 'midline';   // the odonate basket is tiny beside its wide head
+      }
+      for (let i = 0; i < 3; i++) for (let k = 3; k + 1 < joints[i].length; k++) {
+        const j = joints[i], a = j[k], b = j[k + 1], n = Math.max(1, Math.ceil(vlen(sub(b, a)) / 3)), m = halfW(specs[i], k) + 3.5;
+        for (let q = 0; q <= n; q++) { const p = lerpP(a, b, q / n); if (p[1] > thorax.yBot + 1 && p[0] < abdomen.hwAt(p[1]) + m) return 'abdomen'; }
+      }
+      for (let a = 0; a < 3; a++) for (let b = a + 1; b < 3; b++)
+        for (let k = 2; k + 1 < joints[a].length; k++) for (let m = 2; m + 1 < joints[b].length; m++)   // femur onward; coxae and trochanters sit under the thorax
+          if (segDist(joints[a][k], joints[a][k + 1], joints[b][m], joints[b][m + 1]) < halfW(specs[a], k) + halfW(specs[b], m) + 2.5) return 'cross';
+      const W = 2 * Math.max(maxX + 6, P.abdW / 2, P.thoraxW / 2, P.headW / 2) + 2 * 24, H = Math.max(maxY + 6, abdomen.yBot + 10) - Math.min(minY - 6, -10) + 2 * 24;
+      if (Math.min(552 / W, 507 / H) < 0.62) return 'fit';
+      return null;
+    };
+    let specs, joints, why = null, lenK = 1, pose = B.pose, attempt = 0;
+    const reasons = [];
+    for (; attempt < 48; attempt++) {
+      pose = attempt < 16 ? B.pose : attempt < 32 ? (isOdo ? 'basket' : 'spread') : 'safe';
+      specs = []; joints = [];
+      for (let i = 0; i < 3; i++) {
+        specs[i] = makeSpec(i, pose === 'safe' ? safeDirs[i].slice() : rollDirs(i, pose), lenK);
+        joints[i] = legJoints(attachOf(B.legs[i]).p, specs[i]);
+      }
+      why = legsOk(joints, specs);
+      if (!why) break;
+      reasons.push(why);
+      if (why === 'fit') lenK *= 0.92;   // long-legged family on a long body: clamp the splay rather than the plate scale
+    }
+    meta.legRoll = { attempts: attempt + 1, pose, why, lenK, reasons };
+    B.sig.push(pose, ...specs.map(sp => Math.round(sp.dirs[1] / 12) + ':' + Math.round((sp.dirs[2] - sp.dirs[1]) / 12)));
     const legMeta = [];
     for (let i = 2; i >= 0; i--) {     // hind first so front overlaps
-      const g = B.legs[i], wk = wk0 * g.wk, dirJ = g.dirJ;
-      const y = thorax.yAt(g.t), hw = thorax.hwAt(y);
-      const attach = [hw - g.inset, y];   // coxa starts under the thorax edge
-      const spec = {
-        dirs: g.dirs.slice(), lens: g.lens.slice(),
-        widths: [[6, 5], [7, 5], [5, 3.2], [3, 1.8]].map(w => [w[0] * wk, w[1] * wk]),
-        curl: g.curl, spines: null, bowSign: 1, tarsomeres: g.tarsomeres, spurs: 2, spurLen: 1.1,
-      };
-      const W = (k, a, b) => { spec.widths[k] = [a * wk, b * wk]; };
-      switch (type) {
-        case 'grasshopper':
-          if (i === 2) {   // saltatorial: huge femur with chevron muscles, serrated tibia, two pairs of apical spurs
-            W(1, 15, 6); W(2, 5.5, 3.2); spec.lens[0] = 12; spec.herringbone = true; spec.bowSign = -1;
-            spec.spines = { tibia: true, side: 'outer', double: true, spacing: 5, len: 0.75 };
-            spec.spursOuter = true; spec.spurLen = 1.4;
-          } else spec.spurs = 1;
-          break;
-        case 'bee':
-          spec.spurs = 1;
-          if (i === 2) {   // corbicula + flat basitarsus; the leg is swung outward so the tibia clears the wing
-            W(2, 4.5, 9.5); spec.corbicula = true; spec.basitarsus = [7 * wk, 6 * wk]; spec.spurs = 0;
-            spec.dirs = [25 + dirJ, 52 + dirJ, 100 + dirJ, 115 + dirJ]; spec.lens = spec.lens.map((l, k) => k === 0 ? l : l * 1.18);
-          }
-          break;
-        case 'wasp':
-          if (i > 0) spec.spines = { tibia: true, side: 'outer', spacing: 7, len: 0.45, sw: SW.F };
-          break;
-        case 'fly':
-          spec.pulvilli = true; spec.spurs = 0;
-          spec.spines = { femur: true, tibia: true, side: 'outer', spacing: 7.5, len: 0.5, sw: SW.F };   // bristles
-          break;
-        case 'cranefly':
-          spec.spurs = 1; spec.spurLen = 1.6; spec.shade = false;
-          break;
-        case 'dragonfly': case 'damselfly':   // spiny legs held forward as a prey basket
-          spec.spurs = 0;
-          spec.spines = { femur: true, tibia: true, side: 'inner', spacing: 4.5, len: 1.0, sw: SW.F };
-          break;
-        case 'cicada':
-          if (i === 0) { W(1, 9.5, 5); spec.femurTeeth = 3; }   // fore femora armed beneath with strong teeth
-          break;
-        case 'mayfly':
-          spec.spurs = 0;
-          if (i === 0) spec.lens = spec.lens.map((l, k) => k === 0 ? l : l * 1.6);
-          break;
-        case 'lacewing': spec.spurs = 1; break;
-        case 'beetle': spec.spurLen = 0.9; break;
-      }
-      L.legs.push(...legEls(attach, spec, legMeta));
-      legMeta[legMeta.length - 1].hw = hw;
-      legMeta[legMeta.length - 1].pair = ['front', 'mid', 'hind'][i];
+      const at = attachOf(B.legs[i]);
+      L.legs.push(...legEls(at.p, specs[i], legMeta));
+      const lm = legMeta[legMeta.length - 1];
+      lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3];
     }
+    legMeta.reverse();   // front, mid, hind
     meta.legs = legMeta;
+    const prof = [];
+    for (let y = abdomen.yTop; y <= abdomen.yBot; y += 2) prof.push([Math.round(y * 10) / 10, Math.round(abdomen.hwAt(y) * 10) / 10]);
+    meta.abdomen = { yTop: abdomen.yTop, yBot: abdomen.yBot, profile: prof };
   }
 
   partEnd('legs');

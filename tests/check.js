@@ -50,6 +50,35 @@ for (let seed = 1; seed <= N; seed++) {
     if (leg.x < leg.hw * 0.5) fail(leg.pair + ' coxa starts too far inside thorax (' + leg.x.toFixed(1) + ' vs hw ' + leg.hw.toFixed(1) + ')');
     if (leg.hw < 8) fail(leg.pair + ' thorax half-width at attachment suspiciously small: ' + leg.hw.toFixed(1));
   }
+  // Leg pose invariants (meta.legs[i].pts is the joint polyline of the right-hand leg: attach, coxa, trochanter,
+  // femur tip, tibia tip, tarsomeres, claw tip). The engine re-rolls a pose that breaks these; here we assert the result.
+  {
+    const byPair = {}; for (const leg of meta.legs) byPair[leg.pair] = leg;
+    const fr = byPair.front, mi = byPair.mid, hi = byPair.hind;
+    if (fr && mi && hi && !(fr.femurTip[1] < mi.femurTip[1] && mi.femurTip[1] < hi.femurTip[1])) fail('femur tips not ordered front < mid < hind along the body');
+    const prof = meta.abdomen.profile, hwAt = y => {   // abdomen half-width at y, from the sampled profile
+      if (y < prof[0][0] || y > prof[prof.length - 1][0]) return 0;
+      const k = Math.min(prof.length - 2, Math.floor((y - prof[0][0]) / 2)), a = prof[k], b = prof[k + 1];
+      return a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 0 : (y - a[0]) / (b[0] - a[0]));
+    };
+    const segsCross = (a, b, c, d) => { const cr = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
+      const d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); };
+    for (const leg of meta.legs) {
+      const pts = leg.pts;
+      if (pts.some(p => p[0] < 0)) fail(leg.pair + ' leg crosses the mirror line');
+      for (let k = 3; k + 1 < pts.length; k++) {   // femur tip onward, sampled every 2 px, never inside the abdomen below the thorax
+        const a = pts[k], b = pts[k + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2));
+        for (let q = 0; q <= n; q++) { const x = a[0] + (b[0] - a[0]) * q / n, y = a[1] + (b[1] - a[1]) * q / n; if (y > meta.thorax.yBot && x < hwAt(y) - 0.5) { fail(leg.pair + ' leg inside the abdomen outline'); break; } }
+      }
+      const tip = leg.tip, tx = 300 + tip[0] * meta.scale, ty = meta.fitted.minY + (tip[1] - meta.bbox.minY) * meta.scale;
+      if (tx < 0 || tx > 600 || ty < 0 || ty > 600) fail(leg.pair + ' tarsus tip outside the plate');
+    }
+    for (let a = 0; a < meta.legs.length; a++) for (let b = a + 1; b < meta.legs.length; b++) {
+      const A = meta.legs[a].pts, Bp = meta.legs[b].pts; let hit = false;
+      for (let k = 2; k + 1 < A.length && !hit; k++) for (let m = 2; m + 1 < Bp.length; m++) if (segsCross(A[k], A[k + 1], Bp[m], Bp[m + 1])) { hit = true; break; }
+      if (hit) fail(meta.legs[a].pair + ' and ' + meta.legs[b].pair + ' legs cross');
+    }
+  }
   // stroke widths >= 0.5 after scale
   const sws = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * meta.scale);
   if (sws.some(w => w < 0.49)) fail('stroke width below 0.5 after scale');
