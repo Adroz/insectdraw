@@ -2195,11 +2195,13 @@ function generateInsectDetailed(seed, opts) {
         vs.push(bowed(b, U, -W * 0.015, wStem), bowed(b, D, W * 0.012, wStem), bowed(U, D, 0, wBr));
         vs.pre = vs.length; vs.stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0 }; return vs;
       }
-      // discocellular bends set by angle from the cell's cross axis: dc1 back from the upper corner, dc2 back from the lower
-      const ax = norm(sub(lerpP(U, D, 0.5), b)); let nn = perp(ax); if (dot(nn, sub(D, U)) < 0) nn = mul(nn, -1);
+      // discocellular bends, measured against the cell's own chord U -> D: the upper piece leans back from it by t1, the
+      // middle piece runs parallel to it, the lower piece leans forward by t3, so the dcv is a soft chevron pointing at
+      // the base whatever the chord's slant (the back offsets are capped against the span on broad cells)
+      const uUD = norm(sub(D, U)); let nUD = perp(uUD); if (dot(nUD, sub(lerpP(U, D, 0.5), b)) < 0) nUD = mul(nUD, -1);   // nUD points toward the apex
       const lUD = vlen(sub(D, U)), t1 = randRange(34, 46) * D2R, t3 = randRange(29, 41) * D2R;
-      const dc1 = add(U, mul(add(mul(nn, Math.cos(t1)), mul(ax, -Math.sin(t1))), lUD * 0.33));
-      const dc2 = sub(D, mul(add(mul(nn, Math.cos(t3)), mul(ax, Math.sin(t3))), lUD * 0.3));
+      const dc1 = sub(add(U, mul(uUD, lUD * 0.33)), mul(nUD, Math.min(lUD * 0.33 * Math.tan(t1), W * 0.045)));
+      const dc2 = sub(add(U, mul(uUD, lUD * 0.67)), mul(nUD, Math.min(lUD * 0.33 * Math.tan(t3), W * 0.035)));
       const scRoot = [b[0] + W * 0.03, b[1] + (hindW ? H * 0.02 : -H * 0.04)];
       const scE = nearestOutlinePoint(poly, [scX, topAt(wing, scX)]), aE = nearestOutlinePoint(poly, [aX, botAt(wing, aX)]), a3E = nearestOutlinePoint(poly, [aX * 0.35, botAt(wing, aX * 0.35)]);
       const lane = (id, pl, sw, extra) => Object.assign({ id, pl, sw, noFork: true, noJoin: true, stub: false }, extra || {});
@@ -2221,18 +2223,24 @@ function generateInsectDetailed(seed, opts) {
       lanes.push(lane('A2', bowed([b[0], b[1] + H * 0.03], aE, W * 0.018, wBr), wBr));                                   // 2A to the tornus
       const hasA3 = rng() < 0.6;
       if (hasA3) lanes.push(lane('A3', bowed([b[0], b[1] + H * 0.05], a3E, W * 0.012, SW.F), SW.F));                  // 3A, short, at the base
-      // the discocellular: from the cell's upper corner onto M1 just past its root, on to M2, down to the lower corner
-      const r = 0.008, named = [{ a: 'CT', ua: U[0] / W - 0.002, b: 'M1', ub: dc1[0] / W + r * 0.6, reach: r, sw: wBr, bow: 0,
-        then: [{ b: 'M2', ub: dc2[0] / W + r * 0.6, ang: [90, 152] }, { b: 'CB', ub: D[0] / W - r * 0.6, ang: false }] }];
+      // the discocellular: three named crossveins placed independently (each near end fixed at its node, so a piece the
+      // rule cannot place costs only its own angle check): from the cell's upper corner onto M1 just past its root, from
+      // M1's root onto M2 just past its root, from M2's root down onto the cell's lower edge at its corner
+      const r = 0.02, named = [
+        { a: 'CT', ua: U[0] / W - 0.002, b: 'M1', ub: dc1[0] / W + r * 0.5, reach: r, sw: wBr, bow: 0 },
+        { a: 'M1', ua: dc1[0] / W + 0.001, b: 'M2', ub: dc2[0] / W + r * 0.5, reach: r, sw: wBr, bow: 0, ang: [90, 152] },
+        { a: 'M2', ua: dc2[0] / W + 0.001, b: 'CB', ub: D[0] / W - 0.006, reach: 0.012, sw: wBr, bow: 0 },
+      ];
       const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 0.55, angle: randRange(116, 130), lean: -1, stubProb: 0, bowAmt: 0, noSites: true });
       const laneOf = {}; for (const l of grown.lanes) laneOf[l.id] = l;
-      // the dcv as one polyline from its placed pieces (a piece the angle rule could not place falls back to a straight
-      // segment between its nodes, so the cell always closes); M1 / M2 start where the dcv lands on them
+      // the dcv as one polyline from its placed pieces, each re-rooted where the previous one landed (a piece the angle
+      // rule could not place falls back to a straight segment between its nodes, so the cell always closes); M1 / M2
+      // start where the dcv lands on them
       const pieces = [['CT', 'M1', dc1], ['M1', 'M2', dc2], ['M2', 'CB', D]];
       let dcv = [], prev = U;
       for (const [la, lb, nb] of pieces) {
         const j = grown.joins.find(j => j[0] === la && j[1] === lb);
-        const seg = j ? j[3] : bowVein(prev, nb, 0, 6);
+        const seg = j ? [prev].concat(j[3].slice(1)) : bowVein(prev, nb, 0, 6);
         prev = seg[seg.length - 1];
         if (lb === 'M1' || lb === 'M2') { const l = laneOf[lb]; l.pl = [prev].concat(l.pl.filter(p => p[0] > prev[0] + 0.01)); }
         dcv = dcv.length ? dcv.concat(seg.slice(1)) : seg.slice();

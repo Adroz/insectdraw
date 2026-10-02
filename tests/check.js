@@ -83,18 +83,25 @@ for (let seed = 1; seed <= N; seed++) {
   const sws = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * meta.scale);
   if (sws.some(w => w < 0.49)) fail('stroke width below 0.5 after scale');
   if (/opacity|gradient|filter|url\(/.test(svg)) fail('non-eink construct present');
-  // grown venation (bee / wasp / fly / cranefly / dragonfly / damselfly): every crossvein junction is obtuse within
-  // R-D's band, no crossvein is dropped more often than one is placed, and nothing in the wings layer degenerates to
-  // a single-point polyline. For Odonata the angle band is asserted on the ladder rungs only (minAngle / maxAngle are
-  // measured on rungs placed by the slide rule); the edges of the multi-row Voronoi regions are the research model
-  // itself and are slid toward the band where possible but never dropped, so they are exempt.
-  if (['bee', 'wasp', 'fly', 'cranefly', 'dragonfly', 'damselfly'].includes(meta.type)) {
+  // grown venation (every winged type: bee / wasp / fly / cranefly / dragonfly / damselfly / lacewing / mayfly /
+  // grasshopper / cicada / moth): every crossvein junction is obtuse within R-D's band, no crossvein is dropped more
+  // often than one is placed, and nothing in the wings layer degenerates to a single-point polyline. The angle band is
+  // asserted on the rungs placed by the slide rule (minAngle / maxAngle are measured on those); the edges of the
+  // multi-row Voronoi regions (Odonata, the grasshopper archedictyon) are the research model itself and are slid toward
+  // the band where possible but never dropped, so they are exempt, as are structural obliques with their own band (the
+  // odonate triangle side and bridge, the middle piece of the lepidopteran discocellular). A moth plate's only joins
+  // are the six discocellular pieces, and a piece the rule cannot place is drawn straight between its nodes so the
+  // cell still closes, so the drop-count test does not apply to it.
+  if (meta.type !== 'beetle') {
     const s = meta.wingStats;
     if (!s) fail('no wingStats on a grown wing');
     else {
       if (s.joins > 0 && (s.minAngle < 100 || s.maxAngle > 145)) fail('junction angle outside 100-145: ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
-      if (s.dropped > s.joins) fail('more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
+      if (meta.type !== 'moth' && s.dropped > s.joins) fail('more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
       if ((meta.type === 'dragonfly' || meta.type === 'damselfly') && s.rungs < 40) fail('too few ladder rungs on an odonate: ' + s.rungs);
+      if (meta.type === 'mayfly' && s.rungs < 60) fail('too few ladder rungs on a mayfly: ' + s.rungs);
+      if (meta.type === 'lacewing' && s.rungs < 40) fail('too few rungs on a lacewing: ' + s.rungs);
+      if (meta.type === 'cicada' && s.joins < 4) fail('cicada nodal line incomplete: ' + s.joins + ' joins');
     }
   }
   for (const w of meta.layers.wings) { const pl = w.match(/<polyline points="([^"]*)"/); if (pl && pl[1].trim().split(/\s+/).length < 2) fail('wing polyline with fewer than 2 points'); }
