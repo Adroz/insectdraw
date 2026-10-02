@@ -44,8 +44,12 @@ the end are what we derive from them for `growVeins`.
 - Between the two branches of any fork there is an interpolated (intercalary) vein of the
   opposite corrugation (6). Visible as the intercalaries of mayflies and odonates.
 - Longitudinals normally reach the margin. In Diptera and Hymenoptera some stop short and
-  are "joined distally by transverse veins forming closed cells" (3, §5). So closed cells at
-  the apex are the exception that defines those two orders; elsewhere the apex is open.
+  are "joined distally by transverse veins forming closed cells" (3, §5). Two different
+  things are meant by "closed" here: in Odonata, Neuroptera, Ephemeroptera and Orthoptera the
+  membrane is tiled right to the margin by *secondary* crossveins, so every cell is closed
+  but the longitudinals all reach the edge; in Hymenoptera and Diptera a few *named* cells
+  are closed by crossveins in the basal two-thirds, the longitudinals then stop, and the
+  apical third is open membrane with no veins at all.
 - Vein reduction with small size is by **fusion** of adjacent veins (partial or complete,
   proximal or distal) or **elimination** of branches, not by random deletion (3, §4).
 - Thickness: veins are thickest at the base and leading edge and thin distally; primary
@@ -134,16 +138,47 @@ The jogs in the screenshot come from three things the literature rules out:
   clipped to the two lanes. That is the 1-D Voronoi of the strip and yields a ladder of
   near-rectangular cells with obtuse corners when the lanes diverge. Where the strip is wider
   than ~2.2 cells, drop a second row of sites (2-D Voronoi) so pentagons/hexagons appear.
-- R-D **Junction angle**: after placing a crossvein, rotate it about its midpoint so both
-  end angles lie in [105°, 140°]; reject and resample if impossible.
+- R-D **Junction angle**: a crossvein's near end is fixed on lane A; choose its far end's
+  position along lane B (search ± one cell length) so that the angle with each lane's local
+  tangent lies in [105°, 140°] on the acute-facing side; if no position on B satisfies both,
+  drop that crossvein. Never rotate a crossvein off its lanes.
 - R-E **No free ends**: a crossvein exists only if both ends land on lanes that exist at that
   u; stubs are longitudinal only (M, Cu in Hymenoptera; CuA2 in Diptera).
-- R-F **Open apex**: joins stop at `uOpen`; family gene (Odonata 1.0, Hymenoptera 0.7–0.9,
-  Diptera 0.75, Lepidoptera 0.55 i.e. only the discal cell).
-- R-G **Weight**: Murray-style, from tips to base: a lane's weight increases by one level
-  after each fork it is parent to; crossveins one level below the lighter of their two lanes.
+- R-F **Open apex**: joins stop at `uOpen`; family gene. Orders whose longitudinals all
+  reach the margin tile to the edge (`uOpen` 1.0: Odonata, Neuroptera, Ephemeroptera,
+  Orthoptera). Orders that close named cells then go open: Hymenoptera 0.7–0.9, Diptera
+  0.75; Lepidoptera close only the discal cell (0.55) and the rest of the wing has no
+  crossveins at all, only the fan of longitudinals.
+- R-G **Weight**: base weight by trunk rank, C = H, Sc/R/M+Cu stems = O, named branches = D,
+  anal and crossveins = F. Within a fork tree apply Murray from the tips back: a stem that is
+  parent to a fork is one level above its heavier child, capped at O (H is the costa's alone).
+  Crossveins are one level below the lighter of their two lanes, floor F.
 - R-H **Density gradient**: site radius shrinks toward the trailing edge and tip (1, 2), so
   cells get smaller and rounder there; a per-order factor.
+
+## Lane tables to start from
+
+Measured on `ref/hym-apis.png` and `ref/hym-ross.png` (u = span fraction, s = chord fraction
+from the costa; ±0.04 jitter on every value is fine). Hymenoptera forewing:
+
+| lane | from (u, s) | to (u, s) / end | forks | notes |
+|---|---|---|---|---|
+| C | (0, 0.02) | stigma base | – | weight H, stops at the stigma |
+| Sc+R | (0.02, 0.34) | stigma base node | Rs leaves at u 0.30–0.40 (apid: at the basal vein; ichneumonid: under the stigma) | O |
+| R1 | stigma tip node | (xMarg, 0.1) on the margin, or stub if the marginal cell is open | – | D; closes the marginal cell against Rs |
+| Rs | fork off Sc+R | same margin node as R1 | – | D; submarginal cells sit between R1 and Rs, their r-m crossveins at u 0.55, 0.68, 0.80 for three submarginals |
+| M+Cu | (0.02, 0.54) | forks at the basal vein u 0.22–0.34 | → M (s 0.40 → stub at u ≈ uOpen), Cu (s 0.62 → stub at u ≈ uOpen − 0.1) | O stem, D branches |
+| basal vein | Sc+R at u 0.30 | M+Cu fork node | – | D in wasps, O in bees; slants back toward the base (top end more distal than foot) |
+| recurrent 1m-cu, 2m-cu | M | Cu | – | at u 0.45 and 0.62; close the discoidal cells |
+| cu-a | Cu near the fork | A | – | at u 0.26 |
+| A | (0.02, 0.76) | margin at u 0.45–0.55, s 0.85 | – | F |
+| A2 (sawfly, some bees) | (0.02, 0.86) | margin at u 0.25 | – | F |
+
+Dragonfly forewing (for contrast; from `ref/odo-dragonfly.jpg` and the Ris plates): C, Sc (to
+the nodus), R1 (under C to the tip), R+M stem splitting at the arculus u 0.17 into R2/R3/R4 and
+MA/MP, CuA, CuP, A1, all to the margin; intercalaries IR2, IR3 start mid-wing between the R
+branches; crossveins everywhere (`uOpen` 1.0) with one row near the costa and 2–4 rows toward
+the trailing edge.
 
 ## Open questions
 
