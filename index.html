@@ -1978,12 +1978,13 @@ function generateInsectDetailed(seed) {
     const G = {
       hw: randRange(0.13, 0.21), tipY: randRange(-0.25, 0.15), sharp: randRange(0, 1), bulge: randRange(0.82, 1.12),
       hindL: randRange(0.48, 0.64), hindW: randRange(1.1, 1.45), spread: randRange(10, 26), heavy: rng() < 0.4,
-      nM: randInt(2, 4), cuFork: rng() < 0.8, nx0: randRange(0.46, 0.6), slant: randRange(0.06, 0.2), inset: randRange(0.05, 0.1),
+      nM: randInt(2, 4), cuFork: rng() < 0.8, nx0: randRange(0.46, 0.6), slant: randRange(0.04, 0.14), inset: randRange(0.05, 0.1),
       ulnar: rng() < 0.6, nxb: randInt(1, 3), apexBow: randRange(-0.04, 0.04), anal: randInt(1, 3), ambGap: rng() < 0.25,
+      zig: randRange(0.015, 0.04), mcuFork: rng() < 0.7, uFork: randRange(0.1, 0.2),   // nodal-line zigzag; M and CuA leaving a common basal stem
     };
     const nA = 2 + G.nM + (G.cuFork ? 2 : 1);
     meta.wingSig = ['cic', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), nA, G.nM, G.cuFork ? 1 : 0, G.ulnar ? 1 : 0, G.nxb, G.anal, G.ambGap ? 1 : 0, Math.round(G.tipY * 5), Math.round(G.sharp * 2),
-      Math.round(G.nx0 * 10), Math.round(G.slant * 10), Math.round(G.hw * 50), Math.round(G.hindL * 10), Math.round(G.inset * 20)].join(',');
+      Math.round(G.nx0 * 10), Math.round(G.slant * 10), Math.round(G.hw * 50), Math.round(G.hindL * 10), Math.round(G.inset * 20), G.mcuFork ? 1 : 0, Math.round(G.zig * 100)].join(',');
     const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.68, hind: true }, { L: Lw, k: 1, th: theta, t: 0.4, hind: false }];
     const s = G.sharp;
     for (const d of defs) {
@@ -2004,16 +2005,21 @@ function generateInsectDetailed(seed) {
       const amb = []; for (let i = i0; i <= i1; i++) { const p = poly[(i + poly.length) % poly.length]; amb.push(add(p, mul(norm(sub([cx, cy], p)), Y(G.inset) * 1.6))); }
       const ambPl = vein(amb.filter((_, k) => k % 3 === 0).concat([amb[amb.length - 1]]), 4);
       L.wings.push(emitLocalPolyline(wing, ambPl, SW.D));
-      // basal longitudinals to the nodal line (s = chord fraction from the costa)
-      const nx = G.nx0, nodal = ['N0', 'N1', 'N2', 'N3'].map((id, i) => g.node(id, nx - G.slant * i / 3, lerp(0.14, 0.72, i / 3)));
-      g.node('bScR', 0.02, 0.3); g.node('bM', 0.02, 0.42); g.node('bCuA', 0.02, 0.52); g.node('bCuP', 0.02, 0.62); g.node('bA', 0.02, 0.74);
+      // basal longitudinals to the nodal line (s = chord fraction from the costa). The nodal line slants back toward
+      // the base and zigzags (N1 a little distal, N2 a little basal) so each crossvein meets the veins obliquely (R2);
+      // each basal vein is a three-segment chain with alternating bows (R1) so the long basal cells have wavy sides.
+      const nx = G.nx0, nodal = ['N0', 'N1', 'N2', 'N3'].map((id, i) => g.node(id, nx - G.slant * i / 3 + (i === 1 ? G.zig : i === 2 ? -G.zig : 0), lerp(0.14, 0.72, i / 3)));
+      g.node('bScR', 0.02, 0.3); g.node('bM', 0.02, 0.44); g.node('bCuA', 0.02, 0.52); g.node('bCuP', 0.02, 0.62); g.node('bA', 0.02, 0.74);
       const wB = G.heavy ? SW.H : SW.O;
-      g.chain(['bScR', g.node('sr1', nx * 0.5, 0.17), 'N0'], { vein: 'ScR', sw: wB, bows: [-0.02, -0.01] });
-      g.chain(['bM', g.node('m1', nx * 0.5, 0.36), 'N1'], { vein: 'M', sw: wB, bows: [0.015, 0.01] });
-      g.chain(['bCuA', g.node('ca1', nx * 0.5, 0.52), 'N2'], { vein: 'CuA', sw: SW.O, bows: [0.02, 0.01] });
-      g.chain(['bCuP', g.node('cp1', nx * 0.45, 0.66), 'N3'], { vein: 'CuP', sw: SW.D, bows: [0.02, 0.01] });
+      g.chain(['bScR', g.node('sr1', nx * 0.33, 0.2), g.node('sr2', nx * 0.66, 0.15), 'N0'], { vein: 'ScR', sw: wB, bows: [-0.025, 0.02, -0.015] });   // Sc+R under the costa
+      const uF = G.mcuFork ? G.uFork : 0.02, mRoot = G.mcuFork ? 'mcu' : 'bM', cRoot = G.mcuFork ? 'mcu' : 'bCuA';
+      if (G.mcuFork) { g.node('mcu', uF, 0.47); g.chain(['bM', 'mcu'], { vein: 'MCu', sw: wB, bow: 0.015 }); }                // M+CuA stem, forking (ref cic-cicada)
+      const uN = id => g.at(id)[0] / d.L;   // each vein's intermediate nodes sit between its root and its own nodal node
+      g.chain([mRoot, g.node('m1', lerp(uF, uN('N1'), 0.36), 0.38), g.node('m2', lerp(uF, uN('N1'), 0.7), 0.35), 'N1'], { vein: 'M', sw: wB, bows: [-0.03, 0.02, -0.015] });
+      g.chain([cRoot, g.node('ca1', lerp(uF, uN('N2'), 0.36), 0.53), g.node('ca2', lerp(uF, uN('N2'), 0.7), 0.5), 'N2'], { vein: 'CuA', sw: SW.O, bows: [0.03, -0.02, 0.015] });
+      g.chain(['bCuP', g.node('cp1', uN('N3') * 0.3, 0.66), g.node('cp2', uN('N3') * 0.62, 0.69), 'N3'], { vein: 'CuP', sw: SW.D, bows: [0.025, -0.02, 0.015] });
       for (let i = 0; i + 1 < nodal.length; i++) g.edge(nodal[i], nodal[i + 1], { sw: SW.D, bow: randRange(-0.08, 0.08) });        // nodal line
-      for (let q = 0; q < G.nxb; q++) { const t = lerp(0.3, 0.8, (q + 0.5) / G.nxb); g.cross('M', t, 'CuA', t + randRange(-0.05, 0.05), { sw: SW.F }); }
+      for (let q = 0; q < G.nxb; q++) { const t = lerp(0.45, 0.85, (q + 0.5) / G.nxb); g.cross('M', t, 'CuA', t + randRange(-0.06, 0.06), { sw: SW.F }); }
       if (rng() < 0.5) g.cross('ScR', 0.6, 'M', 0.62, { sw: SW.F });
       // apical veins: from the nodal nodes (M and Cu through short stems that fork) to targets spaced along the ambient vein
       const nApex = d.hind ? Math.max(3, nA - 3) : nA;
@@ -2036,9 +2042,11 @@ function generateInsectDetailed(seed) {
       const apical = [];
       for (const [src, k] of sources) {
         if (k >= nApex) continue;
-        const a = g.at(src), b = targets[k], mid = add(lerpP(a, b, randRange(0.4, 0.6)), mul(perp(norm(sub(b, a))), vlen(sub(b, a)) * (G.apexBow + randRange(-0.04, 0.04))));
-        const name = 'ap' + k; g.nodeAt(name + 'm', mid); g.nodeAt(name + 'e', b);
-        g.chain([src, name + 'm', name + 'e'], { vein: name, sw: SW.D, bow: 0 });
+        // two intermediate nodes offset to opposite sides so the apical vein undulates through its cell corners (R1)
+        const a = g.at(src), b = targets[k], nn = perp(norm(sub(b, a))), L2 = vlen(sub(b, a)), k1 = G.apexBow + randRange(-0.03, 0.03);
+        const name = 'ap' + k;
+        g.nodeAt(name + 'm', add(lerpP(a, b, randRange(0.3, 0.4)), mul(nn, L2 * k1))); g.nodeAt(name + 'n', add(lerpP(a, b, randRange(0.65, 0.75)), mul(nn, L2 * (k1 * 0.4 - randRange(0.0, 0.03))))); g.nodeAt(name + 'e', b);
+        g.chain([src, name + 'm', name + 'n', name + 'e'], { vein: name, sw: SW.D, bows: [0.01, -0.01, 0.01] });
         apical.push(name);
       }
       if (G.ulnar && !d.hind) { const t0 = randRange(0.4, 0.6); for (let i = 0; i + 1 < apical.length; i++) g.cross(apical[i], t0 + randRange(-0.05, 0.05), apical[i + 1], t0 + randRange(-0.05, 0.05), { sw: SW.F }); }   // a row of crossveins across the apical cells
