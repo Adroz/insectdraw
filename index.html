@@ -1062,6 +1062,9 @@ function wingGraph(wing, Lw) {
 // uOpen and stub lanes fade past their last junction (R-F). Weights follow Murray from the tips back: a stem is one level
 // above its children (capped at O), a crossvein one below its lighter lane (R-G). Site spacing shrinks toward the tip and
 // trailing edge by G.grad (R-H). Returns { lanes, joins, forks, stats } for the signature and the angle assertions.
+// Mesh orders (Odonata) pass pre-built primaries as lanes (`pl`), wall lanes that are not drawn (`noDraw`: the costa and
+// the trailing edge), an absolute cell size (`cell`), excluded intervals (`gaps`) and `rows2`, which switches each strip
+// segment between a one-row ladder and rows of Voronoi cells by width / cell (Hoffmann 2018); see the strip loop.
 const SW_LV = [SW.F, SW.D, SW.O, SW.H];
 const swLevel = sw => Math.max(0, SW_LV.indexOf(sw));
 const swBelow = sw => SW_LV[Math.max(0, swLevel(sw) - 1)];
@@ -1071,14 +1074,22 @@ function growVeins(g, G) {
   const uOpen = G.uOpen, k = G.k === undefined ? 1.1 : G.k, minSep = G.minSep === undefined ? 0.07 : G.minSep;
   const angLo = 105, angHi = 140, angT = G.angle === undefined ? 120 : G.angle, lean = G.lean === undefined ? -1 : G.lean;
   const bowAmt = G.bowAmt === undefined ? 0.02 : G.bowAmt, stubLen = G.stubLen === undefined ? 0.08 : G.stubLen;
-  const stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0 };
+  const stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
   const joins = [], lanes = [], laneOf = {};
-  let forks = 0;
+  let forks = 0, lastPl = null;   // lastPl: the polyline of the crossvein `place` last drew (a wall for the multi-row regime)
   const sAt = p => { const r = wing.yRange(p[0]); return r && r[1] > r[0] ? (p[1] - r[0]) / (r[1] - r[0]) : 0.5; };
   const chord = u => { const r = wing.yRange(u * Lw); return r ? Math.max(1, r[1] - r[0]) : 1; };
   // point and unit tangent of a lane curve at span position x (curves run base -> apex and are monotone in x)
   const atX = (pl, x) => {
-    for (let i = 0; i + 1 < pl.length; i++) {
+    if (pl._mono === undefined) { pl._mono = true; for (let i = 0; i + 1 < pl.length; i++) if (pl[i + 1][0] < pl[i][0]) { pl._mono = false; break; } }
+    let i = 0;
+    if (pl._mono) {   // x non-decreasing: binary search for the first segment whose far end reaches x (the same one the scan below finds)
+      if (x < pl[0][0] || x > pl[pl.length - 1][0]) return null;
+      let lo = 0, hi = pl.length - 2;
+      while (lo < hi) { const mid = (lo + hi) >> 1; if (pl[mid + 1][0] >= x) hi = mid; else lo = mid + 1; }
+      i = lo;
+    }
+    for (; i + 1 < pl.length; i++) {
       const a = pl[i], b = pl[i + 1];
       if (x >= Math.min(a[0], b[0]) && x <= Math.max(a[0], b[0])) { const t = b[0] === a[0] ? 0 : (x - a[0]) / (b[0] - a[0]); return { p: lerpP(a, b, t), d: norm(sub(b, a)) }; }
     }
@@ -1110,10 +1121,14 @@ function growVeins(g, G) {
   };
   const addLane = (spec, extra) => {
     const l = Object.assign({ u0: 0.02, uEnd: 0.96, sw: SW.D, ctrl: 2 }, spec, extra || {});
-    l.id = spec.id || 'L' + lanes.length; l.noFork = !!spec.noFork; l.noJoin = !!spec.noJoin;
+    l.id = spec.id || 'L' + lanes.length; l.noFork = !!spec.noFork; l.noJoin = !!spec.noJoin; l.noDraw = !!spec.noDraw;
     l.stub = spec.stub === true || (spec.stub !== false && !spec.end && rng() < (G.stubProb || 0));
     l.bow = spec.bow === undefined ? randRange(-bowAmt, bowAmt) : spec.bow;
-    build(l); lanes.push(l); laneOf[l.id] = l;
+    if (spec.pl) {   // a pre-built primary (odonate fan): used as is, never rebuilt; its last point may be an outline sample
+      l.pl = spec.pl; l.x0 = l.pl[0][0]; l.x1 = l.pl[l.pl.length - 1][0]; l.uLast = 0; l.junc = [];
+      l.u0 = l.x0 / Lw; l.uEnd = l.x1 / Lw; l.s0 = sAt(l.pl[0]); l.s1 = sAt(l.pl[l.pl.length - 1]);
+    } else build(l);
+    lanes.push(l); laneOf[l.id] = l;
     return l;
   };
   const fork = (par, uf, spec) => {   // a child lane leaving the parent's curve at u = uf (R-A dichotomy)
@@ -1126,11 +1141,18 @@ function growVeins(g, G) {
   };
   for (const spec of G.lanes) addLane(spec);
   for (const l of lanes.slice()) if (l.fork) fork(l, l.fork.u, l.fork);   // the forks a family always has (M+Cu at the basal vein)
-  const joinSw = (a, b) => swBelow(swLevel(a.sw) < swLevel(b.sw) ? a.sw : b.sw);
+  const joinSw = (a, b) => G.joinSw || swBelow(swLevel(a.sw) < swLevel(b.sw) ? a.sw : b.sw);
   const junctionOK = (l, x, gap) => l.junc.every(j => Math.abs(j - x) >= gap);
   const crossesOther = (A, B, la, lb) => {   // would the chord A-B pass through a third lane? (crossveins never cross a longitudinal)
-    const d = sub(B, A);
-    for (const l of lanes) { if (l === la || l === lb) continue; for (let i = 0; i + 1 < l.pl.length; i++) { const t = lineSegT(A, d, l.pl[i], l.pl[i + 1]); if (t !== null && t > 0.03 && t < 0.97) return true; } }
+    const d = sub(B, A), xlo = Math.min(A[0], B[0]), xhi = Math.max(A[0], B[0]);
+    for (const l of lanes) {
+      if (l === la || l === lb || l.x1 < xlo || l.x0 > xhi) continue;
+      for (let i = 0; i + 1 < l.pl.length; i++) {
+        const p = l.pl[i], q = l.pl[i + 1];
+        if ((p[0] < xlo && q[0] < xlo) || (p[0] > xhi && q[0] > xhi)) continue;   // a segment wholly beside the chord's x-span cannot cross it
+        const t = lineSegT(A, d, p, q); if (t !== null && t > 0.03 && t < 0.97) return true;
+      }
+    }
     return false;
   };
   // one crossvein: near end A on lane la (tangent dA); far end on lane lb near x = xb, slid within +-reach so that both
@@ -1139,6 +1161,7 @@ function growVeins(g, G) {
   const place = (la, A, dA, lb, xb, reach, o) => {
     const bow = o.bow === undefined ? randRange(-0.03, 0.03) : o.bow;
     const h0 = atX(lb.pl, xb), ln = h0 && sAt(A) < sAt(h0.p) ? lean : -lean;
+    const lo = o.ang ? o.ang[0] : angLo, hi = o.ang ? o.ang[1] : angHi;   // o.ang: a structural oblique (triangle side, bridge) with its own band
     let best = null;
     for (let j = -16; j <= 16; j++) {
       const x = xb + j / 16 * reach, h = atX(lb.pl, x);
@@ -1147,13 +1170,14 @@ function growVeins(g, G) {
       if (crossesOther(A, h.p, la, lb)) continue;
       const pl = bowVein(A, h.p, bow, 6);
       const aA = obtuse(dA, norm(sub(pl[1], pl[0]))), aB = obtuse(h.d, norm(sub(pl[pl.length - 1], pl[pl.length - 2])));
-      if (aA < angLo || aA > angHi || aB < angLo || aB > angHi) continue;
+      if (aA < lo || aA > hi || aB < lo || aB > hi) continue;
       const score = Math.abs(aA - angT) + Math.abs(aB - angT) + Math.abs(j) / 16 * 6 + (Math.sign(h.p[0] - A[0]) === ln ? 0 : 12);
       if (!best || score < best.score) best = { score, p: h.p, pl, aA, aB };
     }
     if (!best) { stats.dropped++; return null; }
-    g.poly(best.pl, o.sw);
-    stats.joins++; stats.minAngle = Math.min(stats.minAngle, best.aA, best.aB); stats.maxAngle = Math.max(stats.maxAngle, best.aA, best.aB);
+    g.poly(best.pl, o.sw); lastPl = best.pl;
+    stats.joins++;
+    if (!o.ang) { stats.rungs++; stats.angSum += best.aA + best.aB; stats.minAngle = Math.min(stats.minAngle, best.aA, best.aB); stats.maxAngle = Math.max(stats.maxAngle, best.aA, best.aB); }
     const uA = A[0] / Lw, uB = best.p[0] / Lw;
     la.uLast = Math.max(la.uLast, uA); lb.uLast = Math.max(lb.uLast, uB); la.junc.push(A[0]); lb.junc.push(best.p[0]);
     joins.push([la.id, lb.id, (uA + uB) / 2]);
@@ -1161,6 +1185,7 @@ function growVeins(g, G) {
   };
   const pairKey = (a, b) => a.id + '|' + b.id;
   const named = {};   // pair key -> u of each named crossvein's middle: walls the site walk restarts from
+  const namedW = {};  // pair key -> [{ u, pl, from }]: the same walls with their polylines, bounding the multi-row regions
   // named crossveins (and the forks that hang off them, e.g. Rs leaving Sc+R at the top of the basal vein), in table
   // order; entries marked `early` are structural (they create lanes) and go before the random forks, the rest after,
   // so no lane is ever grown across an existing crossvein
@@ -1169,9 +1194,12 @@ function growVeins(g, G) {
     const la = laneOf[nv.a], lb = laneOf[nv.b]; if (!la || !lb) return;
     const h = atX(la.pl, nv.ua * Lw); if (!h) return;
     const xb = (nv.ub === undefined ? nv.ua : nv.ub) * Lw;
-    const p = place(la, h.p, h.d, lb, xb, (nv.reach === undefined ? 0.05 : nv.reach) * Lw, { sw: nv.sw || joinSw(la, lb), bow: nv.bow });
-    if (p) { const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um); }
+    const p = place(la, h.p, h.d, lb, xb, (nv.reach === undefined ? 0.05 : nv.reach) * Lw, { sw: nv.sw || joinSw(la, lb), bow: nv.bow, ang: nv.ang });
+    if (p) { const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um);
+      const wEntry = { u: um, pl: lastPl, from: la.id }; (namedW[pairKey(la, lb)] ||= []).push(wEntry); (namedW[pairKey(lb, la)] ||= []).push(wEntry); }
     if (nv.forkB) fork(lb, (p ? p[0] : xb) / Lw, nv.forkB);
+    // `then`: the crossvein continues across lb into the next lane(s) with the same lean (aligned odonate antenodals, the arculus)
+    if (p && nv.then) { const dx = p[0] - h.p[0]; const rest = Object.assign({}, nv, { a: lb.id, ua: p[0] / Lw, ub: (p[0] + dx) / Lw, b: nv.then[0], then: nv.then.length > 1 ? nv.then.slice(1) : undefined }); placeNamed(rest); }
   };
   for (const nv of G.named || []) if (nv.early) placeNamed(nv);
   // random forks: a lane splits toward the gap between its own target and its neighbour's
@@ -1203,32 +1231,154 @@ function growVeins(g, G) {
   for (const key in runs) {
     const r = runs[key], a = r.a, b = r.b, u1 = Math.min(r.u1, uOpen);
     const at2 = u => { const ha = atX(a.pl, u * Lw), hb = atX(b.pl, u * Lw); return ha && hb ? { ha, hb, w: vlen(sub(hb.p, ha.p)) } : null; };
-    const sp = u => { const t = at2(u); if (!t) return 1e9; const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * k * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid))); };   // R-H, floored so cells never get tiny
+    const sMidAt = u => { const t = at2(u); return t ? sAt(lerpP(t.ha.p, t.hb.p, 0.5)) : 0.5; };
+    // mesh orders give an absolute cell size G.cell(u, s, laneA, laneB); ladder spacing is then the strip width x k held
+    // within 0.8-1.8 cells, and width / cell decides the regime (one row of rungs, or rows of Voronoi cells)
+    const cell = G.cell ? u => Math.max(G.cellMin || 1, G.cell(u, sMidAt(u), a.id, b.id)) : null;
+    const sp = u => { const t = at2(u); if (!t) return 1e9; if (cell) { const c = cell(u); return Math.max(0.8 * c, Math.min(1.25 * c, t.w * k)); } const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * k * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid))); };   // R-H, floored so cells never get tiny
     const t0 = at2(r.u0); if (!t0) continue;
-    if (G.rows2 && t0.w > 2.2 * sp(r.u0)) {   // wide strip: two rows of sites, 2-D Voronoi (hook for orders with mesh venation)
-      const strip = cutX(a.pl, r.u0 * Lw, u1 * Lw).concat(cutX(b.pl, r.u0 * Lw, u1 * Lw).reverse());
-      if (strip.length > 2) { const edges = voronoiEdges(poissonInPoly(strip, p => sp(p[0] / Lw) * 0.5, 400), strip); for (const e of edges) g.poly(e, joinSw(a, b)); stats.joins += edges.length; joins.push([a.id, b.id, -1]); }
-      continue;
-    }
-    // walls = the strip's ends and its named crossveins; between consecutive walls, sites walk from the wall at the
-    // local spacing (first site half a cell in) and a crossvein is the bisector of each consecutive pair, so every cell
-    // is 0.85-1.8 spacings long and a gap shorter than ~1.5 spacings stays one cell
-    const walls = [r.u0].concat((named[key] || []).filter(u => u > r.u0 && u < u1).sort((p, q) => p - q), [u1]);
-    for (let wI = 0; wI + 1 < walls.length; wI++) {
-      const ua = walls[wI], ub = walls[wI + 1], sites = [];
-      for (let u = ua + 0.5 * sp(ua) / Lw * jitter(0.3); u < ub - 0.35 * sp(u) / Lw; u += sp(u) / Lw * jitter(0.25)) sites.push(u);
+    // one row (R-C): between two walls, sites walk from the wall at the local spacing (first site half a cell in) and a
+    // crossvein is the bisector of each consecutive pair, so every cell is 0.85-1.8 spacings long and a gap shorter
+    // than ~1.5 spacings stays one cell (with G.evenSites the sites divide the interval evenly instead). Returns the
+    // number of rungs placed.
+    const ladder = (ua, ub) => {
+      const sites = [], before = stats.joins, gapK = G.evenSites ? 0.5 : 0.35;
+      if (G.evenSites) {   // mesh orders: the sites divide the interval evenly (Hoffmann's evenly spaced centres), so no cell is much longer than its neighbours
+        const n = Math.max(1, Math.round((ub - ua) * Lw / sp((ua + ub) / 2)));
+        for (let i = 0; i < n; i++) sites.push(lerp(ua, ub, (i + 0.5) / n) + (ub - ua) / n * randRange(-0.1, 0.1));
+      } else for (let u = ua + 0.5 * sp(ua) / Lw * jitter(0.3); u < ub - 0.35 * sp(u) / Lw; u += sp(u) / Lw * jitter(0.25)) sites.push(u);
       for (let i = 0; i + 1 < sites.length; i++) {   // the Voronoi edge between two consecutive sites, clipped to the lanes
         const um = (sites[i] + sites[i + 1]) / 2, spx = sp(um), t = at2(um);
         if (!t) continue;
         const P = lerpP(t.ha.p, t.hb.p, 0.5), dir = perp(norm(add(t.ha.d, t.hb.d)));
         const hA = hitPl(a.pl, P, dir) || t.ha, hB = hitPl(b.pl, P, dir) || t.hb;
-        if (!junctionOK(a, hA.p[0], 0.35 * spx)) continue;
-        place(a, hA.p, hA.d, b, hB.p[0], spx, { sw: joinSw(a, b), gap: 0.35 * spx, xMin: ua * Lw, xMax: ub * Lw });
+        if (!junctionOK(a, hA.p[0], gapK * spx)) continue;
+        place(a, hA.p, hA.d, b, hB.p[0], spx, { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw });
+      }
+      return stats.joins - before;
+    };
+    if (!G.rows2) {   // walls = the strip's ends and its named crossveins; a ladder between consecutive walls
+      const walls = [r.u0].concat((named[key] || []).filter(u => u > r.u0 && u < u1).sort((p, q) => p - q), [u1]);
+      for (let wI = 0; wI + 1 < walls.length; wI++) ladder(walls[wI], walls[wI + 1]);
+      continue;
+    }
+    // ---- mesh orders (G.rows2; Odonata): regime per segment of the strip (Hoffmann 2018). Where the strip is narrower
+    // than G.rowsAt cells it is a ladder of rungs as above; where it is wider, rows = round(width / cell) of sites on a
+    // staggered lattice (hexagonal packing, outer rows zigzagging across so their bisectors lean on the primaries), kept
+    // apart by a Poisson test, and the Voronoi of them clipped to the region. Every multi-row region is closed by real
+    // crossveins (named walls, or rungs placed at the regime transitions) or by the outline at the tip, so no edge ends
+    // in space; edges that end on a primary are then slid along it, within 0.3 cell, toward the junction band. ----
+    const rowsAt = G.rowsAt === undefined ? 1.6 : G.rowsAt, swJ = joinSw(a, b);
+    const onOutline = l => poly.indexOf(l.pl[l.pl.length - 1]) >= 0;
+    const toMargin = onOutline(a) && onOutline(b) && Math.min(a.x1, b.x1) - u1 * Lw < 0.025 * Lw;   // the run reaches both lanes' ends on the margin
+    const gaps = (G.gaps || []).filter(gp => (gp[0] === a.id && gp[1] === b.id) || (gp[0] === b.id && gp[1] === a.id));
+    const inGap = u => gaps.some(gp => u > gp[2] && u < gp[3]);
+    const bps = [...new Set([r.u0, u1].concat(named[key] || [], gaps.flatMap(gp => [gp[2], gp[3]])).filter(u => u >= r.u0 && u <= u1))].sort((p, q) => p - q);
+    const wallAt = u => { let best = null; for (const wv of namedW[key] || []) if (Math.abs(wv.u - u) < 0.015 && (!best || Math.abs(wv.u - u) < Math.abs(best.u - u))) best = wv; return best; };
+    const segDist = (p, s, t) => { const d = sub(t, s), L2 = dot(d, d) || 1e-9, tt = Math.max(0, Math.min(1, dot(sub(p, s), d) / L2)); return vlen(sub(p, add(s, mul(d, tt)))); };
+    const distPl = (p, pl) => { let d = Infinity; for (let i = 0; i + 1 < pl.length; i++) d = Math.min(d, segDist(p, pl[i], pl[i + 1])); return d; };
+    const distLane = (p, pl) => {   // distance to a lane (monotone in x): only the segments around p's x can be nearest
+      let d = Infinity;
+      for (let i = 0; i + 1 < pl.length; i++) { if (pl[i + 1][0] < p[0] - 1 || pl[i][0] > p[0] + 1) continue; d = Math.min(d, segDist(p, pl[i], pl[i + 1])); }
+      return d;
+    };
+    const rungAt = (u, xMin, xMax, dirU) => {   // one crossvein near u by the ladder rule: a wall for a multi-row region
+      for (let tr = 0; tr < 3; tr++) {   // retried a little further along (dirU: which way is allowed) when it lands next to a junction
+        const uu = u + (dirU || 1) * tr * 0.4 * cell(u) / Lw, t = at2(uu);
+        if (!t || uu * Lw < xMin || uu * Lw > xMax) continue;
+        const c = sp(uu), P = lerpP(t.ha.p, t.hb.p, 0.5), dir = perp(norm(add(t.ha.d, t.hb.d)));
+        const hA = hitPl(a.pl, P, dir) || t.ha, hB = hitPl(b.pl, P, dir) || t.hb;
+        if (!junctionOK(a, hA.p[0], 0.5 * c)) continue;
+        const p = place(a, hA.p, hA.d, b, hB.p[0], Math.max(0.6 * c, 0.7 * t.w), { sw: swJ, gap: 0.5 * c, xMin, xMax });   // reach grows with the strip so a lean of 15-50 degrees stays possible
+        if (p) return { u: (hA.p[0] + p[0]) / 2 / Lw, pl: lastPl, from: a.id };
+      }
+      return null;
+    };
+    const mesh = (w0, w1) => {   // rows of Voronoi cells between wall w0 and wall w1 (null: the outline at the tip)
+      const orient = wv => wv.from === a.id ? wv.pl : wv.pl.slice().reverse();   // a-end first
+      const p0 = orient(w0), A0 = p0[0], B0 = p0[p0.length - 1];
+      let ring, p1 = null, walk = null;
+      if (w1) { p1 = orient(w1); const A1 = p1[0], B1 = p1[p1.length - 1];
+        ring = [A0].concat(a.pl.filter(p => p[0] > A0[0] && p[0] < A1[0]), p1, b.pl.filter(p => p[0] > B0[0] && p[0] < B1[0]).reverse(), p0.slice(1).reverse()); }
+      else { walk = outlineWalk(poly, poly.indexOf(a.pl[a.pl.length - 1]), poly.indexOf(b.pl[b.pl.length - 1]));
+        ring = [A0].concat(a.pl.filter(p => p[0] > A0[0]), walk.slice(1, -1), b.pl.filter(p => p[0] > B0[0]).reverse(), p0.slice(1).reverse()); }
+      if (ring.length < 4) return false;
+      const onBoundary = p => distLane(p, a.pl) < 0.3 || distLane(p, b.pl) < 0.3 || distPl(p, p0) < 0.3 || (p1 && distPl(p, p1) < 0.3) || (walk && distPl(p, walk) < 0.3);
+      let xs = Infinity, xe = -Infinity; for (const p of ring) { xs = Math.min(xs, p[0]); xe = Math.max(xe, p[0]); }
+      const sites = [], zig = G.zig === undefined ? 0.18 : G.zig;
+      for (let x = xs + 0.5 * cell(xs / Lw) * jitter(0.3), col = 0; x < xe; col++) {
+        const c = cell(x / Lw), yr = outlineYRange(ring, x);
+        if (yr) {
+          const h = yr[1] - yr[0], rows = Math.max(1, Math.round(h / c)), sg = col % 2 ? 1 : -1;
+          for (let rI = 0; rI < rows; rI++) {
+            const edge = rI === 0 ? sg : rI === rows - 1 ? -sg : 0;
+            const p = [x + (rI % 2) * 0.5 * c + randRange(-0.08, 0.08) * c, yr[0] + h * (rI + 0.5 + edge * zig) / rows + randRange(-0.08, 0.08) * c];
+            if (!pointInPoly(p, ring)) continue;
+            let ok = true;   // Poisson test against the sites of the last columns only (columns advance by at least 0.85 c)
+            for (let q = sites.length - 1; q >= 0 && sites[q][0] > p[0] - 1.2 * c; q--) if (vlen(sub(p, sites[q])) < 0.6 * c) { ok = false; break; }
+            if (ok) sites.push(p);
+          }
+        }
+        x += c * jitter(0.15);
+      }
+      if (sites.length < 2) return false;
+      let n = 0;
+      for (const e of voronoiEdges(sites, ring)) {
+        if (onBoundary(lerpP(e[0], e[1], 0.5))) continue;   // a piece of the region's boundary, already a vein
+        const seg = [e[0], e[1]];
+        for (let end = 0; end < 2; end++) {   // an end on a primary: slide it along the primary toward the junction band
+          const P = seg[end], Q = seg[1 - end];
+          const l = distLane(P, a.pl) < 0.3 ? a : distLane(P, b.pl) < 0.3 ? b : null;
+          if (!l || distPl(P, p0) < 0.3 || (p1 && distPl(P, p1) < 0.3)) continue;
+          const h = atX(l.pl, P[0]); if (!h) continue;
+          const c = cell(P[0] / Lw);
+          let bestP = P, bestA = obtuse(h.d, norm(sub(Q, P)));
+          if (bestA < angLo || bestA > angHi) {
+            let bestScore = Infinity;
+            for (let j = -6; j <= 6; j++) {
+              if (!j) continue;
+              const x = P[0] + j / 6 * 0.3 * c, hh = atX(l.pl, x);
+              if (!hh || !junctionOK(l, x, 0.3 * c) || vlen(sub(hh.p, Q)) < 0.4 * c) continue;
+              const ang = obtuse(hh.d, norm(sub(Q, hh.p))), score = (ang >= angLo && ang <= angHi ? 0 : 100) + Math.abs(ang - angT) + Math.abs(j);
+              if (score < bestScore) { bestScore = score; bestP = hh.p; bestA = ang; }
+            }
+          }
+          seg[end] = bestP; l.junc.push(bestP[0]);
+        }
+        g.poly(seg, swJ); n++;
+      }
+      if (!n) return false;
+      stats.joins += n; stats.multi++; joins.push([a.id, b.id, (A0[0] + (w1 ? w1.pl[0][0] : a.x1)) / 2 / Lw]);
+      return true;
+    };
+    for (let bI = 0; bI + 1 < bps.length; bI++) {
+      const ua = bps[bI], ub = bps[bI + 1], um = (ua + ub) / 2;
+      if (inGap(um) || (ub - ua) * Lw < 0.3 * cell(um)) continue;
+      // regime segments along the interval; short ones merge into their neighbours so the regime does not flicker
+      let segs = [];
+      for (let u = ua; u < ub; u += 0.01) { const t = at2(u), V = !!t && t.w / cell(u) >= rowsAt, last = segs[segs.length - 1]; if (last && last.V === V) last.u1 = Math.min(u + 0.01, ub); else segs.push({ u0: u, u1: Math.min(u + 0.01, ub), V }); }
+      const mergeSame = () => { const out = []; for (const s of segs) { const last = out[out.length - 1]; if (last && last.V === s.V) last.u1 = s.u1; else out.push(Object.assign({}, s)); } segs = out; };
+      for (const s of segs) if (s.V && (s.u1 - s.u0) * Lw < 1.5 * cell((s.u0 + s.u1) / 2)) s.V = false;
+      mergeSame();
+      for (let i = 1; i + 1 < segs.length; i++) if (!segs[i].V && segs[i - 1].V && segs[i + 1].V && (segs[i].u1 - segs[i].u0) * Lw < 1.0 * cell((segs[i].u0 + segs[i].u1) / 2)) segs[i].V = true;
+      mergeSame();
+      segs[0].u0 = ua; segs[segs.length - 1].u1 = ub;
+      // walls at the segment boundaries: named ones where they exist, else a rung placed by the ladder rule
+      const wl = new Array(segs.length + 1).fill(null), xMin = ua * Lw, xMax = ub * Lw;
+      wl[0] = wallAt(ua); wl[segs.length] = wallAt(ub) || (bI + 2 === bps.length && toMargin ? 'margin' : null);
+      if (segs[0].V && !wl[0]) wl[0] = rungAt(ua + 0.25 * cell(ua) / Lw, xMin, xMax, 1);
+      for (let i = 1; i < segs.length; i++) if (segs[i - 1].V || segs[i].V) wl[i] = rungAt(segs[i].u0, xMin, xMax, segs[i].V ? -1 : 1);
+      if (segs[segs.length - 1].V && !wl[segs.length]) wl[segs.length] = rungAt(ub - 0.25 * cell(ub) / Lw, xMin, xMax, -1);
+      for (let i = 0; i < segs.length; i++) {
+        const s = segs[i], w0 = wl[i], w1 = wl[i + 1];
+        const done = s.V && w0 && w1 && mesh(w0, w1 === 'margin' ? null : w1);
+        if (!done && ladder(s.u0, s.u1) > 0) stats.ladders++;
       }
     }
   }
   // ends: a lane reaches its target, or fades as a stub past its last junction (R-F); stems heavier than branches (R-G)
   for (const l of lanes) {
+    if (l.noDraw) continue;   // a wall lane (odonate costa, trailing edge): the outline already draws it
     let xEnd = l.x1;
     if (l.stub) { if (!(l.uLast > l.u0)) l.uLast = Math.max(l.u0 + 0.12, uOpen - 0.15); xEnd = Math.min(l.x1, (l.uLast + stubLen * jitter(0.3)) * Lw); }
     const cuts = [l.x0];
@@ -2426,9 +2576,13 @@ function generateInsectDetailed(seed, opts) {
 
   if (type === 'dragonfly' || type === 'damselfly') {
     // ---- Odonata (docs/wing-venation-spec.md; refs odo-dragonfly, odo-anax-ris1921, odo-damsel-ris1921).
-    // Longitudinals undulate through the cell rows; cells sit on a row lattice (one row = a ladder of
-    // quadrilaterals near the costa and base, several rows = hexagonal mesh toward the margin); the
-    // pterostigma is a rounded parallelogram between C and R1 with a thickened crossvein at each end. ----
+    // Primaries: Sc to the nodus and R1 to the apex run under the costa at the plate's offsets; R2..A1 fan from the
+    // base to the apex and the hind margin, each one smooth curve undulating with the cell period, built once.
+    // Secondaries are grown by growVeins v2 with the costa and the trailing edge as wall lanes (Hoffmann 2018):
+    // a ladder of quadrilaterals where two primaries are closer than 1.6 cells, rows of pentagons / hexagons from a
+    // Voronoi of staggered Poisson sites where they are wider, cells shrinking toward the tip and the trailing edge,
+    // rungs meeting the primaries at 105-140 degrees, no free ends. Named crossveins: aligned antenodals (C-Sc-R1),
+    // subnodus, pterostigma end crossveins, arculus, discoidal triangle (dragonfly) / quadrilateral (damselfly), bridge. ----
     const dam = type === 'damselfly';
     const G = {
       nodus: dam ? randRange(0.36, 0.47) : randRange(0.4, 0.52),
@@ -2436,101 +2590,133 @@ function generateInsectDetailed(seed, opts) {
       anal: dam ? 0.05 : randRange(0.2, 0.42), petiole: dam ? randRange(0.12, 0.26) : 0,
       tipY: randRange(-0.2, 0.12), sharp: randRange(0, 1), bulge: randRange(0.9, 1.1),
       nV: randInt(5, 8), pow0: randRange(1.3, 1.9), wig: randRange(-0.06, 0.06), und: randRange(0.0015, 0.005), period: randRange(0.12, 0.24),
-      antStep: randRange(0.028, 0.05), postStep: randRange(0.02, 0.036), tilt: randRange(-0.012, 0.012),
-      ps0: randRange(0.72, 0.85), psL: randRange(0.05, 0.11), psStyle: pick(['solid', 'solid', 'cross', 'axis']), psSkew: randRange(0.004, 0.014),
-      cells: dam ? randRange(0.9, 1.3) : randRange(0.7, 1.3), rows: dam ? 1 : randInt(2, 4),
-      triangle: !dam && rng() < 0.8, bridge: rng() < 0.5, subnodus: rng() < 0.85,
+      antStep: randRange(0.028, 0.05), postStep: randRange(0.02, 0.036),
+      ps0: randRange(0.72, 0.85), psL: randRange(0.05, 0.11), psStyle: pick(['solid', 'solid', 'cross', 'axis']), psLean: randRange(18, 38),
+      // cells: libellulid (small) .. aeshnid (large); k ladder spacing / strip width; angle, lean, zig: junction genes
+      cells: dam ? randRange(1.0, 1.5) : randRange(0.7, 1.3), k: randRange(1.0, 1.4), angle: randRange(108, 124), lean: rng() < 0.6 ? -1 : 1, zig: randRange(0.14, 0.24),
+      triangle: rng() < 0.8, bridge: rng() < 0.5, subnodus: rng() < 0.85,
       len: randRange(0.88, 1.12), heavy: rng() < 0.35,
     };
     const Lw = P.wingLen * G.len, nodusX = Lw * G.nodus;
-    meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, G.rows, G.psStyle, G.triangle ? 1 : 0, G.bridge ? 1 : 0, G.subnodus ? 1 : 0, Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
-      Math.round(G.pow0 * 4), Math.round(G.antStep * 100), Math.round(G.ps0 * 20), Math.round(G.cells * 3), Math.round(G.wH * 5), Math.round(G.anal * 5), Math.round(G.period * 50)].join(',');
     const wingDefs = dam
       ? [{ t: 0.5, theta: randRange(-16, -1), w: Lw * G.wF, baseW: 0.05, hind: false }, { t: 0.78, theta: randRange(2, 16), w: Lw * G.wF * G.wH, baseW: 0.05, hind: true }]
       : [{ t: 0.5, theta: randRange(-14, -1), w: Lw * G.wF, baseW: 0.14, hind: false }, { t: 0.8, theta: randRange(3, 18), w: Lw * G.wF * G.wH, baseW: G.anal, hind: true }];
+    const ss = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+    const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
     for (const wd of wingDefs) {
       const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * 0.6;
       const w = wd.w, s = G.sharp, bl = G.bulge;
-      const apex = [[Lw * lerp(0.88, 0.94, s), -w * lerp(0.38, 0.22, s)], [Lw, w * G.tipY], [Lw * lerp(0.9, 0.95, s), w * lerp(0.33, 0.18, s) * bl]];
+      const apexPts = [[Lw * lerp(0.88, 0.94, s), -w * lerp(0.38, 0.22, s)], [Lw, w * G.tipY], [Lw * lerp(0.9, 0.95, s), w * lerp(0.33, 0.18, s) * bl]];
       const pts = dam
-        ? [[0, -w * 0.05], [Lw * G.petiole, -w * 0.34], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.48], ...apex, [Lw * 0.65, w * 0.5 * bl], [Lw * 0.35, w * 0.4 * bl], [Lw * G.petiole, w * 0.1], [0, w * 0.05]]
-        : [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], ...apex,
+        ? [[0, -w * 0.05], [Lw * G.petiole, -w * 0.34], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.48], ...apexPts, [Lw * 0.65, w * 0.5 * bl], [Lw * 0.35, w * 0.4 * bl], [Lw * G.petiole, w * 0.1], [0, w * 0.05]]
+        : [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], ...apexPts,
         [Lw * 0.6, w * 0.5 * bl], [Lw * 0.25, w * (wd.hind ? 0.55 : 0.5) * bl], [Lw * 0.06, w * (wd.hind ? 0.45 : 0.3)], [0, w * wd.baseW]];
       const wing = makeWing([bx, by], wd.theta, pts, 0.8);
       const poly = wing.localPoly;
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
-      // primary longitudinals, fused at the base: Sc to the nodus, R1 under the costa to the tip, R2..CuP fanning to the margin,
-      // each undulating with the cell period so it reads as a chain of cell sides rather than a rod
-      const x0 = Lw * 0.01, yr0 = wing.yRange(x0 + Lw * 0.02) || [-w * 0.3, w * 0.1];
+      // ---- primaries. The fan leaves the base (a damselfly's the end of the petiole) and ends on outline samples: R1 just
+      // under the apex, R2..A1 evenly by arc length from the apex back along the hind margin to 42% span, so every strip
+      // can close against the margin. Sc and R1 are offsets from the costa (C-Sc and Sc-R1 ~5% of the chord each before
+      // the nodus, C-R1 ~7% after it, as on the Ris plates); the rest follow a power curve with the undulation genes. ----
+      const x0 = dam ? Lw * G.petiole : Lw * 0.01, yr0 = wing.yRange(x0 + Lw * (dam ? 0.01 : 0.02)) || [-w * 0.3, w * 0.1];
       const nV = G.nV, period = Lw * G.period;
-      const tipTargets = marginTargets(poly, [Lw * 0.05, 0], nV + 1, Lw * 0.55);
-      const scTarget = nearestOutlinePoint(poly, [nodusX, topAt(wing, nodusX)]);
+      const apex = tipPoint(wing), ia = poly.indexOf(apex);
+      const arc = [{ p: apex, d: 0 }];
+      for (let i = ia + 1; i < poly.length && poly[i][0] >= Lw * 0.42; i++) arc.push({ p: poly[i], d: arc[arc.length - 1].d + vlen(sub(poly[i], arc[arc.length - 1].p)) });
+      const arcAt = f => { const d = f * arc[arc.length - 1].d; let best = arc[0]; for (const e of arc) if (Math.abs(e.d - d) < Math.abs(best.d - d)) best = e; return best.p; };
+      const fanTargets = []; for (let i = 1; i <= nV; i++) fanTargets.push(arcAt((i - 0.5) / nV));
+      const r1Target = poly[ia - 1], scTarget = nearestOutlinePoint(poly, [nodusX, topAt(wing, nodusX)]);
       const makeVein = (y0, tg, pow, wig, und, phase) => {
         const pl = [], steps = 48;
         for (let k = 0; k <= steps; k++) { const u = k / steps, x = x0 + (tg[0] - x0) * u; pl.push([x, y0 + (tg[1] - y0) * Math.pow(u, pow) + wig * w * Math.sin(Math.PI * u) + und * Lw * Math.sin(Math.PI * u) * Math.sin(2 * Math.PI * x / period + phase)]); }
         pl[pl.length - 1] = tg;
         return pl;
       };
-      const veins = [];
-      veins.push(makeVein(yr0[0] + 1.5, scTarget, 1.0, 0, 0, 0));                                                        // Sc
-      veins.push(makeVein(yr0[0] + 3.5, tipTargets[0], G.pow0 + 0.1, 0, G.und * 0.4, 1));                                   // R1
-      for (let i = 1; i <= nV; i++) veins.push(makeVein(lerp(yr0[0] + 5, yr0[1] - 1.5, i / nV), tipTargets[i], G.pow0 * jitter(0.07), G.wig, G.und, i * 1.7));
-      veins.forEach((v, i) => L.wings.push(emitLocalPolyline(wing, v, i === 1 ? SW.O : (G.heavy && i < 4 ? SW.O : SW.D))));
-      // antenodal crossveins (C-Sc and Sc-R1, aligned; the first two heavier), postnodals (C-R1), tilted a little
-      const stepA = Lw * G.antStep, tl = Lw * G.tilt;
-      let kA = 0;
-      for (let x = Lw * (dam ? G.petiole + 0.03 : 0.09); x < nodusX - 2; x += stepA, kA++) {
-        const t = topAt(wing, x, 0.3), ys = plYAt(veins[0], x + tl), yr = plYAt(veins[1], x + 2 * tl), sw = kA < 2 && !dam ? SW.D : SW.F;
-        if (ys !== null) L.wings.push(lineEl(wing.T([x, t]), wing.T([x + tl, ys]), sw));
-        if (ys !== null && yr !== null) L.wings.push(lineEl(wing.T([x + tl, ys]), wing.T([x + 2 * tl, yr]), sw));
-      }
-      if (G.subnodus) { const yr = plYAt(veins[1], nodusX); if (yr !== null) L.wings.push(lineEl(wing.T([nodusX, topAt(wing, nodusX, 0.3)]), wing.T([nodusX + Lw * 0.015, yr]), SW.O)); }
-      const psx0 = Lw * G.ps0, psx1 = psx0 + Lw * G.psL;
-      for (let x = nodusX + Lw * 0.02; x < Lw * 0.97; x += Lw * G.postStep) {
-        if (x > psx0 - 2 && x < psx1 + 2) continue;
-        const yr = plYAt(veins[1], x + tl);
-        if (yr !== null) L.wings.push(lineEl(wing.T([x, topAt(wing, x, 0.3)]), wing.T([x + tl, yr]), SW.F));
-      }
-      // pterostigma: between the costa and R1, slanted ends, thickened end crossveins
-      { const g = wingGraph(wing, Lw); const r1y = x => { const y = plYAt(veins[1], x); return y === null ? topAt(wing, x, 3) : y; };
-        g.stigma(psx0, psx1, 0, 0, G.psStyle, r1y, Lw * G.psSkew); L.wings.push(...g.emit());
-        L.wings.push(lineEl(wing.T([psx0, topAt(wing, psx0, 0.3)]), wing.T([psx0 + Lw * G.psSkew, r1y(psx0 + Lw * G.psSkew)]), SW.O));
-        L.wings.push(lineEl(wing.T([psx1, topAt(wing, psx1, 0.3)]), wing.T([psx1 + Lw * G.psSkew, r1y(psx1 + Lw * G.psSkew)]), SW.O)); }
-      // arculus, discoidal triangle and bridge vein: heavier landmarks
-      const xv = (va, x) => { const y = plYAt(va, x); return y === null ? null : wing.T([x, y]); };
-      { const xa = Lw * (dam ? G.petiole + 0.06 : 0.17), j = Math.min(veins.length - 2, 2 + (nV >> 1)); const a = xv(veins[2], xa), b = xv(veins[j], xa + Lw * 0.01); if (a && b) L.wings.push(lineEl(a, b, SW.O)); }   // arculus
-      if (G.triangle) {
-        const j = Math.min(veins.length - 2, 2 + (nV >> 1)), xT = Lw * (wd.hind ? 0.14 : 0.2), xT2 = xT + Lw * (wd.hind ? 0.1 : 0.07);
-        const a1 = xv(veins[j], xT), b1 = xv(veins[j + 1], xT), b2 = xv(veins[j + 1], xT2);
-        if (a1 && b1 && b2) L.wings.push(lineEl(a1, b1, SW.D), lineEl(a1, b2, SW.D));
-      }
-      if (G.bridge) { const a = xv(veins[1], nodusX + Lw * 0.03), b = xv(veins[2], nodusX + Lw * 0.09); if (a && b) L.wings.push(lineEl(a, b, SW.D)); }
-      // secondary venation: Voronoi of a row lattice in each strip from R1 down to the trailing edge. Rows follow
-      // the strip, one row where it is narrow (a ladder), up to G.rows where it is wide (hexagonal mesh);
-      // cells shrink toward the tip and grow toward the hind margin.
-      const basePt = nearestOutlinePoint(poly, [0, w * wd.baseW]);
-      for (let i = 1; i < veins.length; i++) {
-        const a = veins[i], b = i + 1 < veins.length ? veins[i + 1] : [basePt];
-        const strip = stripPolygon(poly, a, b);
-        if (strip.length < 3) continue;
-        const yA = x => plYAt(a, x), yB = x => i + 1 < veins.length ? plYAt(b, x) : botAt(wing, x);
-        let minX = Infinity, maxX = -Infinity; for (const p of strip) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); }
-        const sites = [];
-        const cellAt = x => Math.max(3.2, Math.min(12, (5.5 + 4 * (i / veins.length)) * G.cells)) * (1 - 0.3 * x / Lw);
-        let col = 0;
-        for (let x = minX + 2; x < maxX - 1; col++) {
-          const c = cellAt(x), ya = yA(x), yb = yB(x);
-          if (ya === null || yb === null) { x += c; continue; }
-          const width = yb - ya, rows = Math.max(1, Math.min(G.rows, Math.round(width / c)));
-          for (let r = 0; r < rows; r++) {
-            const p = [x + ((r + col) % 2) * c * 0.5 + randRange(-0.12, 0.12) * c, ya + width * (r + 0.5) / rows + randRange(-0.1, 0.1) * c];
-            if (pointInPoly(p, strip)) sites.push(p);
-          }
-          x += c;
+      // the costa's line with the nodal notch smoothed out, so the veins that follow it stay smooth across the nodus
+      const topS = x => { const h = Lw * 0.06; if (Math.abs(x - nodusX) >= h) return topAt(wing, x); return lerp(topAt(wing, nodusX - h), topAt(wing, nodusX + h), (x - nodusX + h) / (2 * h)); };
+      const costaVein = (offFn, tg, und, phase) => {   // under the costa at offset offFn(u, x), blending into its target over the last 12%
+        const pl = [], steps = 48;
+        for (let k = 0; k <= steps; k++) {
+          const u = k / steps, x = x0 + (tg[0] - x0) * u;
+          let y = topS(x) + offFn(u, x) + und * Lw * Math.sin(Math.PI * u) * Math.sin(2 * Math.PI * x / period + phase);
+          const b = ss((u - 0.88) / 0.12); if (b > 0) y = lerp(y, tg[1], b);
+          pl.push([x, y]);
         }
-        if (sites.length > 1) L.wings.push(...emitEdges(wing, voronoiEdges(sites, strip), SW.F));
+        pl[steps] = tg;
+        return pl;
+      };
+      const veins = [];
+      veins.push(costaVein((u, x) => 1.0 + 0.05 * w * Math.sin(Math.PI * u), scTarget, 0, 0));                                                        // Sc: to the nodus
+      veins.push(costaVein((u, x) => 1.8 + w * (x < nodusX ? 0.1 * ss((x - x0) / (0.3 * Lw)) : lerp(0.1, 0.07, ss((x - nodusX) / (0.1 * Lw)))), r1Target, G.und * 0.4, 1));   // R1: to the apex
+      // the fan hangs off R1: R2 runs one cell under it (absolute gap, so that strip stays a one-row ladder as on the
+      // plates); R3..A1 are laid out as fractions of the depth from R1 to the hind margin so they bow with the outline,
+      // each easing to the margin by a power curve, steeper for the upper veins (which hug the costa longest)
+      const r1At = x => { const y = plYAt(veins[1], x); return y === null ? topS(x) + 1.8 : y; };
+      const fanVein = (s0, gap, tg, pow, wig, und, phase) => {
+        const pl = [], steps = 48;
+        for (let k = 0; k <= steps; k++) {
+          const u = k / steps, x = x0 + (tg[0] - x0) * u, r = wing.yRange(x), top = r1At(x), bot = r ? r[1] : tg[1];
+          let y = gap !== null ? top + lerp(gap * 0.6, gap, ss(u / 0.3)) : top + (s0 + (1 - s0) * Math.pow(u, pow)) * Math.max(1, bot - top);
+          y += wig * w * Math.sin(Math.PI * u) + und * Lw * Math.sin(Math.PI * u) * Math.sin(2 * Math.PI * x / period + phase);
+          const b = ss((u - 0.88) / 0.12); if (b > 0) y = lerp(y, tg[1], b);
+          pl.push([x, y]);
+        }
+        pl[steps] = tg;
+        return pl;
+      };
+      veins.push(fanVein(0, 4.5, fanTargets[0], 1, G.wig * 0.5, G.und, 1.7));   // R2
+      for (let i = 2; i <= nV; i++) { const f = (i - 2) / Math.max(1, nV - 2); veins.push(fanVein(lerp(0.2, 0.95, f), null, fanTargets[i - 1], G.pow0 * lerp(2.5, 1, f) * jitter(0.07), G.wig, G.und, i * 1.7)); }
+      if (dam) {   // petiole: the veins run to its end as two fused stems, Sc+R+M above and Cu+A below
+        const r0 = wing.yRange(2) || [0, 0];
+        L.wings.push(emitLocalPolyline(wing, bowVein([2, r0[0] + 1], veins[1][0], 0.03, 6), SW.O), emitLocalPolyline(wing, bowVein([2, r0[1] - 1], veins[veins.length - 1][0], -0.03, 6), SW.O));
       }
+      // wall lanes: the costa and the trailing edge, 0.3 inside the outline, ending at the apex; drawn by the outline, not here
+      const costaPl = [], edgePl = [], nW = 60;
+      for (let k = 0; k < nW; k++) { const x = lerp(x0, apex[0], k / nW); costaPl.push([x, topAt(wing, x, 0.3)]); edgePl.push([x, botAt(wing, x, 0.3)]); }
+      costaPl.push(apex); edgePl.push(apex);
+      const vId = i => 'V' + i;   // fan lane i = veins[i + 1]
+      const lanes = [{ id: 'C', pl: costaPl, sw: SW.D, noDraw: true, noFork: true, stub: false }, { id: 'Sc', pl: veins[0], sw: G.heavy ? SW.O : SW.D, noFork: true, stub: false },
+        { id: 'R1', pl: veins[1], sw: SW.O, noFork: true, stub: false }];
+      for (let i = 1; i <= nV; i++) lanes.push({ id: vId(i), pl: veins[i + 1], sw: G.heavy && i < 2 ? SW.O : SW.D, noFork: true, stub: false });
+      lanes.push({ id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false });
+      const g = wingGraph(wing, Lw), named = [], gaps = [];
+      // antenodal crossveins: aligned C-Sc-R1 pairs from the base to the nodus, the first two heavier (primary antenodals)
+      let kA = 0;
+      for (let u = dam ? G.petiole + 0.03 : 0.09; u < G.nodus - 0.012; u += G.antStep * jitter(0.08), kA++) named.push({ a: 'C', ua: u, b: 'Sc', ub: u - G.lean * 0.012, reach: 0.01, sw: kA < 2 && !dam ? SW.D : SW.F, then: ['R1'] });
+      if (G.subnodus) named.push({ a: 'C', ua: G.nodus, b: 'R1', ub: G.nodus + 0.012, reach: 0.008, sw: SW.O });   // subnodus: the nodal crossvein C-R1
+      // pterostigma between C and R1 with slanted end crossveins (lower end distal); no other crossvein under it
+      const r1y = x => { const y = plYAt(veins[1], x); return y === null ? topAt(wing, x, 3) : y; };
+      const psx0 = Lw * G.ps0, psx1 = psx0 + Lw * G.psL, psMid = (psx0 + psx1) / 2;
+      const psSkew = Math.tan(G.psLean * D2R) * (r1y(psMid) - topAt(wing, psMid, 0.3));
+      g.stigma(psx0, psx1, 0, 0, G.psStyle, r1y, psSkew);
+      for (const x of [psx0, psx1]) named.push({ a: 'C', ua: x / Lw, b: 'R1', ub: (x + psSkew) / Lw, reach: 0, bow: 0, ang: [60, 179], sw: SW.O });
+      gaps.push(['C', 'R1', (psx0 - 1) / Lw, (psx1 + psSkew + 1) / Lw]);
+      // arculus: a heavy crossvein stepping from R2 through the fan to the median lane; the discoidal triangle (dragonfly)
+      // or quadrilateral (damselfly) just below it; the bridge vein, an oblique from R1 to R2 behind the subnodus
+      const jF = Math.min(nV - 1, 1 + (nV >> 1)), xa = Lw * (dam ? G.petiole + 0.06 : 0.17);
+      named.push({ a: vId(1), ua: xa / Lw, b: vId(2), ub: xa / Lw + 0.008, reach: 0.015, sw: SW.O, then: jF > 2 ? Array.from({ length: jF - 2 }, (_, i) => vId(i + 3)) : undefined });
+      if (G.triangle) {
+        const xT = Lw * (wd.hind ? 0.14 : 0.2) + (dam ? Lw * G.petiole : 0), xT2 = xT + Lw * (wd.hind ? 0.07 : 0.05);
+        named.push({ a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT / Lw, reach: 0.012, sw: SW.D });
+        if (dam) named.push({ a: vId(jF), ua: xT2 / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.D });                        // quadrilateral: two rungs
+        else named.push({ a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.D, ang: [95, 178] });            // triangle: the oblique side
+        gaps.push([vId(jF), vId(jF + 1), (xT - 1) / Lw, (xT2 + 1) / Lw]);
+      }
+      if (G.bridge) { named.push({ a: 'R1', ua: G.nodus + 0.03, b: vId(1), ub: G.nodus + 0.06, reach: 0.01, sw: SW.D, ang: [95, 178] }); gaps.push(['R1', vId(1), G.nodus + 0.025, G.nodus + 0.065]); }
+      // cell size (R-H): base x cells gene, shrinking toward the tip and the trailing edge; the postnodal ladder has its own step
+      const base = Lw * 0.03;
+      const cellFn = (u, sMid, A, B) => (A === 'C' || B === 'C') ? Lw * G.postStep * (1 - 0.2 * Math.max(0, u - G.nodus)) : base * G.cells * (1 - 0.3 * u) * (1 - 0.25 * sMid);
+      const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.015, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0,
+        rows2: true, rowsAt: 1.6, evenSites: true, cell: cellFn, cellMin: 3.2, zig: G.zig, joinSw: SW.F, gaps, noPair: [['C', 'Sc'], ['Sc', 'R1']] });   // the antenodal strips carry only the named antenodals
+      L.wings.push(...g.emit());
+      L.wings.push(...costaEls(wing, x0, apex[0]));   // the costa itself, heavy (R7)
+      const st = grown.stats;
+      S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle);
+      S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi;
     }
+    meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi };
+    meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, S.multi, G.psStyle, G.triangle ? 1 : 0, G.bridge ? 1 : 0, G.subnodus ? 1 : 0, Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
+      Math.round(G.pow0 * 4), Math.round(G.antStep * 100), Math.round(G.ps0 * 20), Math.round(G.cells * 3), Math.round(G.wH * 5), Math.round(G.anal * 5), Math.round(G.period * 50)].join(',');
   }
 
   if (type === 'beetle') {
