@@ -1219,7 +1219,7 @@ function growVeins(g, G) {
     if (!o.ang) { stats.rungs++; stats.angSum += best.aA + best.aB; stats.minAngle = Math.min(stats.minAngle, best.aA, best.aB); stats.maxAngle = Math.max(stats.maxAngle, best.aA, best.aB); }
     const uA = A[0] / Lw, uB = best.p[0] / Lw;
     la.uLast = Math.max(la.uLast, uA); lb.uLast = Math.max(lb.uLast, uB); la.junc.push(A[0]); lb.junc.push(best.p[0]);
-    joins.push([la.id, lb.id, (uA + uB) / 2]);
+    joins.push([la.id, lb.id, (uA + uB) / 2, best.pl]);   // the polyline rides along for callers that assemble a chain from its pieces (the lepidopteran discocellular)
     return best.p;
   };
   const pairKey = (a, b) => a.id + '|' + b.id;
@@ -1237,8 +1237,10 @@ function growVeins(g, G) {
     if (p) { const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um);
       const wEntry = { u: um, pl: lastPl, from: la.id }; (namedW[pairKey(la, lb)] ||= []).push(wEntry); (namedW[pairKey(lb, la)] ||= []).push(wEntry); }
     if (nv.forkB) fork(lb, (p ? p[0] : xb) / Lw, nv.forkB);
-    // `then`: the crossvein continues across lb into the next lane(s) with the same lean (aligned odonate antenodals, the arculus)
-    if (p && nv.then) { const dx = p[0] - h.p[0]; const rest = Object.assign({}, nv, { a: lb.id, ua: p[0] / Lw, ub: (p[0] + dx) / Lw, b: nv.then[0], then: nv.then.length > 1 ? nv.then.slice(1) : undefined }); placeNamed(rest); }
+    // `then`: the crossvein continues across lb into the next lane(s) with the same lean (aligned odonate antenodals, the
+    // arculus); a step given as { b, ub, reach?, ang? } instead of a lane id aims its own far end, with its own band if it is
+    // structural (the bent lepidopteran discocellular: its middle piece meets M2 nearly square, as on the references)
+    if (p && nv.then) { const dx = p[0] - h.p[0], nx = nv.then[0], step = typeof nx === 'object' ? nx : { b: nx }; const rest = Object.assign({}, nv, { a: lb.id, ua: p[0] / Lw, ub: step.ub === undefined ? (p[0] + dx) / Lw : step.ub, b: step.b, reach: step.reach === undefined ? nv.reach : step.reach, ang: step.ang === undefined ? nv.ang : step.ang, then: nv.then.length > 1 ? nv.then.slice(1) : undefined }); placeNamed(rest); }
   };
   for (const nv of G.named || []) if (nv.early) placeNamed(nv);
   // random forks: a lane splits toward the gap between its own target and its neighbour's
@@ -2174,48 +2176,80 @@ function generateInsectDetailed(seed, opts) {
     // points are the cell boundaries for the pattern space). Each polyline carries its weight in `.sw`:
     // stems and cell edges SW.O, branches SW.D, the anal/humeral veins SW.F (spec R7); `heavy` promotes the branches.
     function lepVeins(wing, b, U, D, nR, scX, aX, xMin, nStalk, stemL, hindW) {
-      const vs = [], wStem = SW.O, wBr = G.heavy ? SW.O : SW.D;
+      // Grown by growVeins v2 (docs/wing-venation-spec.md, Lepidoptera; refs lep-agrotis, lep-papilio). Every vein is a
+      // lane: the discal cell's top and bottom edges, Sc, the R stalk, every branch and the anals, each one pre-built
+      // bowed arc (a lepidopteran chord widens to the tornus, so chord-fraction control points would dip; the arcs are
+      // absolute), the branches rooted on their parent (`parent`: the stalk, the cell's lower edge). The discocellular
+      // is a `then` chain of three named crossveins placed by the angle rule from the cell's upper corner onto M1, onto
+      // M2 and down to the lower corner: the upper piece leans back ~40 deg and the lower forward ~35 deg so the corners
+      // and the M roots are obtuse, the middle piece is near-vertical with its own structural band (M2 leaves it nearly
+      // square, as on the references); M1 and M2 are trimmed to leave the dcv where it lands. No sites: a lepidopteran
+      // wing has no other crossveins. The returned array keeps its shape for the pattern code: [cellTop, cellBot, dcv,
+      // Sc, (humeral), (stalk)] then the marginal veins apex -> inner margin, each with `.sw`.
+      const wStem = SW.O, wBr = G.heavy ? SW.O : SW.D;
+      const g = wingGraph(wing, W), poly = wing.localPoly;
       const bowed = (p, q, k, sw) => { const n = perp(norm(sub(q, p))), pl = vein([p, add(lerpP(p, q, 0.5), mul(n, k)), q]); pl.sw = sw; return pl; };
-      // bows are signed toward the trailing edge: R branches convex toward the costa, Cu and the anals convex toward
-      // the hind margin, M nearly straight (refs lep-agrotis, lep-papilio); 2-6% of the chord so they never read as rods
-      const cellTop = bowed(b, U, -W * randRange(0.008, 0.025), wStem), cellBot = bowed(b, D, W * randRange(0.006, 0.02), wStem);
-      // discocellular: two or three pieces meeting at obtuse angles (ref lep-agrotis / lep-papilio), concave toward the base
-      const nDc = rng() < 0.5 ? 2 : 3, dcPts = [U];
-      for (let k = 1; k < nDc; k++) dcPts.push(add(lerpP(U, D, k / nDc), mul(perp(norm(sub(D, U))), W * randRange(0.015, 0.04) * (k === 1 ? 1 : 0.6))));
-      dcPts.push(D);
-      const dcv = []; for (let k = 0; k + 1 < dcPts.length; k++) { const seg = vein([dcPts[k], dcPts[k + 1]], 4); dcv.push(...(k ? seg.slice(1) : seg)); }
-      dcv.sw = wBr;
-      vs.push(cellTop, cellBot, dcv);
-      // Sc (Sc+R1 on the hindwing) along the costa
-      // Sc on the forewing hugs the costa; Sc+R1 on the hindwing leaves the base inside the costa and reaches it at scX
-      const sc = bowed([b[0] + W * 0.03, b[1] + (hindW ? H * 0.02 : -H * 0.04)], [scX, topAt(wing, scX, 0.5)], -W * 0.01, wStem);
-      vs.push(sc);
-      if (hindW) {   // humeral vein: a short hooked vein from the root of Sc+R1 forward to the costal margin (refs lep-agrotis, lep-papilio)
-        const root = plAt(sc, 0.1), hx = root[0] + scX * G.hum;
-        vs.push(bowed(root, [hx, topAt(wing, hx, 0.5)], -W * G.hum * 0.25, SW.F));
+      const nT = nR + 3 + 2, tg = marginTargets(poly, U, nT, xMin);
+      const vs = [];
+      if (tg.length < nT) {   // a degenerate outline (no room for the targets): the cell alone
+        vs.push(bowed(b, U, -W * 0.015, wStem), bowed(b, D, W * 0.012, wStem), bowed(U, D, 0, wBr));
+        vs.pre = vs.length; vs.stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0 }; return vs;
       }
-      const nT = nR + 3 + 2;
-      const tg = marginTargets(wing.localPoly, U, nT, xMin);
-      // R branches: the first from the cell's upper corner, the rest leaving a common stem one after another
-      // (spec "stalked": R3 first, then R4 and R5 from further along, or forking at its end)
-      const nSt = Math.min(nStalk, nR - 1);
+      // discocellular bends set by angle from the cell's cross axis: dc1 back from the upper corner, dc2 back from the lower
+      const ax = norm(sub(lerpP(U, D, 0.5), b)); let nn = perp(ax); if (dot(nn, sub(D, U)) < 0) nn = mul(nn, -1);
+      const lUD = vlen(sub(D, U)), t1 = randRange(34, 46) * D2R, t3 = randRange(29, 41) * D2R;
+      const dc1 = add(U, mul(add(mul(nn, Math.cos(t1)), mul(ax, -Math.sin(t1))), lUD * 0.33));
+      const dc2 = sub(D, mul(add(mul(nn, Math.cos(t3)), mul(ax, Math.sin(t3))), lUD * 0.3));
+      const scRoot = [b[0] + W * 0.03, b[1] + (hindW ? H * 0.02 : -H * 0.04)];
+      const scE = nearestOutlinePoint(poly, [scX, topAt(wing, scX)]), aE = nearestOutlinePoint(poly, [aX, botAt(wing, aX)]), a3E = nearestOutlinePoint(poly, [aX * 0.35, botAt(wing, aX * 0.35)]);
+      const lane = (id, pl, sw, extra) => Object.assign({ id, pl, sw, noFork: true, noJoin: true, stub: false }, extra || {});
+      const ct = bowed(b, U, -W * randRange(0.008, 0.025), wStem), cb = bowed(b, D, W * randRange(0.006, 0.02), wStem);
+      const lanes = [lane('CT', ct, wStem), lane('CB', cb, wStem), lane('Sc', bowed(scRoot, scE, -W * 0.01, wStem), wStem)];
+      // R branches: the first from the cell's upper corner; the rest leave one bowed stalk one after another, the last two
+      // from its end (spec "stalked"); M1 / M2 from the dcv bends, M3 and Cu1 from the lower corner, Cu2 off the lower edge
+      const nSt = Math.min(nStalk, nR - 1), rBow = () => -W * randRange(0.018, 0.035);
       let stem = null;
-      if (tg.length >= nT && nR > 1) {
+      if (nR > 1) {
         const mean = tg.slice(1, nR).reduce((a, p) => add(a, p), [0, 0]).map(v => v / (nR - 1));
         stem = bowed(U, add(U, mul(norm(sub(mean, U)), Math.min(W * 0.2, W * stemL * nSt))), -W * 0.006, wStem);
-        vs.push(stem);
+        lanes.push(lane('St', stem, wStem));
       }
+      lanes.push(lane('R0', bowed(U, tg[0], rBow(), wBr), wBr));
+      for (let i = 1; i < nR; i++) lanes.push(lane('R' + i, bowed(plAt(stem, Math.min(i, nSt) / nSt), tg[i], rBow(), wBr), wBr, { parent: 'St' }));
+      lanes.push(lane('M1', bowed(dc1, tg[nR], -W * randRange(0.004, 0.018), wBr), wBr), lane('M2', bowed(dc2, tg[nR + 1], -W * randRange(0.002, 0.014), wBr), wBr), lane('M3', bowed(D, tg[nR + 2], -W * randRange(0, 0.012), wBr), wBr));
+      lanes.push(lane('Cu1', bowed(D, tg[nR + 3], W * randRange(0.01, 0.024), wBr), wBr), lane('Cu2', bowed(plAt(cb, randRange(0.55, 0.75)), tg[nR + 4], W * randRange(0.012, 0.026), wBr), wBr, { parent: 'CB' }));
+      lanes.push(lane('A2', bowed([b[0], b[1] + H * 0.03], aE, W * 0.018, wBr), wBr));                                   // 2A to the tornus
+      const hasA3 = rng() < 0.6;
+      if (hasA3) lanes.push(lane('A3', bowed([b[0], b[1] + H * 0.05], a3E, W * 0.012, SW.F), SW.F));                  // 3A, short, at the base
+      // the discocellular: from the cell's upper corner onto M1 just past its root, on to M2, down to the lower corner
+      const r = 0.008, named = [{ a: 'CT', ua: U[0] / W - 0.002, b: 'M1', ub: dc1[0] / W + r * 0.6, reach: r, sw: wBr, bow: 0,
+        then: [{ b: 'M2', ub: dc2[0] / W + r * 0.6, ang: [90, 152] }, { b: 'CB', ub: D[0] / W - r * 0.6, ang: false }] }];
+      const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 0.55, angle: randRange(116, 130), lean: -1, stubProb: 0, bowAmt: 0, noSites: true });
+      const laneOf = {}; for (const l of grown.lanes) laneOf[l.id] = l;
+      // the dcv as one polyline from its placed pieces (a piece the angle rule could not place falls back to a straight
+      // segment between its nodes, so the cell always closes); M1 / M2 start where the dcv lands on them
+      const pieces = [['CT', 'M1', dc1], ['M1', 'M2', dc2], ['M2', 'CB', D]];
+      let dcv = [], prev = U;
+      for (const [la, lb, nb] of pieces) {
+        const j = grown.joins.find(j => j[0] === la && j[1] === lb);
+        const seg = j ? j[3] : bowVein(prev, nb, 0, 6);
+        prev = seg[seg.length - 1];
+        if (lb === 'M1' || lb === 'M2') { const l = laneOf[lb]; l.pl = [prev].concat(l.pl.filter(p => p[0] > prev[0] + 0.01)); }
+        dcv = dcv.length ? dcv.concat(seg.slice(1)) : seg.slice();
+      }
+      dcv.sw = wBr;
+      const pl = (id, sw) => { const p = laneOf[id].pl.slice(); p.sw = sw; return p; };
+      vs.push(pl('CT', wStem), pl('CB', wStem), dcv, pl('Sc', wStem));
+      if (hindW) {   // humeral vein: a short hooked vein from the root of Sc+R1 forward to the costal margin (refs lep-agrotis, lep-papilio)
+        const root = plAt(laneOf.Sc.pl, 0.1), hx = root[0] + scX * G.hum;
+        vs.push(bowed(root, [hx, topAt(wing, hx, 0.5)], -W * G.hum * 0.25, SW.F));
+      }
+      if (stem) vs.push(pl('St', wStem));
       vs.pre = vs.length;
-      if (tg.length < nT) return vs;
-      for (let i = 0; i < nR; i++) {
-        const start = i === 0 ? U : plAt(stem, Math.min(i, nSt) / nSt);
-        vs.push(bowed(start, tg[i], -W * randRange(0.018, 0.035), wBr));
-      }
-      for (let i = 0; i < 3; i++) vs.push(bowed(plAt(dcv, 0.15 + i * 0.35), tg[nR + i], -W * randRange(0.004, 0.022), wBr));
-      vs.push(bowed(D, tg[nR + 3], W * randRange(0.01, 0.024), wBr));
-      vs.push(bowed(plAt(cellBot, randRange(0.55, 0.75)), tg[nR + 4], W * randRange(0.012, 0.026), wBr));
-      vs.push(bowed([b[0], b[1] + H * 0.03], [aX, botAt(wing, aX, 0.5)], W * 0.018, wBr));                                // 2A to the tornus
-      if (rng() < 0.6) vs.push(bowed([b[0], b[1] + H * 0.05], [aX * 0.35, botAt(wing, aX * 0.35, 0.5)], W * 0.012, SW.F));   // 3A, short, at the base
+      for (let i = 0; i < nR; i++) vs.push(pl('R' + i, wBr));
+      vs.push(pl('M1', wBr), pl('M2', wBr), pl('M3', wBr), pl('Cu1', wBr), pl('Cu2', wBr), pl('A2', wBr));
+      if (hasA3) vs.push(pl('A3', SW.F));
+      vs.stats = grown.stats;
       return vs;
     }
 
@@ -2225,6 +2259,7 @@ function generateInsectDetailed(seed, opts) {
     const hVeins = lepVeins(hind, hB, hU, hD, G.nRh, W * 0.42 * hk, W * 0.28 * hk, W * 0.45 * hk, 1, 0.05, true);
     const nR = G.nR;
     const fVeins = lepVeins(fore, fB, fU, fD, nR, W * G.scX, W * G.aX, W * Math.min(0.62, G.tornusX - 0.06), G.stalk, G.stemL, false);
+    { const fs = fVeins.stats, hs = hVeins.stats; meta.wingStats = { joins: fs.joins + hs.joins, dropped: fs.dropped + hs.dropped, minAngle: Math.min(fs.minAngle, hs.minAngle), maxAngle: Math.max(fs.maxAngle, hs.maxAngle), rungs: fs.joins + hs.joins }; }   // the discocellular pieces of both wings
     const ends = vs => vs.slice(vs.pre).map(v => v[v.length - 1]);   // marginal vein tips, apex -> inner margin
     const SF = lepSpace(fore, [W * 0.1, 0], ends(fVeins), nR + 3);       // cells posterior to M3 start at nR+3
     const SH = lepSpace(hind, hO, ends(hVeins), G.nRh + 3);
