@@ -179,7 +179,17 @@ rounded, truncate, clubbed), petiole width and length, width factor,
 segmentation (count, start, bow, weight, doubled lines), a markings family
 (plain, banded, spotted, striped, tip-dark, hairy) and terminalia by family
 (ovipositor length, curvature and sheath; cerci; mayfly filaments two or
-three; odonate appendages). **Head**: an outline per order (round, transverse
+three; odonate appendages). **Thorax** (`docs/research-thorax.md`): the
+profile re-rolled from the order's anchors (pronotum width against the head,
+widest point, mesonotal hump, propodeal waist, length; beetle pronotum shape
+cordate / transverse / quadrate / rounded, grasshopper posterior margin), the
+order's dorsal lines (fly transverse suture complete or interrupted, hymenopteran
+collar, notauli and parapsidal lines, odonate mid-dorsal carina and oblique
+humeral sutures, grasshopper sulci and carinae, crane-fly V suture, cicada
+paramedian sutures), a scutellum (triangle, lunule, bilobed, cruciform; hatched
+or not), a surface family (contour hatching along the sides, beetle punctation,
+hoverfly vittae, pile ticks, humeral calli, bristle rows, patagia, crest) and a
+tegula of rolled size and tilt centred on the forewing root the wing block uses. **Head**: an outline per order (round, transverse
 with the odonate frons bump or the cicada postclypeus, triangular with a
 fastigium, elongate with ground-beetle jaws or a weevil rostrum), eyes rolled
 as ranges with holoptic or dichoptic flies, meeting or separated odonate eyes
@@ -189,8 +199,7 @@ highlight), ocelli 0–3 by order, and the mouthparts that show from above
 from `docs/research-head-eyes.md`. The discrete part is exposed as
 `meta.bodySig`, held to the same 10% / 50% rule as `wingSig` by
 `tests/check.js`, which also asserts the leg invariants above on
-`meta.legs[i].pts` and the eye / ocelli containment on `meta.head`. Thorax and
-antenna genes are still the plan in `docs/plan-body-variation.md`.
+`meta.legs[i].pts` and the eye / ocelli containment on `meta.head`. Antenna genes are still the plan in `docs/plan-body-variation.md`.
 
 ## Legs, eyes, antennae
 

@@ -44,6 +44,11 @@ contract for changes.
   in the legs block (`legsOk`: ordering, mirror line, abdomen outline, pair clearance, fit) and
   re-rolled; `tests/check.js` asserts the result on `meta.legs[i].pts`, so a new pose or family
   range must keep those invariants rather than relax the test.
+- Legs and wings attach through `thorax.yAt(t)` / `thorax.hwAt(y)`, so the thorax profile
+  (`B.thorax.anchors` → `P.thoraxAnchors`) must keep `bodyPart`'s interface and stay wide where
+  they land. The wing blocks' root positions are mirrored in the `WING_ROOTS` table in
+  `generateInsectDetailed` (the tegula sits on the first entry; `tests/check.js` asserts width
+  there): change a wing block's root `t` and update the table in the same commit.
 - The head is drawn from `B.head` (order table `HD` in `rollBodyGenes`, rules in
   `docs/research-head-eyes.md`). `P.headW` / `P.headH` / `headTop` / `headCy` stay the bounding box
   and centre of the head; the drawn capsule is `meta.headOutline` (closed polyline, body coords) and

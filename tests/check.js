@@ -50,6 +50,27 @@ for (let seed = 1; seed <= N; seed++) {
     if (leg.x < leg.hw * 0.5) fail(leg.pair + ' coxa starts too far inside thorax (' + leg.x.toFixed(1) + ' vs hw ' + leg.hw.toFixed(1) + ')');
     if (leg.hw < 8) fail(leg.pair + ' thorax half-width at attachment suspiciously small: ' + leg.hw.toFixed(1));
   }
+  // Thorax: the wing blocks root their wings at meta.thorax.wingRoots (t along the thorax); the rolled profile must
+  // still have width there, and the scutellum must sit inside the body outline (thorax, or the abdomen / elytra
+  // where it hangs over the junction, as a beetle's does).
+  {
+    const th = meta.thorax, profHw = (prof, y) => {   // profiles are sampled every 2 px and rounded to 0.1, so tolerate the last sample's rounding
+      if (!prof.length || y < prof[0][0]) return 0;
+      if (y > prof[prof.length - 1][0]) return y - prof[prof.length - 1][0] < 0.11 ? prof[prof.length - 1][1] : 0;
+      const k = Math.min(prof.length - 2, Math.floor((y - prof[0][0]) / 2)), a = prof[k], b = prof[k + 1];
+      return a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 0 : (y - a[0]) / (b[0] - a[0]));
+    };
+    if (!th.profile || th.profile.length < 3) fail('no thorax profile');
+    for (const t of th.wingRoots) {
+      if (t < 0 || t > 1) fail('wing root outside the thorax: t=' + t);
+      const hw = profHw(th.profile, th.yTop + t * (th.yBot - th.yTop));
+      if (hw <= 4) fail('thorax too narrow at a wing root: hw ' + hw.toFixed(1) + ' at t=' + t);
+    }
+    for (const p of th.scutellum) {
+      const hw = p[1] <= th.yBot ? profHw(th.profile, p[1]) : profHw(meta.abdomen.profile, p[1]);
+      if (Math.abs(p[0]) > hw + 0.6) { fail('scutellum outside the body outline'); break; }
+    }
+  }
   // Leg pose invariants (meta.legs[i].pts is the joint polyline of the right-hand leg: attach, coxa, trochanter,
   // femur tip, tibia tip, tarsomeres, claw tip). The engine re-rolls a pose that breaks these; here we assert the result.
   {
@@ -129,7 +150,9 @@ for (let seed = 1; seed <= N; seed++) {
 // plates start to read as repeats when cycling through random seeds.
 // Body uniqueness: every plate exposes meta.bodySig (pose family, leg family, attachment, joint angles, armature,
 // segment counts ...), held to the same rule so the insect under the wings varies as much as the wings do.
-const sigRule = (sigs, what) => {
+// The body signature carries far more discrete genes (legs, abdomen, thorax) than a wing's, so it is held to a
+// stricter floor: at least 98% of a type's plates must be distinct.
+const sigRule = (sigs, what, distinctFloor) => {
   const report = {};
   for (const key in sigs) {
     const m = sigs[key], n = [...m.values()].reduce((a, b) => a + b, 0);
@@ -137,13 +160,12 @@ const sigRule = (sigs, what) => {
     report[key] = { seeds: n, distinct: m.size, topShare: Math.round(top / n * 1000) / 10 + '%' };
     if (n >= 40) {
       if (top / n > 0.1) failures.push({ seed: 0, type: key, msg: what + ' signature repeats: one layout covers ' + Math.round(top / n * 100) + '% of ' + key + ' plates' });
-      if (m.size < n * 0.5) failures.push({ seed: 0, type: key, msg: what + ' signature repeats: only ' + m.size + ' distinct layouts in ' + n + ' ' + key + ' plates' });
-      if (what === 'body' && m.size < n * 0.98) failures.push({ seed: 0, type: key, msg: 'body signature below 98% distinct: ' + m.size + ' of ' + n + ' ' + key + ' plates' });   // with head genes in B.sig the body should never repeat
+      if (m.size < n * distinctFloor) failures.push({ seed: 0, type: key, msg: what + ' signature repeats: only ' + m.size + ' distinct layouts in ' + n + ' ' + key + ' plates' });
     }
   }
   return report;
 };
-const sigReport = sigRule(wingSigs, 'wing'), bodyReport = sigRule(bodySigs, 'body');
+const sigReport = sigRule(wingSigs, 'wing', 0.5), bodyReport = sigRule(bodySigs, 'body', 0.98);
 
 console.log('seeds checked:', N);
 console.log('type distribution:', typeCount);

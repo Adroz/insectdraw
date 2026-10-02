@@ -1613,8 +1613,6 @@ function rollBodyGenes(type, P) {
   const fam = P.fam, isOdo = type === 'dragonfly' || type === 'damselfly';
   const B = { fam, sig: [], legs: [], abd: {}, thorax: {}, head: {}, ant: {} };
   const rr = r => randRange(r[0], r[1]);
-  // ---- thorax ----
-  B.thorax.subSeg = { beetle: 1, grasshopper: 3, cicada: 2 }[type] || randInt(1, 3);
   // ---- abdomen ----
   // Profile: the order's anchors with the widest point slid along the axis, the tip replaced by a rolled shape
   // (pointed / rounded / truncate / clubbed), a rolled petiole on the wasp-waisted orders and a width factor.
@@ -1676,6 +1674,120 @@ function rollBodyGenes(type, P) {
   if (isOdo) A.appendages = { len: randRange(8, 16), spread: randRange(3, 7) };
   B.sig.push(A.tip, A.mark, Math.round(A.peak * 10), Math.round(A.startT * 10), A.sw === SW.F ? 'f' : 'd', A.double ? 1 : 0, A.ticks ? 1 : 0, A.keel ? 1 : 0, A.waist || 0,
     A.ovipositor ? Math.round(A.ovipositor.len / 10) : '-', A.cerci ? 1 : 0, A.filaments ? A.filaments.n : 0, A.mark === 'banded' ? A.band.period + ':' + A.band.phase : A.mark === 'striped' ? A.stripe.n : A.mark === 'tipdark' ? A.tipDark : 0);
+  // ---- thorax: docs/research-thorax.md, "Rules derived" ----
+  // Profile: the order's anchors re-rolled (pronotum front against the head, widest point, mesonotal hump, propodeal
+  // waist, length); beetles roll a pronotum shape (the pronotum is the whole visible thorax), grasshoppers the
+  // posterior margin of the saddle. Then the order's dorsal lines (collar, transverse / scutoscutellar / metanotal
+  // sutures, notauli, parapsidal lines, mid-dorsal carina, humeral sutures, sulci), the scutellum, a surface family
+  // (pile / punctation / vittae / contour hatching) and the tegula over the forewing root.
+  const T = B.thorax;
+  {
+    const TD = {   // front: pronotum width / head width; peak: widest t; hump: shoulder dip; waist: narrowing at t = 1; lenK: length factor
+      beetle:      { front: [1.0, 1.5], peak: [0.3, 0.55], hump: [0, 0], waist: [0, 0], lenK: [0.85, 1.15] },
+      moth:        { front: [0.9, 1.3], peak: [0.3, 0.4], hump: [0.02, 0.1], waist: [0, 0], lenK: [0.85, 1.1] },
+      fly:         { front: [0.8, 1.0], peak: [0.3, 0.45], hump: [0.04, 0.15], waist: [0, 0], lenK: [0.9, 1.15] },
+      cranefly:    { front: [0.8, 1.1], peak: [0.35, 0.5], hump: [0.03, 0.12], waist: [0, 0], lenK: [0.9, 1.2] },
+      bee:         { front: [0.85, 1.15], peak: [0.3, 0.45], hump: [0.02, 0.12], waist: [0.04, 0.12], lenK: [0.9, 1.2] },
+      wasp:        { front: [0.85, 1.15], peak: [0.3, 0.45], hump: [0.02, 0.12], waist: [0.04, 0.12], lenK: [0.9, 1.2] },
+      dragonfly:   { front: [0.5, 0.7], peak: [0.4, 0.55], hump: [0, 0.05], waist: [0, 0], lenK: [0.95, 1.2] },
+      damselfly:   { front: [0.4, 0.55], peak: [0.4, 0.55], hump: [0, 0.05], waist: [0, 0], lenK: [0.95, 1.2] },
+      grasshopper: { front: [0.85, 1.1], peak: [0.3, 0.45], hump: [0, 0], waist: [0, 0], lenK: [0.9, 1.2] },
+      cicada:      { front: [0.8, 1.0], peak: [0.3, 0.4], hump: [0, 0], waist: [0, 0], lenK: [0.9, 1.15] },
+      lacewing:    { front: [0.8, 1.1], peak: [0.35, 0.5], hump: [0.03, 0.12], waist: [0, 0], lenK: [0.9, 1.2] },
+      mayfly:      { front: [0.8, 1.1], peak: [0.35, 0.5], hump: [0.03, 0.12], waist: [0, 0], lenK: [0.9, 1.2] },
+    }[type];
+    const base = P.thoraxAnchors, maxHw = P.thoraxW / 2;
+    T.front = rr(TD.front); T.peak = rr(TD.peak); T.hump = rr(TD.hump); T.waist = rr(TD.waist); T.lenK = rr(TD.lenK);
+    P.thoraxLen *= T.lenK;
+    let fFront = Math.max(0.35, Math.min(0.92, T.front * P.headW / 2 / maxHw));
+    let tRear = base[base.length - 2][0], fRear = base[base.length - 2][1], fEnd = base[base.length - 1][1];
+    T.shape = null; T.margin = null;
+    if (type === 'beetle') {   // pronotum shape: widest before the middle (cordate), at the middle (transverse), parallel-sided (quadrate) or evenly rounded
+      T.shape = weighted({ ground: { cordate: 3, transverse: 2, quadrate: 1 }, rove: { quadrate: 4, cordate: 1 }, scarab: { transverse: 3, rounded: 2 }, longhorn: { quadrate: 3, cordate: 1 }, weevil: { rounded: 3, cordate: 2 } }[fam]);
+      const S = { cordate: { peak: [0.3, 0.4], rear: [0.8, 0.88], end: [0.66, 0.78] }, transverse: { peak: [0.45, 0.55], rear: [0.93, 0.97], end: [0.84, 0.9] },
+        quadrate: { peak: [0.45, 0.55], rear: [0.95, 0.99], end: [0.9, 0.95] }, rounded: { peak: [0.5, 0.6], rear: [0.88, 0.93], end: [0.72, 0.8] } }[T.shape];
+      T.peak = rr(S.peak); fRear = rr(S.rear); fEnd = rr(S.end); tRear = lerp(T.peak, 1, 0.6);
+      if (T.shape === 'quadrate' || T.shape === 'transverse') fFront = Math.max(fFront, T.shape === 'quadrate' ? 0.85 : 0.7);
+    }
+    fRear -= T.hump * 0.5; fEnd = Math.max(0.2, fEnd - T.waist);
+    const shoulder = Math.min(0.97, lerp(fFront, 1, T.shape === 'quadrate' ? 0.8 : 0.55) - T.hump);   // a low shoulder before the widest point reads as the mesonotal hump
+    const anchors = [[0, fFront], [T.peak * 0.5, shoulder], [T.peak, 1], [tRear, fRear]];
+    if (type === 'grasshopper') {   // posterior margin of the pronotum, drawn over the tegmina bases
+      T.margin = weighted({ truncate: 2, angulate: 2, rounded: 1 });
+      anchors.push(...(T.margin === 'angulate' ? [[0.86, fEnd], [0.95, fEnd * 0.5], [1, 0]] : T.margin === 'rounded' ? [[0.92, fEnd * 0.9], [1, fEnd * 0.45]] : [[1, fEnd]]));
+    } else anchors.push([1, fEnd]);
+    T.anchors = anchors;
+  }
+  T.lines = [];   // transverse lines { t, bow (fraction of hw, + toward the tail), sw, gap (interrupted: half-width fraction left open) }
+  T.median = null; T.notauli = null; T.para = null; T.paramedian = null; T.vee = null; T.humeral = null; T.carina = null; T.latCar = null;
+  T.patagia = false; T.crest = false; T.scut = null; T.calli = null; T.bristles = 0; T.bands = null; T.punct = null; T.pile = null; T.bead = false; T.foveae = false;
+  switch (type) {
+    case 'beetle':
+      T.median = rng() < 0.6 ? { t0: 0.12, t1: 0.95, sw: SW.F } : null;
+      T.bead = rng() < 0.7; T.foveae = rng() < 0.4;
+      T.punct = rng() < 0.6 ? { spacing: randRange(4, 6.5), r: randRange(0.5, 0.7), coarse: rng() < 0.3 } : null;
+      T.scut = { shape: 'triangle', w: randRange(0.12, 0.2), drop: randRange(6, 12) };
+      break;
+    case 'fly':
+      T.lines.push({ t: randRange(0.08, 0.14), bow: 0.1, sw: SW.F });   // postpronotal edge
+      T.lines.push({ t: randRange(0.3, 0.42), bow: randRange(-0.05, 0.1), sw: SW.D, gap: rng() < 0.6 ? randRange(0.25, 0.5) : 0 });   // transverse suture, complete in calyptrates
+      T.scut = { shape: 'lunule', t0: randRange(0.72, 0.82), w: randRange(0.3, 0.5), len: randRange(0.18, 0.3), bow: randRange(-0.25, -0.1), hatched: rng() < 0.3, protrude: randRange(0, 5) };
+      T.calli = { rx: randRange(2.5, 4.5), t: randRange(0.08, 0.14) };
+      T.bristles = rng() < 0.5 ? randInt(3, 5) : 0;
+      if (rng() < (fam === 'syrphid' || fam === 'tabanid' ? 0.8 : 0.4)) T.bands = { n: rng() < 0.6 ? 2 : 4, x1: randRange(0.15, 0.22), x2: randRange(0.42, 0.52), w: randRange(0.1, 0.16), spacing: randRange(3, 3.6), interrupted: rng() < 0.5 };
+      break;
+    case 'cranefly':
+      T.vee = { t: randRange(0.3, 0.4), drop: randRange(0.12, 0.2) };   // the V-shaped transverse suture of lower Diptera
+      T.scut = { shape: 'lunule', t0: randRange(0.72, 0.8), w: randRange(0.3, 0.45), len: randRange(0.12, 0.22), bow: randRange(-0.2, -0.1), hatched: rng() < 0.2, protrude: 0 };
+      T.calli = rng() < 0.5 ? { rx: randRange(2, 3), t: randRange(0.08, 0.14) } : null;
+      break;
+    case 'bee': case 'wasp': {
+      const tC = randRange(0.12, 0.22), tS = randRange(0.6, 0.72), tM = randRange(0.82, 0.9);
+      T.lines.push({ t: tC, bow: randRange(0.25, 0.45), sw: SW.D }, { t: tM, bow: randRange(0.05, 0.15), sw: SW.D });   // pronotal collar, metanotum
+      T.scut = { shape: rng() < 0.6 ? 'lunule' : 'bilobed', t0: tS, w: randRange(0.45, 0.65), len: (tM - tS) * randRange(0.8, 0.95), bow: randRange(-0.25, -0.1), hatched: rng() < 0.3, axillae: rng() < 0.5, protrude: 0 };
+      T.notauli = rng() < 0.5 ? { x0: randRange(0.25, 0.35), t0: tC, x1: randRange(0.05, 0.1), t1: randRange(0.45, tS - 0.05) } : null;
+      T.para = rng() < 0.6 ? { x: randRange(0.4, 0.5), len: randRange(0.15, 0.25) } : null;
+      T.median = rng() < 0.3 ? { t0: tC + 0.05, t1: tS - 0.04, sw: SW.F } : null;
+      T.pile = type === 'bee' && rng() < 0.6 ? { spacing: randRange(2.6, 4), len: randRange(3, 5.5), interior: rng() < 0.4 } : null;
+      break;
+    }
+    case 'dragonfly': case 'damselfly':
+      T.lines.push({ t: randRange(0.12, 0.2), bow: randRange(0.15, 0.3), sw: SW.D });   // prothorax collar
+      T.carina = { t0: 0.22, t1: 0.9, sw: SW.D };   // mid-dorsal carina between the mesepisterna
+      T.humeral = { x0: randRange(0.2, 0.35), t0: randRange(0.22, 0.32), x1: randRange(0.8, 0.95), t1: randRange(0.5, 0.62), double: rng() < 0.5, stripe: rng() < 0.35 };
+      break;
+    case 'grasshopper': {
+      T.carina = { t0: 0.06, t1: 0.96, sw: rng() < 0.3 ? SW.O : SW.D };   // median carina, sometimes a crest
+      const n = randInt(2, 3);   // sulci: the rearmost (principal) divides prozona and metazona
+      T.lines.push({ t: randRange(0.5, 0.7), bow: randRange(0.08, 0.2), sw: SW.D }, { t: randRange(0.2, 0.35), bow: randRange(0.08, 0.2), sw: SW.F });
+      if (n === 3) T.lines.push({ t: randRange(0.38, 0.48), bow: randRange(0.08, 0.2), sw: SW.F });
+      T.latCar = rng() < 0.6 ? { k: randRange(0.55, 0.7), curve: rng() < 0.5 ? randRange(0.05, 0.12) : 0 } : null;
+      break;
+    }
+    case 'moth':
+      T.patagia = rng() < 0.8; T.crest = P.variant === 'moth' && rng() < 0.35;
+      if (rng() < 0.4) T.lines.push({ t: randRange(0.4, 0.7), bow: randRange(0.1, 0.25), sw: SW.F });
+      T.pile = { spacing: randRange(2.6, 4), len: randRange(3, 6), interior: rng() < 0.5 };
+      break;
+    case 'cicada':
+      T.lines.push({ t: randRange(0.25, 0.35), bow: randRange(0.1, 0.2), sw: SW.D });   // pronotal collar
+      T.paramedian = rng() < 0.6 ? { x: randRange(0.26, 0.34), t0: 0.4, t1: 0.7 } : null;
+      T.scut = { shape: 'cruciform', t0: randRange(0.72, 0.78), w: randRange(0.3, 0.45), len: randRange(0.15, 0.22) };
+      T.punct = rng() < 0.2 ? { spacing: randRange(4.5, 6.5), r: 0.6, coarse: false } : null;
+      break;
+    default:   // lacewing, mayfly: ground plan
+      T.lines.push({ t: randRange(0.1, 0.2), bow: randRange(0.1, 0.2), sw: SW.D });
+      if (rng() < 0.6) T.lines.push({ t: randRange(0.82, 0.9), bow: 0.1, sw: SW.F });
+      T.scut = { shape: 'lunule', t0: randRange(0.6, 0.75), w: randRange(0.3, 0.45), len: randRange(0.12, 0.22), bow: randRange(-0.2, -0.1), hatched: rng() < 0.2, protrude: 0 };
+  }
+  T.hatch = !T.pile && rng() < 0.6 ? { n: randInt(2, 4), spacing: randRange(3, 4) } : null;   // contour hatching along the sides
+  T.subSeg = T.lines.length;
+  T.tegula = ['moth', 'bee', 'wasp', 'lacewing', 'cicada'].includes(type)
+    ? { rx: rr({ moth: [5, 7], bee: [3.5, 5.5], wasp: [3.5, 5.5] }[type] || [3, 5]), k: randRange(0.5, 0.8), tilt: randRange(20, 40), hairs: type === 'moth' ? randInt(3, 5) : 0 } : null;
+  B.sig.push(T.shape || T.margin || '-', T.lines.map(l => Math.round(l.t * 10) + (l.gap ? 'g' : '')).join('/'), T.median ? 1 : 0, T.notauli ? 1 : 0, T.para || T.paramedian ? 1 : 0,
+    T.humeral ? (T.humeral.double ? 2 : 1) + (T.humeral.stripe ? 's' : '') : 0, T.scut ? T.scut.shape[0] + Math.round(T.scut.w * 10) + (T.scut.hatched ? 'h' : '') + (T.scut.axillae ? 'a' : '') : '-',
+    T.pile ? 'p' + (T.pile.interior ? 'i' : '') : T.punct ? 'd' + (T.punct.coarse ? 'c' : '') : T.bands ? 'b' + T.bands.n : '-', T.hatch ? T.hatch.n : 0, T.calli ? 1 : 0, T.bristles, T.latCar ? 1 : 0, T.patagia ? 1 : 0, T.crest ? 1 : 0,
+    T.tegula ? Math.round(T.tegula.rx) : '-', Math.round(T.front * 10), Math.round(T.hump * 20), Math.round(T.waist * 20), Math.round(T.lenK * 10), Math.round(T.peak * 10));
   // ---- head: outline, eyes, ocelli, mouthparts, face markings -- see docs/research-head-eyes.md ("Rules derived") ----
   // Fractions of headW (x) and headH (y) unless px. The order table gives the ranges, the family (P.fam / variant) overrides
   // some, the seed rolls every value. headW stays the bounding width of the head including the eyes and headH its
@@ -1981,6 +2093,7 @@ function generateInsectDetailed(seed, opts) {
   meta.recipe = P.fam;
   meta.bodyGenes = B;
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
+  P.thoraxAnchors = B.thorax.anchors;
   // organic irregularity on profiles
   const wobble = a => a.map(([t, f]) => [t, f === 0 ? 0 : f * jitter(0.03)]);
   P.thoraxAnchors = wobble(P.thoraxAnchors);
@@ -1991,7 +2104,12 @@ function generateInsectDetailed(seed, opts) {
   const thorax = bodyPart(P.headH * 0.8, P.thoraxLen, P.thoraxW / 2, P.thoraxAnchors);
   const abdomen = bodyPart(thorax.yBot - P.abdOverlap, P.abdLen, P.abdW / 2, P.abdAnchors);
   const abdHW = P.abdW / 2;
-  meta.thorax = { yTop: thorax.yTop, yBot: thorax.yBot };
+  // forewing / hindwing root positions along the thorax, as the wing blocks place them (thorax.yAt(t)); the tegula sits
+  // on the first and tests/check.js asserts the thorax still has width there
+  const WING_ROOTS = { moth: [0.35], fly: [0.42], cranefly: [0.42], lacewing: [0.35, 0.65], cicada: [0.4, 0.68], grasshopper: [0.45, 0.78], bee: [0.4, 0.62], wasp: [0.4, 0.62], dragonfly: [0.5, 0.8], damselfly: [0.5, 0.78], mayfly: [0.45, 0.78] }[type] || [];
+  meta.thorax = { yTop: thorax.yTop, yBot: thorax.yBot, wingRoots: WING_ROOTS, profile: [], scutellum: [] };
+  for (let y = thorax.yTop; y < thorax.yBot; y += 2) meta.thorax.profile.push([Math.round(y * 10) / 10, Math.round(thorax.hwAt(y) * 10) / 10]);
+  meta.thorax.profile.push([Math.round(thorax.yBot * 10) / 10, Math.round(thorax.hwAt(thorax.yBot - 0.05) * 10) / 10]);
 
   // ---------- abdomen + details ----------
   partStart();
@@ -2063,37 +2181,151 @@ function generateInsectDetailed(seed, opts) {
   partStart();
   L.thoraxHead.push(pathEl(thorax.path, SW.O, '#fff'));
   {
-    const sub = B.thorax.subSeg, t0 = thorax.yTop, len = thorax.length;
-    for (let i = 1; i < sub; i++) { const y = t0 + len * i / sub, hw = thorax.hwAt(y); L.thoraxHead.push(bowLine(y, hw - 0.5, hw * 0.15, SW.D)); }
-    if (type === 'beetle') {
-      L.thoraxHead.push(lineEl([0, t0 + len * 0.12], [0, t0 + len * 0.95], SW.F));
-      const hw1 = thorax.hwAt(t0 + len * 0.3);
-      L.thoraxHead.push(pathEl(cubicBezierPath([[-hw1 * 0.55, t0 + len * 0.12], [-hw1 * 0.3, t0 + len * 0.06], [hw1 * 0.3, t0 + len * 0.06], [hw1 * 0.55, t0 + len * 0.12]], false), SW.D));
-      for (const s of [-1, 1]) L.thoraxHead.push(pathEl(cubicBezierPath([[s * hw1 * 0.75, t0 + len * 0.25], [s * hw1 * 0.9, t0 + len * 0.5], [s * hw1 * 0.8, t0 + len * 0.75], [s * hw1 * 0.6, t0 + len * 0.9]], false), SW.F));
-    } else if (type === 'grasshopper') {
-      L.thoraxHead.push(lineEl([0, t0 + len * 0.08], [0, t0 + len * 0.96], SW.D));
-      const hwB = thorax.hwAt(t0 + len * 0.9);
-      for (const s of [-1, 1]) L.thoraxHead.push(pathEl(cubicBezierPath([[s * hwB * 0.45, t0 + len * 0.5], [s * hwB * 0.6, t0 + len * 0.75], [s * hwB * 0.7, t0 + len * 0.9], [s * hwB * 0.75, t0 + len * 1.0]], false), SW.F));
-    } else if (type === 'dragonfly') {
-      const hwM = thorax.hwAt(t0 + len * 0.5);
-      for (const s of [-1, 1]) {
-        L.thoraxHead.push(lineEl([s * hwM * 0.25, t0 + len * 0.3], [s * hwM * 0.85, t0 + len * 0.72], SW.D));
-        L.thoraxHead.push(lineEl([s * hwM * 0.35, t0 + len * 0.18], [s * hwM * 0.95, t0 + len * 0.6], SW.F));
-      }
-      L.thoraxHead.push(bowLine(t0 + len * 0.3, hwM * 0.9, hwM * 0.2, SW.D));
-    } else {
-      const yA = t0 + len * 0.38, yB = t0 + len * 0.72;
-      L.thoraxHead.push(bowLine(yA, thorax.hwAt(yA) - 0.5, thorax.hwAt(yA) * 0.25, SW.D));
-      L.thoraxHead.push(bowLine(yB, thorax.hwAt(yB) - 0.5, thorax.hwAt(yB) * 0.2, SW.D));
-      // scutellum
-      const hwB = thorax.hwAt(yB);
-      L.thoraxHead.push(pathEl(cubicBezierPath([[-hwB * 0.3, thorax.yBot - 4], [-hwB * 0.15, thorax.yBot + 6], [hwB * 0.15, thorax.yBot + 6], [hwB * 0.3, thorax.yBot - 4]], false), SW.D));
-      if (type === 'moth') {   // fuzzy thorax: ticks around the edge
-        for (let y = t0 + 6; y < thorax.yBot - 4; y += 3.2) { const hw = thorax.hwAt(y); for (const s of [-1, 1]) L.thoraxHead.push(lineEl([s * (hw - 0.5), y], [s * (hw - 4), y + 1.2], SW.F)); }
+    // Everything here reads B.thorax (rolled in rollBodyGenes from docs/research-thorax.md). Order: surface (hatching,
+    // punctation, vittae, pile) first, then the sclerite lines, then the scutellum with a white mask over the surface,
+    // then the small sclerites (calli, patagia, foveae).
+    const T = B.thorax, t0 = thorax.yTop, len = thorax.length, yBot = thorax.yBot, yAt = thorax.yAt, hwAt = thorax.hwAt;
+    const TH = L.thoraxHead, both = f => { f(-1); f(1); };
+    const maskEl = d => '<path d="' + d + '" fill="#fff" stroke="none"/>';
+    // y offset of bowLine's curve at |x| (bisection on its bezier), so shapes can sit on a bowed suture
+    const bowYAt = (hw, b, x) => { let lo = 0, hi = 1; for (let i = 0; i < 24; i++) { const s = (lo + hi) / 2, u = 1 - s, xx = hw * (-u * u * u - 1.05 * u * u * s + 1.05 * u * s * s + s * s * s); if (xx < x) lo = s; else hi = s; } const s = (lo + hi) / 2; return 3 * b * s * (1 - s); };
+    const scutY = T.scut && T.scut.shape !== 'triangle' ? yAt(T.scut.t0) : yBot;   // nothing on the scutum runs past the scutellum
+    // ---- surface ----
+    if (T.hatch) {   // contour hatching: nested fine lines parallel to each side, shortening inward, the dorsal highlight left white
+      for (let k = 1; k <= T.hatch.n; k++) both(s => {
+        const a = 0.1 + 0.12 * k, b = Math.min(0.92 - 0.1 * k, (scutY - t0) / len - 0.03), pts = [];
+        for (let t = a; t <= b; t += 0.05) { const y = yAt(t), hw = hwAt(y) - k * T.hatch.spacing - 0.8; if (hw > 3) pts.push([s * hw, y]); }
+        if (pts.length > 2) TH.push(pathEl(smoothPath(pts, false), SW.F));
+      });
+    }
+    if (T.bead) both(s => {   // lateral bead of the beetle pronotum: one fine line just inside the margin
+      const pts = []; for (let t = 0.08; t <= 0.94; t += 0.05) { const y = yAt(t), hw = hwAt(y) - 1.8; if (hw > 3) pts.push([s * hw, y]); }
+      TH.push(pathEl(smoothPath(pts, false), SW.F));
+    });
+    if (T.punct) {   // punctation: dots on a staggered grid over the disc, the median line kept clear; coarse = sides only, denser
+      const sp = T.punct.coarse ? T.punct.spacing * 0.75 : T.punct.spacing;
+      let row = 0;
+      for (let y = t0 + len * 0.12; y < Math.min(yBot, scutY) - 3; y += sp, row++) {
+        const hw = hwAt(y) - Math.max(2.5, hwAt(y) * 0.12);
+        for (let x = -hw + (row % 2) * sp / 2, col = 0; x <= hw; x += sp, col++) {
+          if (T.median && Math.abs(x) < 2.2) continue;
+          if (T.punct.coarse && Math.abs(x) < hw * 0.45) continue;
+          const jx = ((row * 7 + col * 13) % 9 - 4) / 9 * sp * 0.35, jy = ((row * 5 + col * 11) % 7 - 3) / 7 * sp * 0.3;   // deterministic jitter breaks the grid
+          TH.push(circleEl([x + jx, y + jy], T.punct.r, SW.F));
+        }
       }
     }
-    if (type === 'beetle') {   // scutellum triangle sits over the elytra junction
-      L.thoraxHead.push(pathEl(cubicBezierPath([[-7, thorax.yBot - 3], [-3, thorax.yBot + 9], [3, thorax.yBot + 9], [7, thorax.yBot - 3], [4, thorax.yBot - 4], [-4, thorax.yBot - 4], [-7, thorax.yBot - 3]], true), SW.D, '#fff'));
+    if (T.bands) {   // vittae: 2 or 4 longitudinal hatched strips between fine edges, optionally broken at the transverse suture
+      const yA = yAt(T.lines[0].t) + 2, yB = scutY - 2.5, ts = yAt(T.lines[1].t);
+      for (const k of (T.bands.n === 2 ? [T.bands.x1] : [T.bands.x1, T.bands.x2])) both(s => {
+        const edge = d => { const pts = []; for (let y = yA; y <= yB; y += 4) pts.push([s * (k + d) * hwAt(y), y]); pts.push([s * (k + d) * hwAt(yB), yB]); return pts; };
+        TH.push(pathEl(smoothPath(edge(-T.bands.w / 2), false), SW.F), pathEl(smoothPath(edge(T.bands.w / 2), false), SW.F));
+        for (let y = yA + 1.5; y < yB; y += T.bands.spacing) {
+          if (T.bands.interrupted && Math.abs(y - ts) < 3) continue;
+          const hw = hwAt(y); TH.push(lineEl([s * ((k - T.bands.w / 2) * hw + 0.4), y], [s * ((k + T.bands.w / 2) * hw - 0.4), y], SW.F));
+        }
+      });
+    }
+    if (T.pile) {   // hair-like scales: ticks inward along the edge, optionally scattered over the disc too
+      for (let y = t0 + 5; y < yBot - 4; y += T.pile.spacing) { const hw = hwAt(y); if (hw > 5) both(s => TH.push(lineEl([s * (hw - 0.5), y], [s * (hw - T.pile.len), y + 1.2], SW.F))); }
+      if (T.pile.interior) {
+        let row = 0;
+        for (let y = t0 + len * 0.2; y < yBot - 6; y += T.pile.spacing * 2.2, row++) {
+          const hw = hwAt(y) - T.pile.len - 3, off = (row * 0.37) % 1;
+          for (let x = -hw + off * T.pile.spacing * 3; x < hw; x += T.pile.spacing * 3) TH.push(lineEl([x, y], [x + (x < 0 ? -1 : 1) * T.pile.len * 0.5, y + T.pile.len * 0.45], SW.F));
+        }
+      }
+    }
+    // ---- sclerite lines ----
+    for (const l of T.lines) {
+      const y = yAt(l.t), hw = hwAt(y);
+      if (hw < 3) continue;
+      if (l.gap) both(s => TH.push(pathEl(cubicBezierPath([[s * (hw - 0.5), y], [s * hw * 0.8, y + hw * l.bow * 0.5], [s * hw * (l.gap + 0.15), y + hw * l.bow], [s * hw * l.gap, y + hw * l.bow]], false), l.sw)));
+      else TH.push(bowLine(y, hw - 0.5, hw * l.bow, l.sw));
+    }
+    if (T.median) TH.push(lineEl([0, yAt(T.median.t0)], [0, yAt(T.median.t1)], T.median.sw));
+    if (T.carina) TH.push(lineEl([0, yAt(T.carina.t0)], [0, yAt(T.carina.t1)], T.carina.sw));
+    if (T.notauli) {   // notauli: from the collar converging toward the midline
+      const yA = yAt(T.notauli.t0) + 2, yB = yAt(T.notauli.t1), hwA = hwAt(yA), hwB = hwAt(yB);
+      both(s => TH.push(pathEl(cubicBezierPath([[s * T.notauli.x0 * hwA, yA], [s * T.notauli.x0 * hwA * 0.9, lerp(yA, yB, 0.4)], [s * T.notauli.x1 * hwB * 1.6, lerp(yA, yB, 0.78)], [s * T.notauli.x1 * hwB, yB]], false), SW.F)));
+    }
+    if (T.para) {   // parapsidal lines: short, straight, forward from the scutoscutellar suture, halfway between wing base and midline
+      const yS = scutY - 1.5, yE = yS - len * T.para.len;
+      both(s => TH.push(lineEl([s * T.para.x * hwAt(yS), yS], [s * T.para.x * hwAt(yE) * 0.98, yE], SW.F)));
+    }
+    if (T.paramedian) {   // cicada mesonotum: paired sutures running back to the cruciform elevation
+      const yA = yAt(T.paramedian.t0), yB = Math.min(yAt(T.paramedian.t1), scutY - 1.5);
+      both(s => TH.push(lineEl([s * T.paramedian.x * hwAt(yA), yA], [s * T.paramedian.x * 0.85 * hwAt(yB), yB], SW.F)));
+    }
+    if (T.vee) {   // V-shaped transverse suture (lower Diptera): two straight lines meeting on the midline behind
+      const yV = yAt(T.vee.t), hw = hwAt(yV);
+      both(s => TH.push(lineEl([s * (hw - 0.5), yV], [0, yV + len * T.vee.drop], SW.D)));
+    }
+    if (T.humeral) {   // odonate synthorax: oblique humeral sutures from the forewing base forward and outward, optional second line and hatched antehumeral stripe
+      const H = T.humeral, yA = yAt(H.t0), yB = yAt(H.t1);
+      both(s => {
+        const a = [s * H.x0 * hwAt(yA), yA], b = [s * H.x1 * hwAt(yB), yB];
+        TH.push(lineEl(a, b, SW.D));
+        if (H.double) { const yA2 = yA - len * 0.06, yB2 = yB - len * 0.04; TH.push(lineEl([s * Math.min(H.x0 + 0.12, 0.6) * hwAt(yA2), yA2], [s * Math.min(0.97, H.x1 + 0.08) * hwAt(yB2), yB2], SW.F)); }
+        if (H.stripe) {   // ticks across the strip inside the suture
+          const d = norm(sub(b, a)), n = perp(d), L0 = vlen(sub(b, a));
+          for (let q = 6; q < L0 - 4; q += 3.4) { const p = add(a, mul(d, q)), inward = -s * Math.sign(n[0]) || 1; TH.push(lineEl(add(p, mul(n, inward * 1.2)), add(p, mul(n, inward * 4.2)), SW.F)); }
+        }
+      });
+    }
+    if (T.latCar) {   // grasshopper lateral carinae, straight or incurved
+      both(s => { const pts = []; for (let t = 0.08; t <= 0.95; t += 0.05) { const y = yAt(t), hw = hwAt(y); pts.push([s * (T.latCar.k - T.latCar.curve * Math.sin(Math.PI * t)) * hw, y]); } TH.push(pathEl(smoothPath(pts, false), SW.F)); });
+    }
+    // ---- scutellum ----
+    if (T.scut) {
+      const S = T.scut, sp = meta.thorax.scutellum;
+      if (S.shape === 'triangle') {   // beetle: a small triangle over the elytral junction
+        const w = S.w * hwAt(yBot - 3), d = S.drop;
+        TH.push(pathEl(cubicBezierPath([[-w, yBot - 3], [-w * 0.43, yBot + d], [w * 0.43, yBot + d], [w, yBot - 3], [w * 0.57, yBot - 4], [-w * 0.57, yBot - 4], [-w, yBot - 3]], true), SW.D, '#fff'));
+        sp.push([-w, yBot - 3], [w, yBot - 3], [0, yBot - 0.75 + 0.75 * d]);
+      } else if (S.shape === 'cruciform') {   // cicada: the X-shaped cruciform elevation at the rear of the mesonotum
+        const yc = yAt(S.t0) + len * S.len / 2, w = S.w * hwAt(yc), h = len * S.len / 2;
+        both(s => TH.push(pathEl(cubicBezierPath([[s * w, yc - h], [s * w * 0.3, yc - h * 0.15], [-s * w * 0.3, yc + h * 0.15], [-s * w, yc + h]], false), SW.D)));
+        TH.push(pathEl(ellipsePath([0, yc], w * 0.22, h * 0.3, 0), SW.F, '#fff'));
+        sp.push([-w, yc - h], [w, yc - h], [-w, yc + h], [w, yc + h]);
+      } else {   // lunule / bilobed: a convex plate behind the scutoscutellar suture, the suture bowing forward into the scutum
+        const yS = yAt(S.t0), hwS = hwAt(yS), w = S.w * hwS, bowB = hwS * S.bow;
+        const Lsc = Math.min(len * S.len, yBot - yS + S.protrude);
+        const yL = yS + bowYAt(hwS, bowB, w), yTip = yS + Lsc;
+        const body = S.shape === 'bilobed'
+          ? [[-w, yL], [-w * 0.9, yS + Lsc * 0.55], [-w * 0.45, yTip], [0, yS + Lsc * 0.78], [w * 0.45, yTip], [w * 0.9, yS + Lsc * 0.55], [w, yL]]
+          : [[-w, yL], [-w * 0.92, yS + Lsc * 0.5], [-w * 0.5, yS + Lsc * 0.93], [0, yTip], [w * 0.5, yS + Lsc * 0.93], [w * 0.92, yS + Lsc * 0.5], [w, yL]];
+        const top = []; for (let k = 1; k < 6; k++) { const x = w - 2 * w * k / 6; top.push([x, yS + bowYAt(hwS, bowB, Math.abs(x))]); }
+        TH.push(maskEl(smoothPath(body.concat(top), true)));
+        TH.push(pathEl(smoothPath(body, false), SW.D));
+        TH.push(bowLine(yS, hwS - 0.5, bowB, SW.D));   // scutoscutellar suture, across to the axillae
+        if (S.axillae) both(s => TH.push(lineEl([s * w, yL + 0.5], [s * Math.min(hwS - 1.5, w + hwS * 0.15), yS + Lsc * 0.45], SW.F)));
+        if (S.hatched) for (let y = yS + Lsc * 0.55; y < yTip - 1.5; y += 2.6) {   // shadow under the convex rear edge
+          const f = (y - yS) / Lsc, half = w * (f < 0.78 ? 0.9 : 0.9 * Math.sqrt(Math.max(0, 1 - ((f - 0.78) / 0.22) ** 2))) - 1.2;
+          if (half > 1) TH.push(lineEl([-half, y], [half, y], SW.F));
+        }
+        sp.push(...body);
+      }
+    }
+    // ---- small sclerites ----
+    if (T.calli) {   // postpronotal lobes (humeral calli) at the anterolateral corners of the scutum
+      const y = yAt(T.calli.t), hw = hwAt(y);
+      both(s => TH.push(pathEl(ellipsePath([s * (hw - T.calli.rx * 1.05), y], T.calli.rx, T.calli.rx * 0.7, s * -20), SW.D, '#fff')));
+    }
+    if (T.bristles) {   // dorsocentral bristle rows: a dot per bristle socket
+      const yA = yAt(T.lines[0].t) + 3, yB = scutY - 3;
+      for (let i = 0; i < T.bristles; i++) { const y = lerp(yA, yB, (i + 0.5) / T.bristles); both(s => TH.push(circleEl([s * 0.3 * hwAt(y), y], 0.7, SW.F))); }
+    }
+    if (T.patagia) {   // lepidopteran collar lobes on the prothorax
+      const y = yAt(0.1), hw = hwAt(y);
+      both(s => TH.push(pathEl(ellipsePath([s * hw * 0.3, y], hw * 0.24, len * 0.07, s * 12), SW.D, '#fff')));
+    }
+    if (T.crest) {   // dorsal crest of scales along the midline
+      for (let t = 0.3, i = 0; t <= 0.62; t += 0.08, i++) { const y = yAt(t), s = i % 2 ? -1 : 1; TH.push(lineEl([s * 0.8, y], [s * 2.6, y - 4], SW.F)); }
+    }
+    if (T.foveae) {   // basal foveae: two impressions near the hind margin of the pronotum
+      const y = yAt(0.86), hw = hwAt(y);
+      both(s => TH.push(pathEl(ellipsePath([s * hw * 0.55, y], 2.2, 1.3, 0), SW.F)));
     }
   }
   // head: capsule outline from B.head (docs/research-head-eyes.md), mouthparts that show from above drawn first so the
@@ -2197,9 +2429,14 @@ function generateInsectDetailed(seed, opts) {
 
   partEnd('head');
   // ---------- tegulae over the forewing roots ----------
-  if (['moth', 'bee', 'wasp', 'lacewing', 'cicada'].includes(type)) {
-    const ty = thorax.yAt(type === 'moth' || type === 'lacewing' ? 0.35 : 0.4), tx = thorax.hwAt(ty) * 0.72 + 2;   // sits over the wing root
-    L.tegulae.push(pathEl(ellipsePath([tx, ty], 5, 3.5, 30), SW.D, '#fff'));
+  if (B.thorax.tegula) {
+    const G = B.thorax.tegula, ty = thorax.yAt(WING_ROOTS[0]), rootX = thorax.hwAt(ty) * (type === 'moth' ? 0.5 : 0.72);   // where the wing block puts the forewing root
+    const c = [rootX + G.rx * 0.3, ty];
+    L.tegulae.push(pathEl(ellipsePath(c, G.rx, G.rx * G.k, G.tilt), SW.D, '#fff'));
+    for (let i = 0; i < G.hairs; i++) {   // lepidopteran tegulae are beset with hair-like scales on their outer edge
+      const a = (G.tilt - 70 + i * 140 / Math.max(1, G.hairs - 1)) * D2R, p = [c[0] + Math.cos(a) * G.rx * 0.95, c[1] + Math.sin(a) * G.rx * G.k * 0.95];
+      L.tegulae.push(lineEl(p, [p[0] + Math.cos(a) * 3, p[1] + Math.sin(a) * 3], SW.F));
+    }
   }
 
   // ---------- antennae ----------

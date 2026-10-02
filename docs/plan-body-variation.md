@@ -1,7 +1,7 @@
 # Plan: per-seed variation for legs, body, head, eyes and antennae
 
-Status: steps 1–3 and 5 implemented, 2026-10-02 (plumbing, legs, abdomen, head); steps 4, 6, 7
-(thorax, antennae, mirror skew) still open. Follows the wing-genes work (see README "Venation" and
+Status: steps 1–5 implemented, 2026-10-02 (plumbing, legs, abdomen, thorax, head); steps 6, 7
+(antennae, mirror skew) still open. Follows the wing-genes work (see README "Venation" and
 `meta.wingSig`).
 
 ### Status detail
@@ -29,6 +29,27 @@ Status: steps 1–3 and 5 implemented, 2026-10-02 (plumbing, legs, abdomen, head
   doubled lines); markings families; terminalia (ovipositor by family, cerci, valves, mayfly
   filaments 2–3, odonate appendages); keel and side ticks. Lateral bulge and overlapping
   tergite arcs were not added.
+- **Step 4, done** (ranges in `docs/research-thorax.md`, "Rules derived"). Profile from the order's
+  anchors with the pronotum front rolled against the head width, widest point, hump (a dipped
+  shoulder before the peak), propodeal waist on bee / wasp, length 0.85–1.2; beetles roll a pronotum
+  shape (cordate / transverse / quadrate / rounded, biased by body family), grasshoppers a posterior
+  margin (truncate / angulate / rounded). Sutures are per order rather than `subSeg` thirds: fly
+  postpronotal edge + transverse suture (complete 40% / interrupted) + scutoscutellar; hymenopteran
+  collar, scutoscutellar, metanotal, notauli, parapsidal lines, median; odonate collar, mid-dorsal
+  carina, oblique humeral suture (single / double, hatched antehumeral stripe); grasshopper carina
+  (D or O crest), 2–3 sulci with the principal at 0.5–0.7, lateral carinae; cicada collar,
+  paramedian sutures, cruciform elevation; crane-fly V suture; lacewing / mayfly ground plan.
+  Scutellum shape triangle / lunule / bilobed / cruciform with width 0.12–0.65, hatched shadow,
+  axillae; surface: contour hatching 2–4 nested lines per side (any order without pile), beetle
+  punctation (fine / coarse) with bead and basal foveae, fly vittae 2 / 4 with humeral calli and
+  bristle rows, pile ticks (moth always, bee 60%) with interior ticks, moth patagia and crest.
+  Tegula rx 3–7, ry / rx 0.5–0.8, tilt 20–40°, centred on the wing block's forewing root
+  (`WING_ROOTS` table in `generateInsectDetailed` mirrors the wing blocks' `thorax.yAt(t)`), moth
+  tegulae with hair ticks. Deviations from the text above: "notopleural lines (flies)" became the
+  humeral calli + bristle rows the references actually show in dorsal view; the plan's "pronotum
+  width 0.8–1.3× head" is per order (beetle 1.0–1.5, odonata 0.4–0.7, see the research table).
+  `tests/check.js` adds: thorax width > 4 at every wing root, scutellum inside the body outline,
+  bodySig ≥ 98% distinct.
 - **Step 5, done.** Head genes in `rollBodyGenes` (`B.head`, order table `HD` with family overrides `FO`),
   grounded in `docs/research-head-eyes.md`: outline enum (`round` / `transverse` / `triangular` /
   `elongate`) built by `headOutlinePts` from a warped unit circle with a flattened front margin,
