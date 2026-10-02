@@ -1168,13 +1168,22 @@ function insectName(seed, type, variant) {
 // ============================================================
 const TYPES = ['beetle', 'moth', 'fly', 'bee', 'dragonfly', 'grasshopper', 'cranefly', 'lacewing', 'cicada', 'wasp', 'damselfly', 'mayfly'];
 
-function generateInsectDetailed(seed) {
+function generateInsectDetailed(seed, opts) {
   seed = seed >>> 0;
   rng = mulberry32(seed);
-  bbox = { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity };
-  const type = pick(TYPES);
+  const freshBox = () => ({ minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+  bbox = freshBox();
+  const picked = pick(TYPES);                                  // always drawn, so forcing a type never shifts the stream
+  const type = opts && opts.type && TYPES.includes(opts.type) ? opts.type : picked;
   const L = { wings: [], abdomen: [], covers: [], thoraxHead: [], tegulae: [], legs: [], antennae: [] };
-  const meta = { seed, type, variant: null, legs: [] };
+  const meta = { seed, type, variant: null, legs: [], partBox: {} };
+  // per-part bounding boxes (right half, body coordinates) so a single part can be cropped out
+  let outerBox = null;
+  const partStart = () => { outerBox = bbox; bbox = freshBox(); };
+  const partEnd = name => {
+    meta.partBox[name] = bbox;
+    bbox = { minX: Math.min(outerBox.minX, bbox.minX), maxX: Math.max(outerBox.maxX, bbox.maxX), minY: Math.min(outerBox.minY, bbox.minY), maxY: Math.max(outerBox.maxY, bbox.maxY) };
+  };
 
   // ---------- proportions ----------
   const P = {};
@@ -1285,6 +1294,7 @@ function generateInsectDetailed(seed) {
   meta.thorax = { yTop: thorax.yTop, yBot: thorax.yBot };
 
   // ---------- abdomen + details ----------
+  partStart();
   L.abdomen.push(pathEl(abdomen.path, SW.O, '#fff'));
   {
     const n = P.abdSeg, startT = type === 'bee' ? 0.22 : type === 'wasp' ? 0.3 : 0.08;
@@ -1330,7 +1340,9 @@ function generateInsectDetailed(seed) {
     }
   }
 
+  partEnd('abdomen');
   // ---------- thorax + head ----------
+  partStart();
   L.thoraxHead.push(pathEl(thorax.path, SW.O, '#fff'));
   {
     const sub = P.subSeg, t0 = thorax.yTop, len = thorax.length;
@@ -1401,6 +1413,7 @@ function generateInsectDetailed(seed) {
     }
   }
 
+  partEnd('head');
   // ---------- tegulae over the forewing roots ----------
   if (['moth', 'bee', 'wasp', 'lacewing', 'cicada'].includes(type)) {
     const ty = thorax.yAt(type === 'moth' || type === 'lacewing' ? 0.35 : 0.4), tx = thorax.hwAt(ty) * 0.72 + 2;   // sits over the wing root
@@ -1408,6 +1421,7 @@ function generateInsectDetailed(seed) {
   }
 
   // ---------- antennae ----------
+  partStart();
   {
     // antennal sockets sit on the front of the head between the eyes
     const AB = { dragonfly: [0.14, 0.12], damselfly: [0.12, 0.25], fly: [0.055, 0.2], bee: [0.16, 0.3], wasp: [0.16, 0.3], moth: [0.16, 0.3], beetle: [0.2, 0.3], grasshopper: [0.13, 0.24], mayfly: [0.08, 0.2], cicada: [0.22, 0.3] }[type] || [0.18, 0.28];
@@ -1416,7 +1430,9 @@ function generateInsectDetailed(seed) {
     if (type === 'mayfly') L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 72, P.abdLen * 0.85, 14, 8), false), SW.D));   // outer tail filaments
   }
 
+  partEnd('antennae');
   // ---------- legs ----------
+  partStart();
   {
     const u = P.legScale * (thorax.length / 60);
     // leg thickness follows body size, with slender-legged orders thinned further
@@ -1497,7 +1513,9 @@ function generateInsectDetailed(seed) {
     meta.legs = legMeta;
   }
 
+  partEnd('legs');
   // ---------- wings / covers ----------
+  partStart();
   if (type === 'moth') {
     const isB = P.variant === 'butterfly';
     const fam = isB ? pick(['nymphalid', 'satyrine', 'pierid', 'lycaenid', 'papilionid']) : pick(['noctuid', 'noctuid', 'geometrid', 'arctiid', 'saturniid', 'sphingid', 'plain']);
@@ -2411,7 +2429,9 @@ function generateInsectDetailed(seed) {
     }
   }
 
+  partEnd('wings');
   // ---------- assemble ----------
+  meta.layers = L;
   const mirrored = k => '<g>' + L[k].join('') + '</g><g transform="scale(-1,1)">' + L[k].join('') + '</g>';
   const single = k => '<g>' + L[k].join('') + '</g>';
   // legs sprout from under the body; wings are dorsal, so they lie over the body with
@@ -2451,8 +2471,35 @@ function generateInsectDetailed(seed) {
 
 function generateInsect(seed) { return generateInsectDetailed(seed).svg; }
 
+// ---------- single-part generator ----------
+// Draws one body part of the insect that `seed` (forced to `type` when given) would have, cropped to that
+// part's own bounding box and fitted into a `size` px square. Parts: wings (with covers), legs, antennae,
+// head (thorax + head), abdomen, body (everything but wings and legs). The right half only, so wings can be
+// compared side by side without the mirror doubling them.
+const PARTS = ['wings', 'legs', 'antennae', 'head', 'abdomen', 'body'];
+const PART_LAYERS = { wings: ['covers', 'wings', 'tegulae'], legs: ['legs'], antennae: ['antennae'], head: ['thoraxHead'], abdomen: ['abdomen'], body: ['abdomen', 'thoraxHead', 'tegulae', 'antennae'] };
+const PART_BOXES = { wings: ['wings'], legs: ['legs'], antennae: ['antennae'], head: ['head'], abdomen: ['abdomen'], body: ['abdomen', 'head', 'antennae'] };
+function generatePart(seed, type, part, size) {
+  part = PARTS.includes(part) ? part : 'wings';
+  size = size || 300;
+  const r = generateInsectDetailed(seed, { type });
+  const L = r.meta.layers, boxes = PART_BOXES[part].map(k => r.meta.partBox[k]).filter(b => b && b.minX < Infinity);
+  if (!boxes.length) return { svg: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '"></svg>', meta: r.meta };
+  const box = { minX: Math.min(...boxes.map(b => b.minX)), maxX: Math.max(...boxes.map(b => b.maxX)), minY: Math.min(...boxes.map(b => b.minY)), maxY: Math.max(...boxes.map(b => b.maxY)) };
+  const margin = size * 0.05, bw = Math.max(1, box.maxX - box.minX), bh = Math.max(1, box.maxY - box.minY);
+  const s = Math.min((size - 2 * margin) / bw, (size - 2 * margin) / bh);
+  const tx = size / 2 - (box.minX + box.maxX) / 2 * s, ty = size / 2 - (box.minY + box.maxY) / 2 * s;
+  let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + size + ' ' + size + '" width="' + size + '" height="' + size + '">' +
+    '<rect width="' + size + '" height="' + size + '" fill="#fff"/>' +
+    '<g transform="translate(' + fmt(tx) + ' ' + fmt(ty) + ') scale(' + (Math.round(s * 1000) / 1000) + ')" stroke="#000" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
+    PART_LAYERS[part].map(k => '<g>' + L[k].join('') + '</g>').join('') + '</g></svg>';
+  const sw = v => String(Math.round(v / s * 1000) / 1000);
+  svg = svg.replace(/SW_H/g, sw(2.2)).replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
+  return { svg, meta: Object.assign({}, r.meta, { part, partScale: s }) };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { generateInsect, generateInsectDetailed, insectName, dailySeed, hashString, mulberry32, TYPES };
+  module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName, dailySeed, hashString, mulberry32, TYPES, PARTS };
 }
 </script>
 

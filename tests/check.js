@@ -28,6 +28,12 @@ for (let seed = 1; seed <= N; seed++) {
 
   if (/NaN|Infinity|undefined|null/.test(svg)) fail('bad number in svg');
   if (E.generateInsect(seed) !== svg) fail('non-deterministic');
+  if (E.generateInsectDetailed(seed, { type: meta.type }).svg !== svg) fail('forcing the rolled type changes the drawing');
+  if (seed % 50 === 0) for (const part of E.PARTS) {   // part crops: no bad numbers, something drawn
+    const p = E.generatePart(seed, meta.type, part).svg;
+    if (/NaN|Infinity|undefined/.test(p)) fail('bad number in part svg: ' + part);
+    if ((p.match(/<(path|line|polyline|circle)\b/g) || []).length < 1) fail('empty part: ' + part);
+  }
   const els = (svg.match(/<(path|line|polyline|circle)\b/g) || []).length;
   elTotal += els;
   if (els < 60) fail('too few elements: ' + els);

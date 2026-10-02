@@ -49,6 +49,12 @@ node tests/check.js 3000                 # invariants + determinism + wing uniqu
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
 ```
 
+For a part in isolation use `node tests/sheet.js out.png 4 random:12 --part wings --type wasp`
+or open `parts.html` over HTTP and Reroll. `generatePart` relies on `partStart()`/`partEnd()`
+bracketing each drawing section in `generateInsectDetailed`; keep those brackets if you move
+sections, and force a type with `generateInsectDetailed(seed, { type })` (the type pick is
+still drawn from the stream, so forcing never shifts the other rolls).
+
 Always render a sheet for every body plan you touched and compare against the previous
 render. Numbers passing is not the same as the plates looking varied and anatomically sane.
 `node tests/sheet.js out.png 3 1,2,3,4,5,6` takes explicit seeds; `type:count` takes the first

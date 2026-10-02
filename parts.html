@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>insectdraw parts</title>
+<style>
+  html, body { margin: 0; background: #fff; color: #000; }
+  body { font: 14px/1.4 Georgia, "Times New Roman", serif; padding: 12px 16px; box-sizing: border-box; }
+  .controls { display: flex; gap: 8px; align-items: center; margin: 0 0 12px; flex-wrap: wrap; }
+  input, button, select { font: inherit; padding: 4px 10px; border: 1px solid #000; background: #fff; color: #000; border-radius: 0; }
+  input[type=number] { width: 4em; }
+  button { cursor: pointer; }
+  button:active { background: #000; color: #fff; }
+  #grid { display: grid; grid-template-columns: repeat(var(--cols, 4), 1fr); gap: 8px; }
+  .cell { border: 1px solid #ccc; position: relative; cursor: pointer; }
+  .cell svg { width: 100%; height: auto; display: block; }
+  .cell .tag { position: absolute; left: 4px; top: 2px; font: 11px monospace; color: #444; background: rgba(255,255,255,0.8); padding: 0 3px; }
+  .cell.pinned { border-color: #000; box-shadow: inset 0 0 0 2px #000; }
+  .hint { color: #666; font-size: 12px; margin-top: 10px; }
+  a { color: inherit; }
+</style>
+</head>
+<body>
+<div class="controls">
+  <label>Part <select id="part"></select></label>
+  <label>Type <select id="type"><option value="">any</option></select></label>
+  <label>Count <input id="count" type="number" value="12" min="1" max="60"></label>
+  <label>Columns <input id="cols" type="number" value="4" min="1" max="10"></label>
+  <button id="reroll">Reroll</button>
+  <button id="back" disabled>Back</button>
+  <span id="status"></span>
+</div>
+<div id="grid"></div>
+<p class="hint">Click a cell to pin it (pinned cells survive Reroll); shift-click opens that seed as a full plate. Serve this directory over HTTP (the page fetches the engine from <code>index.html</code>). The URL hash carries the state: <code>#part=wings&amp;type=wasp&amp;seeds=1,2,3</code>.</p>
+<script>
+fetch('index.html').then(r => r.text()).then(html => {
+  const m = html.match(/<script id="engine">([\s\S]*?)<\/script>/);
+  const sc = document.createElement('script'); sc.textContent = m[1]; document.head.appendChild(sc);
+  init();
+});
+function init() {
+  const $ = id => document.getElementById(id);
+  const partSel = $('part'), typeSel = $('type'), countIn = $('count'), colsIn = $('cols'), grid = $('grid'), status = $('status'), backBtn = $('back');
+  for (const p of PARTS) partSel.appendChild(new Option(p, p));
+  for (const t of TYPES) typeSel.appendChild(new Option(t, t));
+  let seeds = [], pinned = new Set();
+  const past = [];   // previous seed sets for Back
+  const rnd = () => Math.floor(Math.random() * 4294967296);
+
+  function readHash() {
+    const q = new URLSearchParams(location.hash.slice(1));
+    if (q.get('part') && PARTS.includes(q.get('part'))) partSel.value = q.get('part');
+    if (q.get('type') !== null && (q.get('type') === '' || TYPES.includes(q.get('type')))) typeSel.value = q.get('type');
+    if (q.get('cols')) colsIn.value = q.get('cols');
+    const s = (q.get('seeds') || '').split(',').filter(x => /^\d+$/.test(x)).map(Number);
+    if (s.length) { seeds = s; countIn.value = s.length; }
+  }
+  function writeHash() {
+    window.history.replaceState(null, '', '#' + new URLSearchParams({ part: partSel.value, type: typeSel.value, cols: colsIn.value, seeds: seeds.join(',') }).toString());
+  }
+  function render() {
+    grid.style.setProperty('--cols', colsIn.value);
+    grid.innerHTML = '';
+    const sigs = new Map();
+    for (const seed of seeds) {
+      const r = generatePart(seed, typeSel.value || undefined, partSel.value, 300);
+      const cell = document.createElement('div');
+      cell.className = 'cell' + (pinned.has(seed) ? ' pinned' : '');
+      const label = (r.meta.variant || r.meta.type) + ' ' + seed + (r.meta.wingSig && partSel.value === 'wings' ? ' ' + r.meta.wingSig.split(',').slice(0, 2).join(',') : '');
+      cell.innerHTML = r.svg + '<span class="tag">' + label + '</span>';
+      cell.title = r.meta.name.binomial + ' (seed ' + seed + ')';
+      cell.addEventListener('click', e => {
+        if (e.shiftKey) { window.open('index.html#' + seed, '_blank'); return; }
+        if (pinned.has(seed)) pinned.delete(seed); else pinned.add(seed);
+        cell.classList.toggle('pinned', pinned.has(seed));
+      });
+      grid.appendChild(cell);
+      if (r.meta.wingSig) sigs.set(r.meta.wingSig, (sigs.get(r.meta.wingSig) || 0) + 1);
+    }
+    status.textContent = partSel.value === 'wings' && sigs.size ? sigs.size + ' distinct wing signatures of ' + seeds.length : '';
+    writeHash();
+  }
+  function reroll(push = true) {
+    if (push && seeds.length) { past.push(seeds.slice()); if (past.length > 50) past.shift(); }
+    const n = Math.max(1, Math.min(60, Number(countIn.value) || 12));
+    const keep = seeds.filter(s => pinned.has(s));
+    seeds = keep.slice();
+    while (seeds.length < n) seeds.push(rnd());
+    backBtn.disabled = past.length === 0;
+    render();
+  }
+  $('reroll').addEventListener('click', () => reroll());
+  backBtn.addEventListener('click', () => { if (past.length) { seeds = past.pop(); backBtn.disabled = past.length === 0; render(); } });
+  partSel.addEventListener('change', render);
+  typeSel.addEventListener('change', render);
+  colsIn.addEventListener('change', render);
+  countIn.addEventListener('change', () => reroll());
+  window.addEventListener('keydown', e => { if (e.key === ' ' && e.target === document.body) { e.preventDefault(); reroll(); } });
+
+  readHash();
+  if (seeds.length) render(); else reroll(false);
+}
+</script>
+</body>
+</html>

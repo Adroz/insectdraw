@@ -35,6 +35,21 @@ by hand renders those seeds too.
 For a daily e-ink display, `generateInsect(dailySeed())` returns the SVG
 string; the `<svg>` has a `600×600` viewBox and scales cleanly.
 
+### Comparing one part across many seeds
+
+`parts.html` draws a grid of a single body part (wings, legs, antennae, head,
+abdomen or body) for random seeds, optionally forcing every seed to one body
+plan, so you can judge how varied, say, wasp wings are. **Reroll** (or the
+space bar) regenerates the grid, click pins a cell so it survives rerolls,
+shift-click opens that seed as a full plate, **Back** restores the previous
+grid. Serve the directory over HTTP (`python3 -m http.server`); the page
+loads the engine from `index.html`. The underlying call is
+`generatePart(seed, type, part, size)`, which returns the right-hand part
+cropped to its own bounding box; `generateInsectDetailed(seed, { type })`
+forces the body plan without disturbing the rest of the seed's randomness,
+so a forced wasp is the same drawing the seed would produce if it had rolled
+a wasp anyway.
+
 ## Venation
 
 Wings are drawn from real vein layouts rather than generic radiating lines,
@@ -124,6 +139,7 @@ from a drawn antennal socket.
 node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-attachment/determinism/wing-uniqueness checks
 node tests/sheet.js out.png 3 wasp:6         # contact sheet PNG via headless Chromium (first 6 wasp seeds, 3 columns)
 node tests/sheet.js out.png 3 1,2,3,4,5,6    # ... or explicit seeds; set CHROMIUM=/path/to/chrome if it is not found
+node tests/sheet.js out.png 4 random:12 --part wings --type wasp   # one part only, 12 random seeds all forced to wasps
 python3 -m http.server 8765                  # or open tests/sheet.html?seeds=1,2,3,4,5,6&cols=3 in a browser
 ```
 
