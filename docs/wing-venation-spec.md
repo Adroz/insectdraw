@@ -214,6 +214,10 @@ rather than square) instead of Voronoi; fan hindwing ladder spacing gene.
 
 ## Generation model
 
+See `research-vein-branching.md` for the literature behind the growth model (Hoffmann et al.
+2018 inhibitory-field / Voronoi secondaries; de Celis 2003 dichotomous primaries and closed
+cells; Runions 2005 growth toward sources with anastomosis; junction angles ~110–120°).
+
 ### Growth, not templates
 
 A fixed cell template with jittered corners always reads as the same wing. The references read as
