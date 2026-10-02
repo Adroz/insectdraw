@@ -2603,6 +2603,9 @@ function generateInsectDetailed(seed, opts) {
     const theta = randRange(28, 46);
     const by0 = thorax.yAt(0.4);
     const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.12, 1.32);
+    // clamp the span so a steep theta on a long body cannot push the plate scale under the 0.55 floor
+    const LwMax = (abdomen.yBot - thorax.yTop) * 1.9;
+    const LwC = Math.min(Lw, LwMax);
     const G = {
       hw: randRange(0.13, 0.21), tipY: randRange(-0.25, 0.15), sharp: randRange(0, 1), bulge: randRange(0.82, 1.12),
       hindL: randRange(0.48, 0.64), hindW: randRange(1.1, 1.45), spread: randRange(10, 26), heavy: rng() < 0.4,
@@ -2613,7 +2616,7 @@ function generateInsectDetailed(seed, opts) {
     const nA = 2 + G.nM + (G.cuFork ? 2 : 1);
     meta.wingSig = ['cic', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), nA, G.nM, G.cuFork ? 1 : 0, G.ulnar ? 1 : 0, G.nxb, G.anal, G.ambGap ? 1 : 0, Math.round(G.tipY * 5), Math.round(G.sharp * 2),
       Math.round(G.nx0 * 10), Math.round(G.slant * 10), Math.round(G.hw * 50), Math.round(G.hindL * 10), Math.round(G.inset * 20), G.mcuFork ? 1 : 0, Math.round(G.zig * 100)].join(',');
-    const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.68, hind: true }, { L: Lw, k: 1, th: theta, t: 0.4, hind: false }];
+    const defs = [{ L: LwC * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.68, hind: true }, { L: LwC, k: 1, th: theta, t: 0.4, hind: false }];
     const s = G.sharp;
     for (const d of defs) {
       const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * 0.72;
