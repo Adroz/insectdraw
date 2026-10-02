@@ -196,10 +196,20 @@ as ranges with holoptic or dichoptic flies, meeting or separated odonate eyes
 and three engraving styles (hexagonal lattice, stipple, plain with a
 highlight), ocelli 0–3 by order, and the mouthparts that show from above
 (sickle mandibles, mandible tips, palps, a coiled proboscis, clypeus bow),
-from `docs/research-head-eyes.md`. The discrete part is exposed as
-`meta.bodySig`, held to the same 10% / 50% rule as `wingSig` by
-`tests/check.js`, which also asserts the leg invariants above on
-`meta.legs[i].pts` and the eye / ocelli containment on `meta.head`. Antenna genes are still the plan in `docs/plan-body-variation.md`.
+from `docs/research-head-eyes.md`. **Antennae**: a kind rolled from the order's and
+family's weighted list (a ground beetle filiform or moniliform, a scarab
+lamellate, a weevil elbowed and clubbed, a longhorn filiform at up to 1.6 body
+lengths swept back beside the body; male-moth bipectinate with long or short
+rami, butterfly clubs gradual, abrupt, upcurved or hooked; bee and wasp
+geniculate 12–13 segments, ichneumonid long filiform, chalcid clubbed; fly
+aristate with a plumose or bare arista or stylate; bristle antennae on
+dragonflies, cicadas and mayflies), with length, segment count, club, rami,
+lamellae, arista, socket and a pose (angle, outward curvature, droop) that is
+checked against the mirror line, the plate and raised forelegs and re-rolled
+(`docs/research-antennae.md`). The discrete part is exposed as `meta.bodySig`,
+held to the same 10% / 50% rule as `wingSig` by `tests/check.js`, which also
+asserts the leg invariants above on `meta.legs[i].pts` and the antenna
+invariants on `meta.antennae.pts`.
 
 ## Legs, eyes, antennae
 
@@ -212,10 +222,11 @@ femur, a corbicula and flat basitarsus on the bee hind leg, and engraver's
 hatching on the far side of each femur and tibia. Compound eyes are a
 hexagonal ommatidia lattice clipped to an order-specific outline (holoptic
 fly, dorsally meeting dragonfly, dumbbell damselfly, kidney bee, notched
-beetle) with a white highlight. Antennae follow the order: filiform,
-moniliform, serrate, lamellate, clubbed/hooked, bipectinate/pectinate,
-geniculate (scape, pedicel, flagellum), aristate and setaceous, each rising
-from a drawn antennal socket.
+beetle) with a white highlight. Antennae are drawn from the type table and
+proportions in `docs/research-antennae.md`: filiform, moniliform, serrate,
+pectinate / bipectinate, plumose, clubbed, lamellate, geniculate (scape,
+pedicel, flagellum), aristate, stylate and setaceous, each rising from a drawn
+antennal socket at the order's position on the head.
 
 ## Dev
 

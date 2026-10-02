@@ -1,7 +1,7 @@
 # Plan: per-seed variation for legs, body, head, eyes and antennae
 
-Status: steps 1–5 implemented, 2026-10-02 (plumbing, legs, abdomen, thorax, head); steps 6, 7
-(antennae, mirror skew) still open. Follows the wing-genes work (see README "Venation" and
+Status: steps 1–6 implemented, 2026-10-02 (plumbing, legs, abdomen, thorax, head, antennae); step 7
+(mirror skew) still open. Follows the wing-genes work (see README "Venation" and
 `meta.wingSig`).
 
 ### Status detail
@@ -70,6 +70,26 @@ Status: steps 1–5 implemented, 2026-10-02 (plumbing, legs, abdomen, thorax, he
   Deviations from the text above: grasshopper mandibles are not drawn (hypognathous, hidden from
   above; palps and the fastigium furrow instead); the fly proboscis is not drawn (hidden under the
   head); the antennal socket table `AB` is untouched (step 6 can snap it to `meta.headOutline`).
+- **Step 6, done.** Research first (`research-antennae.md`, six references in `ref/ant-*`), then
+  `rollAntGenes` in `rollBodyGenes`: per-order / per-family weighted kind lists (`ANT_FAMS`:
+  filiform, moniliform, serrate, pectinate, bipectinate, plumose, clubbed with gradual / abrupt /
+  hooked / upcurved clubs, lamellate, geniculate with an optional club, aristate with plumose /
+  bare / pubescent arista, stylate with annuli or a style, setaceous), length in head widths, body
+  lengths or forewing lengths by kind, segment counts, scape fraction and elbow, rami count /
+  length / peak / sweep, lamella count and spread, arista and style lengths, socket position and
+  radius. The pose (base angle, outward curvature, tip droop) is rolled from one of five families
+  (`ANT_POSES`: v, wide, costal, face, arc, swept) and validated in the antennae block, which now
+  runs after the legs: no point of the right antenna at x < max(0.5, 0.6 × shaft width) (the left is
+  the mirror image, so that is the no-crossing rule), the antenna alone must not push the plate
+  scale under 0.6, and where the legs are raised ahead of the head the antenna keeps clear of them;
+  re-roll up to 24 times, then a known-good forward pose. `meta.antennae` exposes the geometry and
+  `tests/check.js` asserts it; the discrete genes are on `B.sig`. Over 3000 seeds the fallback fires
+  on about 1% of damselflies (basket legs around a bristle antenna) and nowhere else.
+  Deviations from the text above: lengths are per kind and reference (0.1 hw for a cicada bristle,
+  1.6 body lengths for a longhorn), not "0.4–2.5× head width"; inward curvature is limited to −5°
+  on the costal pose because anything larger crosses the midline on a long antenna; droop is 0–15°
+  and only on the forward poses. The legacy `antenna` / `antLen` fields in the proportions switch
+  are no longer read but were left in place so the rng stream of the family pick does not move.
 - **Known, outside this plan:** the cicada wing span (`abdomen length / sin(theta) × 1.0–1.12`
   in the wing block) pushes ~0.4% of cicadas below plate scale 0.55 on the baseline engine as
   well; which seeds hit it moves with the rng stream, so `check.js 3000` can show one to three.
