@@ -1071,7 +1071,7 @@ const swBelow = sw => SW_LV[Math.max(0, swLevel(sw) - 1)];
 const swAbove = sw => SW_LV[Math.min(2, swLevel(sw) + 1)];
 function growVeins(g, G) {
   const wing = g.wing, poly = wing.localPoly, Lw = g.Lw;
-  const uOpen = G.uOpen, k = G.k === undefined ? 1.1 : G.k, minSep = G.minSep === undefined ? 0.07 : G.minSep;
+  const uOpen = G.uOpen, k = G.k === undefined ? 1.1 : G.k, minSep = G.minSep === undefined ? 0.07 : G.minSep, minSepAbs = (G.minSepAbs || 0) * g.Lw;   // minSepAbs: strips narrower than this (fraction of the span) carry no sites, e.g. the basal bundle of a fly wing
   const angLo = 105, angHi = 140, angT = G.angle === undefined ? 120 : G.angle, lean = G.lean === undefined ? -1 : G.lean;
   const bowAmt = G.bowAmt === undefined ? 0.02 : G.bowAmt, stubLen = G.stubLen === undefined ? 0.08 : G.stubLen;
   const stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
@@ -1222,7 +1222,7 @@ function growVeins(g, G) {
     const lv = live(u);
     for (let i = 0; i + 1 < lv.length; i++) {
       const a = lv[i].l, b = lv[i + 1].l, key = pairKey(a, b);
-      if (noPair.has(key) || (lv[i + 1].y - lv[i].y) / chord(u) < minSep) continue;
+      if (noPair.has(key) || (lv[i + 1].y - lv[i].y) / chord(u) < minSep || lv[i + 1].y - lv[i].y < minSepAbs) continue;
       const r = runs[key] ||= { a, b, u0: u, u1: u, closed: false };
       if (r.closed) continue;
       if (u - r.u1 > 0.015) r.closed = true; else r.u1 = u;
@@ -2180,25 +2180,50 @@ function generateInsectDetailed(seed, opts) {
   }
 
   if (type === 'fly' || type === 'cranefly') {
-    // ---- Diptera on the wing graph (docs/wing-venation-spec.md; refs dip-eristalis, dip-asilid-photo, dip-limonia).
-    // C heavy to the apex; Sc, R1, R2+3 end on the costa in turn; R4+5 reaches the apex; M1 bends forward (muscids),
-    // forks (nematocerans) or runs straight to the margin (asilids); closed cells br, bm, cup (CuA2 meets A1) and
-    // dm (closed by dm-cu); a small dark stigma where Sc ends; an alula at the base. ----
+    // ---- Diptera, grown by growVeins v2 (docs/wing-venation-spec.md, Diptera; refs dip-eristalis, dip-asilid-photo,
+    // dip-limonia). Lanes are the fly's Comstock-Needham trunks measured on dip-eristalis: Sc and R1 run under the costa
+    // and meet it in turn; Rs forks off R1 at u 0.2 and splits again into R2+3 (costa) and R4+5 (apex); M runs through
+    // r-m and dm-cu; CuA1 goes to the hind margin; CuA2 bends back onto A1 to close cup, and A1+CuA2 reaches the margin
+    // just beyond. The family decides how M1 ends (bent forward to the margin or onto R4+5, closing r4+5; forked into
+    // M1 / M2 (+ M3); M1-M3 all to the margin), whether R4 forks off R4+5, whether cup closes, the site spacing and the
+    // open line; the seed rolls every position, every bow, the optional h and bm-cu crossveins, the stigma and the
+    // posture. C stays heavy to the apex; the small stigma sits where Sc ends. ----
     const fam = type === 'cranefly' ? 'tipulid' : pick(['muscid', 'muscid', 'nemato', 'syrphid', 'tabanid', 'asilid']);
-    const nemato = fam === 'tipulid' || fam === 'nemato';
-    const E = { sc: randRange(0.4, 0.55), r1: randRange(0.58, 0.72), r23: randRange(0.8, 0.9), fork: randRange(0.48, 0.6), rm: randRange(0.42, 0.5), dmcu: randRange(0.6, 0.7), cu1: randRange(0.6, 0.74), cu2: randRange(0.3, 0.42), a: randRange(0.14, 0.24), bmcu: randRange(0.33, 0.4) };
+    const F = {   // ky breadth / Lw; len span factor; sc / r1 / r23 where Sc, R1, R2+3 meet the costa; fork where Rs splits; bmcu / dmcu crossvein u;
+      // cu1 CuA1's margin u past dm-cu; cu2 where CuA2 meets A1 (or the margin when cup is open); mEnd where M stops before the M1 bend;
+      // m1: bend (muscid M1 bent forward), fork (nematoceran M1 / M2, m3 odds of M3), three (M1-M3 to the margin); r45 odds r4+5 closes;
+      // r4 odds R4 forks off R4+5; sepAbs: strips narrower than this fraction of the span carry no sites (the basal bundle); k site spacing / strip width; uOpen; a2 / h / bmcu odds; cupOpen: CuA2 and A1 reach the margin apart
+      muscid:  { ky: [0.92, 1.1], len: [1.05, 1.28], sc: [0.42, 0.52], r1: [0.6, 0.72], fork: [0.5, 0.6], r23: [0.82, 0.9], bmcu: [0.33, 0.4], dmcu: [0.6, 0.7], cu1: [0.05, 0.1], cu2: [0.28, 0.36], mEnd: [0.74, 0.8],
+                 m1: 'bend', m3: 0, r45: 0.5, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.7, 0.8], a2: 0.4, h: 0.7, bmcuP: 0.85, stig: ['solid', 'solid', 'stipple', 'none'] },
+      nemato:  { ky: [0.85, 1.0], len: [1.05, 1.25], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.52, 0.62], r23: [0.82, 0.9], bmcu: [0.34, 0.42], dmcu: [0.6, 0.7], cu1: [0.05, 0.1], cu2: [0.3, 0.4], mEnd: [0.7, 0.76],
+                 m1: 'fork', m3: 0.5, r45: 0, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.72, 0.8], a2: 0.5, h: 0.7, bmcuP: 0.8, stig: ['solid', 'stipple', 'none', 'none'] },
+      syrphid: { ky: [0.95, 1.1], len: [1.08, 1.28], sc: [0.45, 0.55], r1: [0.6, 0.7], fork: [0.48, 0.58], r23: [0.8, 0.88], bmcu: [0.34, 0.4], dmcu: [0.62, 0.7], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
+                 m1: 'bend', m3: 0, r45: 1, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.72, 0.8], a2: 0.5, h: 0.8, bmcuP: 1, stig: ['solid', 'solid', 'stipple'] },
+      tabanid: { ky: [1.08, 1.2], len: [1.05, 1.2], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.5, 0.58], r23: [0.82, 0.88], bmcu: [0.34, 0.4], dmcu: [0.6, 0.68], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
+                 m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 3.5], uOpen: [0.74, 0.8], a2: 0.6, h: 0.8, bmcuP: 0.9, stig: ['solid', 'stipple', 'none'] },
+      asilid:  { ky: [0.72, 0.84], len: [1.2, 1.35], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.5, 0.6], r23: [0.84, 0.9], bmcu: [0.34, 0.4], dmcu: [0.6, 0.68], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
+                 m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.74, 0.8], a2: 0.3, h: 0.7, bmcuP: 0.8, stig: ['solid', 'solid', 'none'] },
+      tipulid: { ky: [0.56, 0.68], len: [0.95, 1.05], sc: [0.6, 0.7], r1: [0.76, 0.84], fork: [0.62, 0.72], r23: [0.88, 0.94], bmcu: [0.42, 0.52], dmcu: [0.62, 0.72], cu1: [0.04, 0.08], cu2: [0.54, 0.62], mEnd: [0.8, 0.86],
+                 m1: 'fork', m3: 0.8, r45: 0, r4: 0, sepAbs: 0.055, k: [1.6, 2.4], uOpen: [0.88, 0.92], a2: 1, h: 0.8, bmcuP: 0.8, stig: ['solid', 'stipple', 'none'], cupOpen: true },
+    }[fam];
+    const rr = r => randRange(r[0], r[1]);
+    const E = { sc: rr(F.sc), r1: rr(F.r1), fork: rr(F.fork), r23: rr(F.r23), bmcu: rr(F.bmcu), dmcu: rr(F.dmcu), cu2: rr(F.cu2), mEnd: rr(F.mEnd), a: randRange(0.14, 0.24), h: randRange(0.1, 0.17), r4: randRange(0.66, 0.74) };
+    E.rm = Math.max(0.4, E.fork - randRange(0.03, 0.1));                      // r-m sits just basal of the Rs fork (dip-eristalis)
+    E.cu1 = E.dmcu + rr(F.cu1);                                              // CuA1 turns down to the margin right after dm-cu
+    E.mf = Math.max(E.dmcu + 0.08, fam === 'tipulid' ? randRange(0.78, 0.84) : lerp(E.dmcu, 0.94, randRange(0.3, 0.45)));   // where M forks into M1 / M2
     const G = {
+      fam, ky: rr(F.ky), len: rr(F.len), theta: type === 'cranefly' ? randRange(44, 68) : randRange(24, 56),
       tipY: randRange(-0.08, 0.1), sharp: randRange(0, 1), lobe: randRange(0.82, 1.18), stalk: type === 'cranefly' ? randRange(0.5, 0.8) : randRange(0.7, 1.15),
-      bend: fam === 'muscid' ? randRange(0.05, 0.14) : 0, spines: rng() < 0.65, spurious: fam === 'syrphid' || (fam === 'muscid' && rng() < 0.1),
-      r45closed: fam === 'syrphid' || (fam === 'muscid' && rng() < 0.5), fork: fam === 'tabanid', m3: nemato && rng() < 0.5, a2: rng() < 0.45,
-      stig: pick(['solid', 'solid', 'stipple', 'none']), heavy: rng() < 0.4, bmcu: rng() < 0.8, h: rng() < 0.7,
+      spines: rng() < 0.65, spurious: fam === 'syrphid' || (fam === 'muscid' && rng() < 0.1),
+      r45closed: F.m1 === 'bend' && rng() < F.r45, r4: rng() < F.r4, m2: F.m1 === 'three' || (F.m1 === 'fork' && rng() < 0.75), m3: F.m1 !== 'bend' && rng() < F.m3, a2: rng() < F.a2, h: rng() < F.h, bmcu: rng() < F.bmcuP,
+      stig: pick(F.stig), heavy: rng() < 0.4,
+      k: rr(F.k), uOpen: rr(F.uOpen), angle: randRange(112, 128), lean: rng() < 0.8 ? -1 : 1, bow: randRange(0.01, 0.03), grad: randRange(0, 0.2),
+      bend: randRange(0.1, 0.16), dmBow: randRange(-0.06, -0.02),            // the muscid M1 bend (chord fraction M1 rises by); dm-cu bows toward the apex (a bow rotates both end tangents, so it stays gentle for R-D)
     };
-    meta.wingSig = ['dip', fam, G.heavy ? 1 : 0, G.bend > 0 ? 1 : 0, G.spurious ? 1 : 0, G.spines ? 1 : 0, G.r45closed ? 1 : 0, G.fork ? 1 : 0, G.m3 ? 1 : 0, G.a2 ? 1 : 0, G.stig, G.bmcu ? 1 : 0,
-      Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.lobe * 10), Math.round(G.stalk * 5), Math.round(E.fork * 10), Math.round(E.r1 * 10), Math.round(E.dmcu * 10)].join(',');
     const by = thorax.yAt(0.42), bx = thorax.hwAt(by) * 0.72;
-    const theta = type === 'cranefly' ? randRange(44, 68) : randRange(24, 56);
-    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * (type === 'cranefly' ? randRange(0.95, 1.05) : fam === 'asilid' ? randRange(1.2, 1.35) : randRange(1.05, 1.28));
-    const ky = (type === 'cranefly' ? 0.62 : fam === 'asilid' ? 0.78 : fam === 'tabanid' ? 1.12 : 1) * randRange(0.9, 1.1);
+    const theta = G.theta;
+    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * G.len;
+    const ky = G.ky * randRange(0.9, 1.1);
     const X = f => f * Lw, Y = f => f * Lw * ky;
     const s = G.sharp;
     const o = [[0, 0], [0.08, -0.05 * G.stalk], [0.18, -0.14 * G.stalk], [0.35, -0.27], [0.55, -0.33], [0.78, -0.3], [lerp(0.9, 0.95, s), -lerp(0.2, 0.1, s)], [1.0, G.tipY], [lerp(0.9, 0.95, s), lerp(0.2, 0.1, s) + G.tipY * 0.5],
@@ -2208,57 +2233,59 @@ function generateInsectDetailed(seed, opts) {
     L.wings.push(pathEl(wing.path, SW.O, '#fff'));
     L.wings.push(...fringe(wing, 2.2, 1.8, SW.F, p => p[0] > X(0.08)));
     if (G.spines) L.wings.push(...costalSpines(wing, X(0.2), X(0.75), 3.2, 2.6));
-    const g = wingGraph(wing, Lw), wO = G.heavy ? SW.O : SW.D;
-    const node = (id, u, s_) => g.node(id, u, Math.max(0.03, Math.min(0.97, s_ + randRange(-0.03, 0.03))));
-    node('b', 0.02, 0.45); node('bL', 0.02, 0.6);
-    // Sc and R1 to the costa; the stigma sits where Sc ends
-    g.margin('scE', E.sc, 'top'); node('sc1', E.sc * 0.55, 0.2);
-    g.chain(['b', 'sc1', 'scE'], { vein: 'Sc', sw: SW.O, bows: [-0.02, -0.01] });
-    if (G.stig !== 'none') g.stigma(X(E.sc) - X(0.035), X(E.sc) + X(0.03), Y(0.035), 0.4, G.stig);
-    g.margin('r1E', E.r1, 'top'); node('rs0', 0.2, 0.32); node('r1m', lerp(0.2, E.r1, 0.55), 0.17);
-    g.chain(['b', 'rs0', 'r1m', 'r1E'], { vein: 'R1', sw: SW.O, bows: [-0.01, -0.02, -0.01] });
-    // Rs from R1, forking into R2+3 (to the costa) and R4+5 (to the apex)
-    node('rsF', E.fork, 0.3); node('rs1', lerp(0.2, E.fork, 0.5), 0.33);
-    g.chain(['rs0', 'rs1', 'rsF'], { vein: 'Rs', sw: wO, bows: [0.01, 0.0] });
-    g.margin('r23E', E.r23, 'top'); node('r23m', lerp(E.fork, E.r23, 0.5), 0.2);
-    g.chain(['rsF', 'r23m', 'r23E'], { vein: 'R23', sw: wO, bows: [-0.02, -0.02] });
-    if (fam === 'asilid') { g.margin('r4E', 0.9, 'top'); node('r4m', 0.75, 0.22); g.chain(['rsF', 'r4m', 'r4E'], { vein: 'R4', sw: wO, bows: [-0.02, -0.01] }); }
-    g.margin('tip', 1, 'tip'); node('r45m', 0.78, fam === 'syrphid' ? 0.3 : 0.28);
-    g.chain(['rsF', 'r45m', 'tip'], { vein: 'R45', sw: wO, bows: [0.01, fam === 'syrphid' ? 0.06 : 0.01] });
-    if (G.fork) { g.margin('r4fE', 0.93, 'top'); const p = g.on('R45', 0.6); g.nodeAt('r4f', p); g.chain(['r4f', 'r4fE'], { vein: 'R4f', sw: wO, bow: -0.03 }); }   // tabanid: R4 forks off to the costa
-    // M stem through r-m and dm-cu, then M1 (bent, forked or straight) to the margin
-    node('bm0', 0.3, 0.5); node('rm', E.rm, 0.44); node('dmcu', E.dmcu, 0.5);
-    g.chain(['b', 'bm0', 'rm', 'dmcu'], { vein: 'M', sw: wO, bows: [0.01, -0.01, 0.01] });
-    g.cross('Rs', 0.96, 'M', 0.68, { sw: SW.D, bow: -0.02 });                                                              // r-m
-    if (nemato) {
-      g.margin('m1E', 0.95, 'bot'); g.margin('m2E', 0.86, 'bot');
-      node('mF', lerp(E.dmcu, 0.95, 0.35), 0.48);
-      g.chain(['dmcu', 'mF'], { vein: 'Mst', sw: wO, bow: 0.01 });
-      node('m1m', lerp(E.dmcu, 0.95, 0.7), 0.45); g.chain(['mF', 'm1m', 'm1E'], { vein: 'M1', sw: SW.D, bows: [0.01, 0.02] });
-      node('m2m', lerp(E.dmcu, 0.86, 0.7), 0.6); g.chain(['mF', 'm2m', 'm2E'], { vein: 'M2', sw: SW.D, bows: [0.02, 0.02] });
-      if (G.m3) { g.margin('m3E', 0.78, 'bot'); node('m3m', lerp(E.dmcu, 0.78, 0.6), 0.68); g.chain(['dmcu', 'm3m', 'm3E'], { vein: 'M3', sw: SW.D, bows: [0.02, 0.02] }); }
-    } else if (fam === 'asilid') {
-      for (let k = 0; k < 3; k++) { const uE = [0.96, 0.9, 0.82][k]; g.margin('m' + k + 'E', uE, 'bot'); node('m' + k + 'm', lerp(E.dmcu, uE, 0.55), 0.42 + 0.12 * k); g.chain(['dmcu', 'm' + k + 'm', 'm' + k + 'E'], { vein: 'M' + k, sw: SW.D, bows: [0.01, 0.02] }); }
-    } else {
-      const uB = lerp(E.dmcu, 0.96, 0.6);
-      node('m1b', uB, 0.42 - G.bend * 1.2);
-      if (G.r45closed) { g.nodeAt('m1E', g.on('R45', 0.9)); } else g.margin('m1E', 0.95, 'bot');
-      g.chain(['dmcu', 'm1b', 'm1E'], { vein: 'M1', sw: wO, bows: [-G.bend * 0.6, G.bend] });
+    const g = wingGraph(wing, Lw), wO = G.heavy ? SW.O : SW.D;   // R-G: the heavy gene promotes Rs, M and CuA1 to O
+    if (G.stig !== 'none') g.stigma(X(E.sc) - X(0.035), X(E.sc) + X(0.03), Y(0.035), 0.4, G.stig);   // small dark stigma where Sc ends
+    // margin nodes: Sc, R1, R2+3 (and R4) on the costa, R4+5 at the apex, M1-M3 / CuA1 / CuA2 / A1 / A2 on the hind margin
+    g.margin('scE', E.sc, 'top'); g.margin('r1E', E.r1, 'top'); g.margin('r23E', E.r23, 'top'); g.margin('r4E', E.r23 + 0.05, 'top'); g.margin('tip', 1, 'tip');
+    g.margin('cu1E', E.cu1, 'bot'); g.margin('cu2E', E.cu2 + (F.cupOpen ? 0 : 0.05), 'bot'); g.margin('a1E', E.cu2 - 0.16, 'bot'); g.margin('a2E', E.a, 'bot');
+    const bend = F.m1 === 'bend', three = F.m1 === 'three', forked = F.m1 === 'fork';
+    const uM1 = fam === 'tipulid' ? 0.96 : 0.95;
+    g.margin('m1E', bend ? 0.99 : uM1, 'bot'); g.margin('m2E', uM1 - 0.07, 'bot'); g.margin('m3E', uM1 - 0.14, 'bot');   // a bent M1 ends just behind the apex
+    const closed45 = G.r45closed;
+    g.node('r45J', E.mEnd + randRange(0.12, 0.16), 0.3);                    // where the long oblique M1 meets R4+5 when r4+5 closes (dip-eristalis)
+    g.node('mE', E.mEnd, 0.5);                                               // where M stops and M1 begins (bend families)
+    g.node('m1K', E.mEnd + randRange(0.07, 0.1), 0.5 - G.bend);              // the muscid M1 elbow
+    g.node('cupJ', E.cu2, 0.84);                                             // CuA2 meets A1: cup closes
+    g.node('cuK', E.dmcu + randRange(0.01, 0.03), 0.74);                     // CuA1 turns down to the margin at dm-cu's foot (dm's lower edge sits at s 0.75-0.8)
+    g.node('mF', E.mf, 0.5);                                                 // M forks into M1 / M2 (fork and three families)
+    const lanes = [
+      { id: 'Sc', u0: 0.02, s0: 0.2, s1: 0.03, end: 'scE', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.06, -0.02) },                  // Sc hugs the costa and meets it
+      { id: 'R1', u0: 0.02, s0: 0.3, s1: 0.03, end: 'r1E', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: randRange(0.03, 0.07),                     // R stem (O) then R1 rising to the costa
+        fork: { id: 'Rs', u: randRange(0.17, 0.23), s1: 0.3, end: closed45 ? 'r45J' : 'tip', sw: wO, noFork: false, stub: false, ctrl: 2, bow: randRange(-0.01, 0.03) } },   // Rs: stem (O) to its fork, then R4+5 to the apex
+      { id: 'M', u0: 0.02, s0: 0.45, s1: 0.5, end: bend ? 'mE' : 'mF', sw: wO, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.02, 0.02) },          // M through r-m, bm-cu, dm-cu, flat to where M1 begins
+      { id: 'CuA1', u0: 0.02, s0: 0.6, s1: 0.74, end: 'cuK', sw: wO, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.03, 0) },                     // CuA1 under bm and dm
+      { id: 'CuA1b', start: 'cuK', s1: 0.97, end: 'cu1E', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.08, -0.04) },      // then down to the hind margin, convex toward the apex
+      { id: 'CuA2', u0: 0.02, s0: 0.64, s1: F.cupOpen ? 0.97 : 0.84, end: F.cupOpen ? 'cu2E' : 'cupJ', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: F.cupOpen ? randRange(-0.08, -0.04) : randRange(-0.14, -0.1) },   // CuA2 runs out then bends back onto A1
+      { id: 'A1', u0: 0.02, s0: 0.8, s1: F.cupOpen ? 0.97 : 0.84, end: F.cupOpen ? 'a1E' : 'cupJ', sw: SW.D, noFork: true, stub: false, ctrl: 1, bow: randRange(0.0, 0.04) },
+    ];
+    if (!F.cupOpen) lanes.push({ id: 'A1c', start: 'cupJ', s1: 0.97, end: 'cu2E', sw: SW.D, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: 0 });   // A1+CuA2, the short way on to the margin
+    if (G.a2) lanes.push({ id: 'A2', u0: 0.02, s0: 0.9, s1: 0.97, end: 'a2E', sw: SW.F, noFork: true, stub: false, ctrl: 1, bow: randRange(0, 0.03) });
+    if (closed45) lanes.push({ id: 'R45b', start: 'r45J', s1: 0.5, end: 'tip', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.09, -0.05) });   // R4+5 on to the apex past M1 (the bow keeps it on Rs's line as the chord shrinks)
+    if (bend) {   // muscid / syrphid M1: a long oblique vein from the end of M onto R4+5 (r4+5 closed) or over an elbow to the margin below the apex
+      if (closed45) lanes.push({ id: 'M1', start: 'mE', s1: 0.3, end: 'r45J', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.03, 0) });
+      else lanes.push({ id: 'M1', start: 'mE', s1: 0.5 - G.bend, end: 'm1K', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.03, 0) },
+        { id: 'M1b', start: 'm1K', s1: 0.6, end: 'm1E', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.05, -0.02) });
+    } else {      // nematoceran / asilid / tabanid: M1 and M2 leave the end of M together (M3 forks off earlier, at dm-cu)
+      lanes.push({ id: 'M1', start: 'mF', s1: 0.97, end: 'm1E', sw: SW.D, noFork: true, noJoin: true, stub: false, ctrl: 2, bow: randRange(-0.06, -0.02) });
+      if (G.m2) lanes.push({ id: 'M2', start: 'mF', s1: 0.97, end: 'm2E', sw: SW.D, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(0, 0.03) });
     }
-    // CuA1 with bm-cu and dm-cu (closing bm and dm); CuA2 bends back to meet A1 and close cup; A1, A2 to the hind margin
-    g.margin('cu1E', E.cu1, 'bot'); node('cu0', 0.3, 0.62); node('cu1m', lerp(0.3, E.cu1, 0.55), 0.62);
-    g.chain(['bL', 'cu0', 'cu1m', 'cu1E'], { vein: 'CuA1', sw: wO, bows: [0.02, 0.015, 0.01] });
-    g.cross('M', 0.98, 'CuA1', 0.72, { sw: SW.D, bow: 0.04 });                                                             // dm-cu
-    if (G.bmcu) g.cross('M', 0.44, 'CuA1', 0.44, { sw: SW.D, bow: -0.02 });                                               // bm-cu
-    node('cupJ', E.cu2 - 0.04, 0.8); g.margin('cu2E', E.cu2, 'bot'); node('cu2m', E.cu2 * 0.55, 0.72);
-    g.chain(['bL', 'cu2m', 'cupJ', 'cu2E'], { vein: 'CuA2', sw: SW.D, bows: [0.02, 0.03, 0.0] });
-    node('a1m', E.cu2 * 0.4, 0.85);
-    g.chain(['bL', 'a1m', 'cupJ'], { vein: 'A1', sw: SW.F, bows: [0.02, 0.0] });                                             // cup closed where A1 meets CuA2
-    if (G.a2) { g.margin('a2E', E.a * 0.9, 'bot'); node('a2m', E.a * 0.5, 0.9); g.chain(['bL', 'a2m', 'a2E'], { vein: 'A2', sw: SW.F, bows: [0.03, 0.01] }); }
-    if (G.h) g.cross('Sc', 0.3, 'R1', 0.3, { sw: SW.D, bow: 0 });                                                           // h crossvein
-    if (G.spurious) g.chain([g.nodeAt('sv0', [X(0.28), Y(-0.02)]), g.nodeAt('sv1', [X(0.55), Y(0.04)]), g.nodeAt('sv2', [X(0.85), Y(0.05)])], { vein: 'sv', sw: SW.F, bows: [0.01, -0.01] });   // vena spuria
+    const named = [
+      { early: true, forkOn: 'Rs', u: E.fork, spec: { id: 'R23', end: 'r23E', s1: 0.03, sw: wO, stub: false, ctrl: 2, ease: 'mid', bow: randRange(-0.05, -0.02) } },   // Rs forks: R2+3 to the costa
+    ];
+    if (G.r4) named.push({ early: true, forkOn: 'Rs', u: E.r4, spec: { id: 'R4', end: 'r4E', s1: 0.03, sw: SW.D, stub: false, ctrl: 1, bow: randRange(-0.03, -0.01) } });   // tabanid / asilid: R4 forks off R4+5
+    if (G.m3) named.push({ early: true, forkOn: 'M', u: E.dmcu + 0.02, spec: { id: 'M3', end: 'm3E', s1: 0.97, sw: SW.D, stub: false, ctrl: 1, bow: randRange(0, 0.03) } });   // M3 off the dm cell's distal corner
+    named.push({ a: 'Rs', ua: E.rm, b: 'M', reach: 0.07, sw: SW.D, bow: randRange(-0.02, 0.02) });                 // r-m: closes br against bm / dm
+    if (G.bmcu) named.push({ a: 'M', ua: E.bmcu, b: 'CuA1', reach: 0.09, sw: SW.D, bow: randRange(-0.02, 0.02) });  // bm-cu: closes bm
+    named.push({ a: 'M', ua: E.dmcu, b: 'CuA1', reach: 0.08, sw: SW.D, bow: G.dmBow });                             // dm-cu: closes dm, bowed toward the apex
+    if (G.h) named.push({ a: 'Sc', ua: E.h, b: 'R1', reach: 0.04, sw: SW.D, bow: 0 });                               // h: the humeral crossvein
+    const noPair = [['CuA2', 'A1'], ['A1', 'A2'], ['Sc', 'R1'], ['R23', 'Rs'], ['R23', 'R4'], ['R4', 'Rs']].concat(fam === 'tipulid' ? [] : [['R1', 'Rs']]);   // cup, the anal field, the subcostal strip and r2+3 never carry rungs; the strip under R1 only in crane flies
+    const grown = growVeins(g, { lanes, named, forks: 0, uOpen: G.uOpen, k: G.k, minSepAbs: F.sepAbs, angle: G.angle, lean: G.lean, bowAmt: G.bow, grad: G.grad, stubProb: 0, stubLen: 0.08, noPair });
+    if (G.spurious) g.chain([g.node('sv0', 0.2, 0.34), g.node('sv1', 0.44, 0.42), g.node('sv2', 0.66, 0.47)], { vein: 'sv', sw: SW.F, bows: [0.01, -0.01] });   // vena spuria: a fold, joins nothing
     L.wings.push(...g.emit());
     L.wings.push(...costaEls(wing, X(0), X(0.97)));
+    meta.wingStats = grown.stats; meta.wingTheta = theta;
+    meta.wingSig = ['dip', fam, grown.lanes.length, grown.joins.length, grown.forks, G.heavy ? 1 : 0, G.spurious ? 1 : 0, G.spines ? 1 : 0, closed45 ? 1 : 0, G.r4 ? 1 : 0, G.m2 ? 1 : 0, G.m3 ? 1 : 0, G.a2 ? 1 : 0, G.stig, G.bmcu ? 1 : 0, G.h ? 1 : 0,
+      Math.round(G.uOpen * 10), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.lobe * 10), Math.round(G.stalk * 5), Math.round(E.fork * 10), Math.round(E.r1 * 10), Math.round(E.dmcu * 10)].join(',');
     // halteres
     const hy = thorax.yAt(0.8), hx = thorax.hwAt(hy) * 0.8;
     const hd = dirv(theta + 20);
