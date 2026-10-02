@@ -2630,10 +2630,14 @@ function generateInsectDetailed(seed, opts) {
   }
 
   if (type === 'cicada') {
-    // ---- Cicadidae (docs/wing-venation-spec.md; ref cic-cicada). Sc+R, M, CuA, CuP run heavy and nearly
-    // parallel from the base and are closed by the nodal line; RA, RP, M1-M4, CuA1, CuA2 fan from the nodal
-    // nodes to the ambient vein, which runs inside the outline round the apex and hind margin; the peripheral
-    // membrane outside it stays blank. Anal veins are short, to the clavus. ----
+    // ---- Cicadidae, grown by growVeins v2 (docs/wing-venation-spec.md, Cicadidae; ref cic-cicada). Sc+R, M, CuA and CuP
+    // are smooth bowed lanes from the base (M and CuA off a short common stem) to the nodal nodes; the nodal line is a
+    // `then` chain of named crossveins stepping from Sc+R through M and CuA to CuP at one slant, back toward the base.
+    // The apical veins leave the nodal nodes (RA / RP off Sc+R's, M1-M4 off M's through one or two short stem lanes,
+    // CuA1 / CuA2 off CuA's) as lanes sharing the node, each ending on a node of the ambient vein, which is a pre-built
+    // lane along the inset outline from the costa round the apex to the clavus; the peripheral membrane outside it stays
+    // blank. Joins are all named (no sites): the nodal line, 1-3 rungs in the basal cells and the optional ulnar row
+    // across the apical lanes. Anal veins short, to the clavus. ----
     const theta = randRange(28, 46);
     const by0 = thorax.yAt(0.4);
     const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.12, 1.32);
@@ -2644,12 +2648,13 @@ function generateInsectDetailed(seed, opts) {
       hw: randRange(0.13, 0.21), tipY: randRange(-0.25, 0.15), sharp: randRange(0, 1), bulge: randRange(0.82, 1.12),
       hindL: randRange(0.48, 0.64), hindW: randRange(1.1, 1.45), spread: randRange(10, 26), heavy: rng() < 0.4,
       nM: randInt(2, 4), cuFork: rng() < 0.8, nx0: randRange(0.46, 0.6), slant: randRange(0.04, 0.14), inset: randRange(0.05, 0.1),
-      ulnar: rng() < 0.6, nxb: randInt(1, 3), apexBow: randRange(-0.04, 0.04), anal: randInt(1, 3), ambGap: rng() < 0.25,
-      zig: randRange(0.015, 0.04), mcuFork: rng() < 0.7, uFork: randRange(0.1, 0.2),   // nodal-line zigzag; M and CuA leaving a common basal stem
+      ulnar: rng() < 0.6, nxb: randInt(1, 3), anal: randInt(1, 3), ambGap: rng() < 0.25,
+      mcuFork: rng() < 0.7, uFork: randRange(0.1, 0.2), angle: randRange(112, 128), lean: rng() < 0.7 ? -1 : 1, bow: randRange(0.015, 0.04),   // M and CuA leaving a common basal stem; junction genes; lane bow
+      scr: rng() < 0.5, apBow: randRange(-0.03, 0.03),                                                                                        // a crossvein Sc+R - M in the radial cell; the apical lanes' common bow
     };
     const nA = 2 + G.nM + (G.cuFork ? 2 : 1);
-    meta.wingSig = ['cic', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), nA, G.nM, G.cuFork ? 1 : 0, G.ulnar ? 1 : 0, G.nxb, G.anal, G.ambGap ? 1 : 0, Math.round(G.tipY * 5), Math.round(G.sharp * 2),
-      Math.round(G.nx0 * 10), Math.round(G.slant * 10), Math.round(G.hw * 50), Math.round(G.hindL * 10), Math.round(G.inset * 20), G.mcuFork ? 1 : 0, Math.round(G.zig * 100)].join(',');
+    const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0 };
+    let foreGrown = null;
     const defs = [{ L: LwC * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.68, hind: true }, { L: LwC, k: 1, th: theta, t: 0.4, hind: false }];
     const s = G.sharp;
     for (const d of defs) {
@@ -2661,64 +2666,68 @@ function generateInsectDetailed(seed, opts) {
       const wing = makeWing([bx, by], d.th, o, 0.9);
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
       L.wings.push(...costaEls(wing, X(0), X(0.97)));
-      const g = wingGraph(wing, d.L);
-      // ambient vein: the outline from the costa near the apex round to the clavus, inset by the peripheral membrane
-      const poly = wing.localPoly;
+      const g = wingGraph(wing, d.L), poly = wing.localPoly;
+      // ambient vein: the outline from the costa near the apex round to the clavus, inset by the peripheral membrane;
+      // its two monotone halves (costa -> apex, clavus -> apex) are pre-built lanes that the apical lanes end on
       let cx = 0, cy = 0; for (const p of poly) { cx += p[0]; cy += p[1]; } cx /= poly.length; cy /= poly.length;
       let tipI = 0; for (let i = 1; i < poly.length; i++) if (poly[i][0] > poly[tipI][0]) tipI = i;
       const i0 = tipI - Math.floor(poly.length * 0.07), i1 = tipI + Math.floor(poly.length * 0.4);
       const amb = []; for (let i = i0; i <= i1; i++) { const p = poly[(i + poly.length) % poly.length]; amb.push(add(p, mul(norm(sub([cx, cy], p)), Y(G.inset) * 1.6))); }
       const ambPl = vein(amb.filter((_, k) => k % 3 === 0).concat([amb[amb.length - 1]]), 4);
-      L.wings.push(emitLocalPolyline(wing, ambPl, SW.D));
-      // basal longitudinals to the nodal line (s = chord fraction from the costa). The nodal line slants back toward
-      // the base and zigzags (N1 a little distal, N2 a little basal) so each crossvein meets the veins obliquely (R2);
-      // each basal vein is a three-segment chain with alternating bows (R1) so the long basal cells have wavy sides.
-      const nx = G.nx0, nodal = ['N0', 'N1', 'N2', 'N3'].map((id, i) => g.node(id, nx - G.slant * i / 3 + (i === 1 ? G.zig : i === 2 ? -G.zig : 0), lerp(0.14, 0.72, i / 3)));
-      g.node('bScR', 0.02, 0.3); g.node('bM', 0.02, 0.44); g.node('bCuA', 0.02, 0.52); g.node('bCuP', 0.02, 0.62); g.node('bA', 0.02, 0.74);
-      const wB = G.heavy ? SW.H : SW.O;
-      g.chain(['bScR', g.node('sr1', nx * 0.33, 0.2), g.node('sr2', nx * 0.66, 0.15), 'N0'], { vein: 'ScR', sw: wB, bows: [-0.025, 0.02, -0.015] });   // Sc+R under the costa
-      const uF = G.mcuFork ? G.uFork : 0.02, mRoot = G.mcuFork ? 'mcu' : 'bM', cRoot = G.mcuFork ? 'mcu' : 'bCuA';
-      if (G.mcuFork) { g.node('mcu', uF, 0.47); g.chain(['bM', 'mcu'], { vein: 'MCu', sw: wB, bow: 0.015 }); }                // M+CuA stem, forking (ref cic-cicada)
-      const uN = id => g.at(id)[0] / d.L;   // each vein's intermediate nodes sit between its root and its own nodal node
-      g.chain([mRoot, g.node('m1', lerp(uF, uN('N1'), 0.36), 0.38), g.node('m2', lerp(uF, uN('N1'), 0.7), 0.35), 'N1'], { vein: 'M', sw: wB, bows: [-0.03, 0.02, -0.015] });
-      g.chain([cRoot, g.node('ca1', lerp(uF, uN('N2'), 0.36), 0.53), g.node('ca2', lerp(uF, uN('N2'), 0.7), 0.5), 'N2'], { vein: 'CuA', sw: SW.O, bows: [0.03, -0.02, 0.015] });
-      g.chain(['bCuP', g.node('cp1', uN('N3') * 0.3, 0.66), g.node('cp2', uN('N3') * 0.62, 0.69), 'N3'], { vein: 'CuP', sw: SW.D, bows: [0.025, -0.02, 0.015] });
-      for (let i = 0; i + 1 < nodal.length; i++) g.edge(nodal[i], nodal[i + 1], { sw: SW.D, bow: randRange(-0.08, 0.08) });        // nodal line
-      for (let q = 0; q < G.nxb; q++) { const t = lerp(0.45, 0.85, (q + 0.5) / G.nxb); g.cross('M', t, 'CuA', t + randRange(-0.06, 0.06), { sw: SW.F }); }
-      if (rng() < 0.5) g.cross('ScR', 0.6, 'M', 0.62, { sw: SW.F });
-      // apical veins: from the nodal nodes (M and Cu through short stems that fork) to targets spaced along the ambient vein
-      const nApex = d.hind ? Math.max(3, nA - 3) : nA;
-      const apArc = ambPl.filter(p => p[0] > X(d.hind ? 0.6 : 0.68));                      // the apical arc of the ambient vein
+      let kTip = 0; for (let k = 1; k < ambPl.length; k++) if (ambPl[k][0] > ambPl[kTip][0]) kTip = k;
+      const ambA = ambPl.slice(0, kTip + 1), ambB = ambPl.slice(kTip).reverse();
+      // apical targets: nodes on the ambient vein beyond 0.68 of the span, evenly spaced from the costal side round to the hind margin
+      const nApex = d.hind ? 3 : nA;
+      const apArc = ambPl.filter(p => p[0] > X(d.hind ? 0.6 : 0.68));
       const targets = []; for (let k = 0; k < nApex; k++) targets.push(apArc[Math.min(apArc.length - 1, Math.floor((k + 0.5) / nApex * apArc.length))]);
-      const sources = [];                                             // [node id, target index]
+      targets.forEach((p, k) => g.nodeAt('ap' + k, p));
+      const sOf = p => { const r = wing.yRange(p[0]); return r && r[1] > r[0] ? Math.max(0.03, Math.min(0.97, (p[1] - r[0]) / (r[1] - r[0]))) : 0.5; };
+      // basal lanes to the nodal nodes (s = chord fraction from the costa); the nodal line slants back toward the base
+      const nx = G.nx0, nodal = ['N0', 'N1', 'N2', 'N3'].map((id, i) => g.node(id, nx - G.slant * i / 3, lerp(0.14, 0.72, i / 3)));
+      const wB = G.heavy ? SW.O : SW.D;
+      const uF = G.mcuFork ? G.uFork : 0.02;
+      if (G.mcuFork) g.node('mcu', uF, 0.47);
+      const lanes = [
+        { id: 'ScR', u0: 0.02, s0: 0.3, s1: 0.16, end: 'N0', sw: wB, noFork: true, stub: false, ctrl: 2, bow: -G.bow },                                            // Sc+R under the costa
+        G.mcuFork
+          ? { id: 'MCu', u0: 0.02, s0: 0.44, s1: 0.47, end: 'mcu', sw: wB, noFork: true, stub: false, ctrl: 1, bow: 0.01, fork: { id: 'CuA', u: uF, s1: 0.5, end: 'N2', sw: SW.O, noFork: true, stub: false, ctrl: 2, ease: 'mid', bow: G.bow } }   // M+CuA stem, forking
+          : { id: 'CuA', u0: 0.02, s0: 0.52, s1: 0.5, end: 'N2', sw: SW.O, noFork: true, stub: false, ctrl: 2, bow: G.bow },
+        { id: 'M', start: G.mcuFork ? 'mcu' : undefined, u0: 0.02, s0: 0.44, s1: 0.38, end: 'N1', sw: wB, noFork: true, stub: false, ctrl: 2, bow: -G.bow * 0.8 },
+        { id: 'CuP', u0: 0.02, s0: 0.62, s1: 0.68, end: 'N3', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: G.bow * 0.7 },
+        { id: 'AmbA', pl: ambA, sw: SW.D, noFork: true, noJoin: true, stub: false },
+        { id: 'AmbB', pl: ambB, sw: SW.D, noFork: true, noJoin: true, stub: false },
+      ];
+      // apical veins from the nodal nodes: a short stem lane then the branches (two sub-stems when M carries 3-4), each
+      // branch a smooth lane from its stem's end to an ambient node; the stems and branches share nodes rather than fork
+      const mean = pts => pts.reduce((a, p) => add(a, p), [0, 0]).map(v => v / pts.length);
       const plan = d.hind ? [['N0', 1], ['N1', 1], ['N2', 1]] : [['N0', 2], ['N1', G.nM], ['N2', G.cuFork ? 2 : 1]];
+      const apical = [];   // { id, u0, u1 } for the ulnar row
+      const branch = (from, ti) => { const tg = targets[ti]; lanes.push({ id: 'ap' + ti, start: from, end: 'ap' + ti, s1: sOf(tg), sw: SW.D, noFork: true, noJoin: true, stub: false, ctrl: 2, bow: G.apBow + randRange(-0.015, 0.015) }); apical.push({ id: 'ap' + ti, u0: g.at(from)[0] / d.L, u1: tg[0] / d.L }); };
+      const stem = (from, id, toward, f) => { g.nodeAt(id, lerpP(g.at(from), toward, f)); lanes.push({ id: id + 'L', start: from, end: id, s1: sOf(g.at(id)), sw: SW.D, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: 0.01 }); return id; };
       let ti = 0;
-      for (const [src, n] of plan) {
-        if (n === 1) { sources.push([src, ti++]); continue; }
-        const mean = pts => pts.reduce((a, p) => add(a, p), [0, 0]).map(v => v / pts.length);
-        const tg = targets.slice(ti, ti + n), st = g.nodeAt(src + 's', lerpP(g.at(src), mean(tg), randRange(0.2, 0.32)));   // short stem, then the fork tree
-        g.chain([src, st], { vein: src + 'stem', sw: SW.D, bow: 0.01 });
-        if (n <= 2) { for (let k = 0; k < n && ti < nApex; k++) sources.push([st, ti++]); }
-        else {   // two sub-stems, each forking again
-          const half = Math.ceil(n / 2);
-          for (const grp of [tg.slice(0, half), tg.slice(half)]) { if (!grp.length) continue; const st2 = g.nodeAt(src + 's' + ti, lerpP(g.at(st), mean(grp), randRange(0.3, 0.45))); g.chain([st, st2], { vein: src + 'st' + ti, sw: SW.D, bow: 0.01 }); for (let k = 0; k < grp.length; k++) sources.push([st2, ti++]); }
-        }
+      for (const [root, n] of plan) {
+        if (n === 1) { branch(root, ti++); continue; }
+        const grp = targets.slice(ti, ti + n), st = stem(root, root + 's', mean(grp), randRange(0.2, 0.32));
+        if (n <= 2) { for (let k = 0; k < n; k++) branch(st, ti++); }
+        else { const half = Math.ceil(n / 2); for (const sub of [grp.slice(0, half), grp.slice(half)]) { if (!sub.length) continue; const st2 = stem(st, root + 's' + ti, mean(sub), randRange(0.3, 0.45)); for (let k = 0; k < sub.length; k++) branch(st2, ti++); } }
       }
-      const apical = [];
-      for (const [src, k] of sources) {
-        if (k >= nApex) continue;
-        // two intermediate nodes offset to opposite sides so the apical vein undulates through its cell corners (R1)
-        const a = g.at(src), b = targets[k], nn = perp(norm(sub(b, a))), L2 = vlen(sub(b, a)), k1 = G.apexBow + randRange(-0.03, 0.03);
-        const name = 'ap' + k;
-        g.nodeAt(name + 'm', add(lerpP(a, b, randRange(0.3, 0.4)), mul(nn, L2 * k1))); g.nodeAt(name + 'n', add(lerpP(a, b, randRange(0.65, 0.75)), mul(nn, L2 * (k1 * 0.4 - randRange(0.0, 0.03))))); g.nodeAt(name + 'e', b);
-        g.chain([src, name + 'm', name + 'n', name + 'e'], { vein: name, sw: SW.D, bows: [0.01, -0.01, 0.01] });
-        apical.push(name);
-      }
-      if (G.ulnar && !d.hind) { const t0 = randRange(0.4, 0.6); for (let i = 0; i + 1 < apical.length; i++) g.cross(apical[i], t0 + randRange(-0.05, 0.05), apical[i + 1], t0 + randRange(-0.05, 0.05), { sw: SW.F }); }   // a row of crossveins across the apical cells
+      // nodal line: Sc+R -> M -> CuA -> CuP as one `then` chain at one slant; the basal rungs (m-cua in the median cell,
+      // the optional Sc+R - M rung in the radial cell); the ulnar row of rungs across the apical lanes
+      const named = [{ a: 'ScR', ua: nx - 0.004, b: 'M', ub: nx - G.slant / 3 - 0.004, reach: 0.03, sw: SW.D, bow: 0, then: ['CuA', 'CuP'] }];
+      for (let q = 0; q < G.nxb; q++) named.push({ a: 'M', ua: lerp(0.45, 0.85, (q + 0.5) / G.nxb) * nx, b: 'CuA', reach: 0.04, sw: SW.F });
+      if (G.scr) named.push({ a: 'ScR', ua: 0.62 * nx, b: 'M', reach: 0.04, sw: SW.F });
+      if (G.ulnar && !d.hind) { const t0 = randRange(0.45, 0.6); for (let i = 0; i + 1 < apical.length; i++) { const p = apical[i], q = apical[i + 1]; named.push({ a: p.id, ua: lerp(p.u0, p.u1, t0), b: q.id, ub: lerp(q.u0, q.u1, t0), reach: 0.05, sw: SW.F }); } }
+      const grown = growVeins(g, { lanes, named, forks: 0, uOpen: nx, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0, noSites: true });
       // anal veins to the clavus
-      for (let k = 0; k < G.anal; k++) { const uE = 0.34 - k * 0.09; g.margin('aE' + k, uE, 'bot'); g.chain(['bA', g.node('a' + k, uE * 0.5, lerp(0.8, 0.95, k / 2)), 'aE' + k], { vein: 'A' + k, sw: k === 0 ? SW.D : SW.F, bows: [0.02, 0.01] }); }
+      for (let k = 0; k < G.anal; k++) { const uE = 0.34 - k * 0.09; g.margin('aE' + k, uE, 'bot'); g.chain([g.node('bA' + k, 0.02, 0.74), g.node('a' + k, uE * 0.5, lerp(0.8, 0.95, k / 2)), 'aE' + k], { vein: 'A' + k, sw: k === 0 ? SW.D : SW.F, bows: [0.02, 0.01] }); }
       L.wings.push(...g.emit());
+      const st = grown.stats;
+      S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum;
+      if (!d.hind) foreGrown = grown;
     }
+    meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0 };
+    meta.wingSig = ['cic', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), nA, G.nM, G.cuFork ? 1 : 0, G.ulnar ? 1 : 0, G.nxb, G.anal, G.ambGap ? 1 : 0, foreGrown.joins.length, Math.round(G.tipY * 5), Math.round(G.sharp * 2),
+      Math.round(G.nx0 * 10), Math.round(G.slant * 10), Math.round(G.hw * 50), Math.round(G.hindL * 10), Math.round(G.inset * 20), G.mcuFork ? 1 : 0, G.scr ? 1 : 0, Math.round(G.bow * 100)].join(',');
   }
 
   if (type === 'mayfly') {
