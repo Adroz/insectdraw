@@ -51,14 +51,18 @@ for (let seed = 1; seed <= N; seed++) {
   const sws = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * meta.scale);
   if (sws.some(w => w < 0.49)) fail('stroke width below 0.5 after scale');
   if (/opacity|gradient|filter|url\(/.test(svg)) fail('non-eink construct present');
-  // grown venation (bee / wasp): every crossvein junction is obtuse within R-D's band, no crossvein is dropped more
-  // often than one is placed, and nothing in the wings layer degenerates to a single-point polyline
-  if (meta.type === 'bee' || meta.type === 'wasp') {
+  // grown venation (bee / wasp / dragonfly / damselfly): every crossvein junction is obtuse within R-D's band, no
+  // crossvein is dropped more often than one is placed, and nothing in the wings layer degenerates to a single-point
+  // polyline. For Odonata the angle band is asserted on the ladder rungs only (minAngle / maxAngle are measured on
+  // rungs placed by the slide rule); the edges of the multi-row Voronoi regions are the research model itself and
+  // are slid toward the band where possible but never dropped, so they are exempt.
+  if (meta.type === 'bee' || meta.type === 'wasp' || meta.type === 'dragonfly' || meta.type === 'damselfly') {
     const s = meta.wingStats;
     if (!s) fail('no wingStats on a grown wing');
     else {
       if (s.joins > 0 && (s.minAngle < 100 || s.maxAngle > 145)) fail('junction angle outside 100-145: ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
       if (s.dropped > s.joins) fail('more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
+      if ((meta.type === 'dragonfly' || meta.type === 'damselfly') && s.rungs < 40) fail('too few ladder rungs on an odonate: ' + s.rungs);
     }
   }
   for (const w of meta.layers.wings) { const pl = w.match(/<polyline points="([^"]*)"/); if (pl && pl[1].trim().split(/\s+/).length < 2) fail('wing polyline with fewer than 2 points'); }
