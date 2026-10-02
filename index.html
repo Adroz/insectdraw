@@ -953,9 +953,10 @@ function fringe(wing, spacing, len, sw, filter) {
   return els;
 }
 // a vein that forks into two short twigs just before the margin (Neuroptera "end-twigging")
-function twigEnd(wing, pl, k) {
-  const end = pl[pl.length - 1], p = plAt(pl, 0.88), d = norm(sub(end, p)), t = perp(d), tip = add(end, mul(d, k * 0.4));
-  return [lineEl(wing.T(p), wing.T(add(tip, mul(t, k))), SW.F), lineEl(wing.T(p), wing.T(sub(tip, mul(t, k))), SW.F)];
+function twigEnd(wing, pl, k) {   // the two twigs leave the vein just inside the margin and end on the outline itself
+  const end = pl[pl.length - 1], p = plAt(pl, 0.9), d = norm(sub(end, p)), t = perp(d), tip = add(end, mul(d, k * 0.3));
+  const a = nearestOutlinePoint(wing.localPoly, add(tip, mul(t, k))), b = nearestOutlinePoint(wing.localPoly, sub(tip, mul(t, k)));
+  return [lineEl(wing.T(p), wing.T(a), SW.F), lineEl(wing.T(p), wing.T(b), SW.F)];
 }
 // margin point at a given x on the leading (top) or trailing (bottom) edge, inset slightly
 function onTop(wing, x) { return [x, topAt(wing, x, 0.6)]; }
@@ -1913,7 +1914,7 @@ function generateInsectDetailed(seed) {
     const G = {
       spread: randRange(10, 24), heavy: rng() < 0.35, hw: randRange(0.16, 0.23), tipY: randRange(-0.1, 0.14), sharp: randRange(0, 1), hindL: randRange(0.82, 0.95), hindW: randRange(0.85, 1.0),
       nB: randInt(8, 14), rsEnd: randRange(0.8, 0.9), ladder: randRange(0.022, 0.038), twig: randRange(1.5, 3.5), bowB: randRange(0.02, 0.07),
-      grad: [], im: rng() < 0.85, mFork: rng() < 0.5, mX: randRange(0.34, 0.48), cuX: randRange(0.2, 0.3), nmc: randInt(1, 4), zig: randRange(0.02, 0.05),
+      grad: [], im: rng() < 0.85, mFork: rng() < 0.5, mX: randRange(0.34, 0.48), cuX: randRange(0.2, 0.3), nmc: randInt(1, 4), zig: randRange(0.07, 0.12), drift: randRange(0, 0.01),   // gradate rung lean (fraction of a branch) and per-branch drift of the series
     };
     { const ng = randInt(1, 3); for (let g = 0; g < ng; g++) G.grad.push(lerp(0.42, 0.78, (g + 0.5) / ng) * jitter(0.08)); }
     meta.wingSig = ['neu', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), G.nB, G.grad.length, G.im ? 1 : 0, G.mFork ? 1 : 0, G.nmc, Math.round(G.hw * 50), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.bowB * 50),
@@ -1945,7 +1946,8 @@ function generateInsectDetailed(seed) {
       for (let i = 0; i < nB; i++) { const u = lerp(G.im ? 0.3 : 0.14, G.rsEnd, i / (nB - 1)); g.nodeAt('rs' + i, [X(u), Y(lerp(0.05, -0.45, Math.pow(i / (nB - 1), 1.3)))]); rsIds.push('rs' + i); }
       g.chain(rsIds, { vein: 'Rs', sw: G.heavy ? SW.O : SW.D, bow: -0.004 });
       // pectinate branches: each curves from its Rs node to a margin target, bowing outward, and twigs at the tip
-      const cands = wing.localPoly.filter(p => p[0] > X(0.5) && p[1] > Y(-0.9)).map(p => ({ p, a: Math.atan2(p[1] - Y(0.2), p[0] - X(0.3)) })).sort((a, b) => b.a - a.a);
+      // margin targets from the hind margin round to the apex, never the costal side above the tip (a branch must not double back)
+      const cands = wing.localPoly.filter(p => p[0] > X(0.5) && p[1] >= Y(G.tipY) - 0.5).map(p => ({ p, a: Math.atan2(p[1] - Y(0.2), p[0] - X(0.3)) })).sort((a, b) => b.a - a.a);
       const branches = [];
       for (let i = 0; i < nB && cands.length; i++) {
         const tgt = cands[Math.floor((i + 0.5) / nB * (cands.length - 1))].p;
@@ -1954,8 +1956,9 @@ function generateInsectDetailed(seed) {
         branches.push('B' + i);
         L.wings.push(...twigEnd(wing, g.pl('B' + i), G.twig));
       }
-      // gradate series: zigzag staircases, each rung meeting the next branch a little further out
-      for (const g0 of G.grad) { let t = g0; for (let i = 0; i + 1 < branches.length; i++) { const t2 = Math.min(0.92, t + G.zig * jitter(0.3)); g.edge(g.on(branches[i], t), g.on(branches[i + 1], t2), { sw: SW.D, bow: 0 }); t = t2; } }
+      // gradate series (ref neu-nothochrysa): each rung leans outward from branch i to branch i+1, and the next rung
+      // leaves branch i+1 a little behind where the last one landed, so rung / riser / rung reads as a zigzag staircase
+      for (const g0 of G.grad) { let t = g0; for (let i = 0; i + 1 < branches.length; i++) { const t2 = Math.min(0.92, t + G.zig * jitter(0.3)), a = g.on(branches[i], t), b = g.on(branches[i + 1], t2); if (vlen(sub(a, b)) > 2.5) g.edge(a, b, { sw: SW.D, bow: 0 }); t = Math.min(0.9, t + G.drift); } }
       // M and Cu, short, to the hind margin
       g.nodeAt('bm', [X(0.01), Y(0.05)]); g.nodeAt('bc', [X(0.01), Y(0.1)]);
       g.margin('mE', G.mX, 'bot'); g.nodeAt('mm', [X(G.mX * 0.55), Y(0.3)]); g.chain(['bm', 'mm', 'mE'], { vein: 'M', sw: SW.D, bows: [0.03, 0.02] });
