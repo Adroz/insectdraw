@@ -1525,11 +1525,12 @@ function generateInsectDetailed(seed) {
       // discal cell corners (fractions of W / H), R-branch count and stalking, Sc and 1A endpoints
       fU: [randRange(0.46, 0.6), randRange(0.2, 0.32)], fD: [randRange(0.4, 0.55), randRange(0.0, 0.12)],
       hU: [randRange(0.34, 0.46), randRange(0.08, 0.17)], hD: [randRange(0.3, 0.42), randRange(0.26, 0.36)],
-      nR: randInt(3, 5), nRh: randInt(2, 3), stalk: randInt(1, 3), stemL: randRange(0.03, 0.08), scX: randRange(0.56, 0.7), aX: randRange(0.36, 0.5),
+      nR: randInt(3, 5), nRh: randInt(2, 3), stalk: randInt(2, 3), stemL: randRange(0.03, 0.08), scX: randRange(0.56, 0.7), aX: randRange(0.36, 0.5),
       sweep: randRange(-8, 6), hindSweep: randRange(0, 10), heavy: rng() < 0.3,                  // posture: forewing sweep, hindwing drop; heavy veins
+      hum: randRange(0.1, 0.22),                                                                  // hindwing humeral vein: reach along the costa as a fraction of Sc+R1
     };
     meta.wingSig = ['lep', isB ? 'b' : 'm', fam, G.heavy ? 1 : 0, Math.round(G.sweep / 4), Math.round(G.hindSweep / 4), G.nR, G.nRh, G.stalk, G.scallop ? 1 : 0, G.tail > 0 ? 1 : 0, G.concave > 0 ? 1 : 0, Math.round(G.apexY * 10), Math.round(G.sharp * 2),
-      Math.round(G.tornusX * 10), Math.round(G.fU[0] * 10), Math.round(G.fD[1] * 10), Math.round(G.hindK * 10)].join(',');
+      Math.round(G.tornusX * 10), Math.round(G.fU[0] * 10), Math.round(G.fD[1] * 10), Math.round(G.hindK * 10), Math.round(G.hum * 25)].join(',');
     const by = thorax.yAt(0.35), bx = thorax.hwAt(by) * 0.5;
     const j = () => jitter(0.03);
     // forewing: base -> costa -> apex -> termen -> tornus -> inner margin
@@ -1567,42 +1568,62 @@ function generateInsectDetailed(seed) {
     // Comstock-Needham layout: a closed discal cell near the wing centre; Sc+R1 runs
     // along the costa; R2-R5 fan from the cell's upper corner to the apex; M1-M3 leave
     // the discocellular crossvein; Cu1/Cu2 leave the lower edge; 1A runs to the inner margin.
-    function lepVeins(wing, b, U, D, nR, scX, aX, xMin, nStalk, stemL) {
-      const vs = [];
-      const bowed = (p, q, k) => { const n = perp(norm(sub(q, p))); return vein([p, add(lerpP(p, q, 0.5), mul(n, k)), q]); };
-      const cellTop = bowed(b, U, -W * randRange(0.005, 0.025)), cellBot = bowed(b, D, W * randRange(0.004, 0.02));
+    // Returns the vein polylines with `vs.pre` = how many lead the list before the marginal veins (whose last
+    // points are the cell boundaries for the pattern space). Each polyline carries its weight in `.sw`:
+    // stems and cell edges SW.O, branches SW.D, the anal/humeral veins SW.F (spec R7); `heavy` promotes the branches.
+    function lepVeins(wing, b, U, D, nR, scX, aX, xMin, nStalk, stemL, hindW) {
+      const vs = [], wStem = SW.O, wBr = G.heavy ? SW.O : SW.D;
+      const bowed = (p, q, k, sw) => { const n = perp(norm(sub(q, p))), pl = vein([p, add(lerpP(p, q, 0.5), mul(n, k)), q]); pl.sw = sw; return pl; };
+      // bows are signed toward the trailing edge: R branches convex toward the costa, Cu and the anals convex toward
+      // the hind margin, M nearly straight (refs lep-agrotis, lep-papilio); 2-6% of the chord so they never read as rods
+      const cellTop = bowed(b, U, -W * randRange(0.008, 0.025), wStem), cellBot = bowed(b, D, W * randRange(0.006, 0.02), wStem);
       // discocellular: two or three pieces meeting at obtuse angles (ref lep-agrotis / lep-papilio), concave toward the base
       const nDc = rng() < 0.5 ? 2 : 3, dcPts = [U];
       for (let k = 1; k < nDc; k++) dcPts.push(add(lerpP(U, D, k / nDc), mul(perp(norm(sub(D, U))), W * randRange(0.015, 0.04) * (k === 1 ? 1 : 0.6))));
       dcPts.push(D);
       const dcv = []; for (let k = 0; k + 1 < dcPts.length; k++) { const seg = vein([dcPts[k], dcPts[k + 1]], 4); dcv.push(...(k ? seg.slice(1) : seg)); }
+      dcv.sw = wBr;
       vs.push(cellTop, cellBot, dcv);
-      vs.push(bowed([b[0] + W * 0.03, b[1] - H * 0.04], [scX, topAt(wing, scX, 0.5)], -W * 0.01));
+      // Sc (Sc+R1 on the hindwing) along the costa
+      // Sc on the forewing hugs the costa; Sc+R1 on the hindwing leaves the base inside the costa and reaches it at scX
+      const sc = bowed([b[0] + W * 0.03, b[1] + (hindW ? H * 0.02 : -H * 0.04)], [scX, topAt(wing, scX, 0.5)], -W * 0.01, wStem);
+      vs.push(sc);
+      if (hindW) {   // humeral vein: a short hooked vein from the root of Sc+R1 forward to the costal margin (refs lep-agrotis, lep-papilio)
+        const root = plAt(sc, 0.1), hx = root[0] + scX * G.hum;
+        vs.push(bowed(root, [hx, topAt(wing, hx, 0.5)], -W * G.hum * 0.25, SW.F));
+      }
       const nT = nR + 3 + 2;
       const tg = marginTargets(wing.localPoly, U, nT, xMin);
-      if (tg.length < nT) return vs;
-      // R branches: R2 from the corner, the rest from a short stem continuing the cell's top edge
-      const stemDir = norm(sub(tg[0], U));
-      for (let i = 0; i < nR; i++) {
-        const start = i === 0 ? U : add(U, mul(stemDir, W * stemL * Math.min(i, nStalk)));
-        if (i > 0 && i <= nStalk) vs.push([U, start]);
-        vs.push(bowed(start, tg[i], randRange(-1, 1) * W * 0.012));
+      // R branches: the first from the cell's upper corner, the rest leaving a common stem one after another
+      // (spec "stalked": R3 first, then R4 and R5 from further along, or forking at its end)
+      const nSt = Math.min(nStalk, nR - 1);
+      let stem = null;
+      if (tg.length >= nT && nR > 1) {
+        const mean = tg.slice(1, nR).reduce((a, p) => add(a, p), [0, 0]).map(v => v / (nR - 1));
+        stem = bowed(U, add(U, mul(norm(sub(mean, U)), Math.min(W * 0.2, W * stemL * nSt))), -W * 0.006, wStem);
+        vs.push(stem);
       }
-      for (let i = 0; i < 3; i++) vs.push(bowed(plAt(dcv, 0.15 + i * 0.35), tg[nR + i], randRange(-1, 1) * W * 0.014));
-      vs.push(bowed(D, tg[nR + 3], W * randRange(0.004, 0.016)));
-      vs.push(bowed(plAt(cellBot, randRange(0.55, 0.75)), tg[nR + 4], W * randRange(0.006, 0.018)));
-      vs.push(bowed([b[0], b[1] + H * 0.03], [aX, botAt(wing, aX, 0.5)], W * 0.012));                                   // 2A to the tornus
-      if (rng() < 0.6) vs.push(bowed([b[0], b[1] + H * 0.05], [aX * 0.35, botAt(wing, aX * 0.35, 0.5)], W * 0.01));          // 3A, short, at the base
+      vs.pre = vs.length;
+      if (tg.length < nT) return vs;
+      for (let i = 0; i < nR; i++) {
+        const start = i === 0 ? U : plAt(stem, Math.min(i, nSt) / nSt);
+        vs.push(bowed(start, tg[i], -W * randRange(0.018, 0.035), wBr));
+      }
+      for (let i = 0; i < 3; i++) vs.push(bowed(plAt(dcv, 0.15 + i * 0.35), tg[nR + i], -W * randRange(0.004, 0.022), wBr));
+      vs.push(bowed(D, tg[nR + 3], W * randRange(0.01, 0.024), wBr));
+      vs.push(bowed(plAt(cellBot, randRange(0.55, 0.75)), tg[nR + 4], W * randRange(0.012, 0.026), wBr));
+      vs.push(bowed([b[0], b[1] + H * 0.03], [aX, botAt(wing, aX, 0.5)], W * 0.018, wBr));                                // 2A to the tornus
+      if (rng() < 0.6) vs.push(bowed([b[0], b[1] + H * 0.05], [aX * 0.35, botAt(wing, aX * 0.35, 0.5)], W * 0.012, SW.F));   // 3A, short, at the base
       return vs;
     }
 
     // ---- venation ----
     const hB = mul([W * 0.01, H * 0.1], hk), hU = [W * G.hU[0] * hk, H * G.hU[1] * hk], hD = [W * G.hD[0] * hk, H * G.hD[1] * hk];
     const fB = [W * 0.01, H * 0.02], fU = [W * G.fU[0], -H * G.fU[1]], fD = [W * G.fD[0], H * G.fD[1]];
-    const hVeins = lepVeins(hind, hB, hU, hD, G.nRh, W * 0.42 * hk, W * 0.28 * hk, W * 0.45 * hk, 1, 0.05);
+    const hVeins = lepVeins(hind, hB, hU, hD, G.nRh, W * 0.42 * hk, W * 0.28 * hk, W * 0.45 * hk, 1, 0.05, true);
     const nR = G.nR;
-    const fVeins = lepVeins(fore, fB, fU, fD, nR, W * G.scX, W * G.aX, W * Math.min(0.62, G.tornusX - 0.06), G.stalk, G.stemL);
-    const ends = vs => vs.slice(4).filter(v => v.length > 2).map(v => v[v.length - 1]);   // marginal vein tips, apex -> inner margin
+    const fVeins = lepVeins(fore, fB, fU, fD, nR, W * G.scX, W * G.aX, W * Math.min(0.62, G.tornusX - 0.06), G.stalk, G.stemL, false);
+    const ends = vs => vs.slice(vs.pre).map(v => v[v.length - 1]);   // marginal vein tips, apex -> inner margin
     const SF = lepSpace(fore, [W * 0.1, 0], ends(fVeins), nR + 3);       // cells posterior to M3 start at nR+3
     const SH = lepSpace(hind, hO, ends(hVeins), G.nRh + 3);
 
@@ -1784,7 +1805,7 @@ function generateInsectDetailed(seed) {
       L.wings.push(...lepHatch(wing, lepParallel(wing, hindW ? Q.hatch.crossH : Q.hatch.crossF, Q.hatch.xSpacing), tone, clsX, 1.2, mask));
       for (const pl of o.fine) L.wings.push(pathEl(smoothPath(pl.map(wing.T), false, 1), SW.F));
       if (!hindW) L.wings.push(...costaEls(wing, 0, W * 0.9));
-      for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, G.heavy ? SW.O : SW.D));
+      for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, v.sw || SW.D));
       for (const pl of o.det) L.wings.push(pathEl(smoothPath(pl.map(wing.T), false, 1), SW.D));
       L.wings.push(...o.after);
       const a0 = S.bounds[0] + 0.3 * (S.bounds[1] - S.bounds[0]);
