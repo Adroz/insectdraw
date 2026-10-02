@@ -1281,7 +1281,7 @@ function growVeins(g, G) {
     // than ~1.5 spacings stays one cell (with G.evenSites the sites divide the interval evenly instead). Returns the
     // number of rungs placed.
     const ladder = (ua, ub) => {
-      const sites = [], before = stats.joins, gapK = G.evenSites ? 0.5 : 0.35;
+      const sites = [], before = stats.joins, gapK = G.evenSites ? 0.5 : 0.35, gapA = G.gapNear === undefined ? gapK : G.gapNear;   // gapNear: clearance of a rung's near end from the junctions the lane already carries (ladder-everywhere orders share every lane between two strips, so they pass a small one)
       if (G.evenSites) {   // mesh orders: the sites divide the interval evenly (Hoffmann's evenly spaced centres), so no cell is much longer than its neighbours
         const n = Math.max(1, Math.round((ub - ua) * Lw / sp((ua + ub) / 2)));
         for (let i = 0; i < n; i++) sites.push(lerp(ua, ub, (i + 0.5) / n) + (ub - ua) / n * randRange(-0.1, 0.1));
@@ -1291,8 +1291,8 @@ function growVeins(g, G) {
         if (!t) continue;
         const P = lerpP(t.ha.p, t.hb.p, 0.5), dir = perp(norm(add(t.ha.d, t.hb.d)));
         const hA = hitPl(a.pl, P, dir) || t.ha, hB = hitPl(b.pl, P, dir) || t.hb;
-        if (!junctionOK(a, hA.p[0], gapK * spx)) continue;
-        place(a, hA.p, hA.d, b, hB.p[0], spx, { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw });
+        if (!junctionOK(a, hA.p[0], gapA * spx)) continue;
+        place(a, hA.p, hA.d, b, hB.p[0], Math.max(spx, (G.reachW || 0) * t.w), { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw });   // reachW: the slide also grows with the strip width, so a rung across a wide strip can still lean into the band
       }
       return stats.joins - before;
     };
@@ -2722,53 +2722,99 @@ function generateInsectDetailed(seed, opts) {
   }
 
   if (type === 'mayfly') {
-    // ---- Ephemeroptera (docs/wing-venation-spec.md; ref eph-mayfly-1956). Triangular forewing with 9-15 fanning
-    // longitudinals that bow toward the trailing edge, intercalaries between them that start mid-wing, and ladders
-    // of crossveins tilted toward the apex between every pair; tiny rounded hindwing, often lost. ----
+    // ---- Ephemeroptera, grown by growVeins v2 (docs/wing-venation-spec.md, Ephemeroptera; ref eph-mayfly-1956). The
+    // costa and the trailing edge are undrawn wall lanes; Sc and R1 are pre-built offsets under the costa (Sc ending on it
+    // before the apex, R1 at the apex), and 7-13 fan longitudinals (Rs, M, Cu1, Cu2, 1A..) sweep from the base to targets
+    // spaced by arc length along the hind margin, undulating as they go; intercalaries start free in mid-wing between
+    // alternate pairs. Every strip is a one-row ladder of rungs placed by the angle rule (cell size shrinking toward
+    // the tip and the trailing edge, the costal ladder densest), with rows of polygons only where a basal strip is wider
+    // than two cells; uOpen 1.0. Hindwing small, three fan lanes, sparse; often lost. ----
     const by = thorax.yAt(0.45), bx = thorax.hwAt(by) * 0.8;
     const Lw = P.abdLen * randRange(0.9, 1.05);
     const G = {
-      nV: randInt(9, 15), xStep: randRange(4.5, 9), inter: rng() < 0.6, hasHind: rng() < 0.8, hindL: randRange(0.22, 0.36),
-      top: randRange(0.85, 1.15), tipY: randRange(-0.12, 0.08), sharp: randRange(0, 1), k1: randRange(0.3, 0.5), fan: randRange(60, 85), heavy: rng() < 0.3, tilt: randRange(0.1, 0.3),
+      nV: randInt(9, 15), inter: rng() < 0.6, hasHind: rng() < 0.8, hindL: randRange(0.22, 0.36),
+      top: randRange(0.85, 1.15), tipY: randRange(-0.12, 0.08), sharp: randRange(0, 1), pow0: randRange(0.8, 1.0), heavy: rng() < 0.3,   // pow0: how much of the costa's bow the upper fan veins take
+      cells: randRange(0.8, 1.3), costStep: randRange(0.022, 0.034), sub: randRange(0.035, 0.055),   // cell size gene; costal ladder step; the C-Sc / Sc-R1 gaps (chord fraction)
+      k: randRange(1.0, 1.4), angle: randRange(110, 124), lean: rng() < 0.8 ? -1 : 1, und: randRange(0.002, 0.005), u0i: randRange(0.4, 0.5),   // junction genes; undulation; where the intercalaries start
     };
-    meta.wingSig = ['eph', G.heavy ? 1 : 0, G.nV, G.inter ? 1 : 0, G.hasHind ? 1 : 0, Math.round(G.xStep), Math.round(G.top * 10), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.k1 * 10), Math.round(G.fan / 5), Math.round(G.tilt * 10)].join(',');
     const defs = [{ L: Lw * G.hindL, th: randRange(10, 30), t: 0.78, hind: true }, { L: Lw, th: randRange(-22, 4), t: 0.45, hind: false }];
     const s = G.sharp;
+    const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
+    let foreGrown = null;
     for (const d of defs) {
       if (d.hind && !G.hasHind) continue;
       const byy = thorax.yAt(d.t), bxx = thorax.hwAt(byy) * 0.72;
       const X = f => f * d.L, Y = f => f * d.L * 0.8;
       const o = d.hind
         ? [[0, 0], [0.1, -0.3], [0.5, -0.45], [0.9, -0.25], [1, 0.05], [0.8, 0.35], [0.4, 0.45], [0.1, 0.3]].map(p => [X(p[0]), Y(p[1])])
-        : [[0, 0.01], [0.04, -0.12], [0.3, -0.3 * G.top], [0.6, -0.36 * G.top], [0.85, -0.3 * G.top], [lerp(0.95, 0.98, s), -lerp(0.17, 0.08, s)], [1, G.tipY], [lerp(0.88, 0.94, s), lerp(0.17, 0.1, s)], [0.7, 0.3], [0.45, 0.42], [0.2, 0.45], [0.05, 0.3]].map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
-      const wing = makeWing([bxx, byy], d.th, o, 0.9);
+        // triangular forewing (ref eph-mayfly-1956): a gently convex costa, the apex at the top corner, the outer margin
+        // curving back to the tornus at about half span, the hind margin nearly straight back to a narrow root
+        : [[0, 0.01], [0.04, -0.14], [0.3, -0.28 * G.top], [0.6, -0.34 * G.top], [0.85, -0.36 * G.top], [lerp(0.95, 0.98, s), -0.33 * G.top], [1, -lerp(0.27, 0.2, s) * G.top + G.tipY], [lerp(0.9, 0.95, s), -0.08], [0.74, 0.2], [0.52, 0.4], [0.26, 0.45], [0.06, 0.28]].map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+      const wing = makeWing([bxx, byy], d.th, o, 0.9), poly = wing.localPoly, apex = tipPoint(wing), ia = poly.indexOf(apex);
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
-      L.wings.push(...costaEls(wing, X(0), X(0.97)));
-      const nV = d.hind ? 3 : G.nV;
-      const tg = marginTargets(wing.localPoly, [X(0.1), 0], nV + 2, X(d.hind ? 0.5 : 0.3));
-      const veins = [];
-      const yr = wing.yRange(X(0.06)) || [-2, 2];
-      for (let i = 0; i < nV && i + 1 < tg.length; i++) {
-        // sweep to the target, then undulate so the vein reads as a chain of cell sides
-        const base = sweep([X(0.04), lerp(yr[0] + 1, yr[1] - 1, i / (nV - 1))], tg[i + 1], lerp(-5, G.fan, i / (nV - 1)), G.k1, 0.3);
-        const pl = base.map((p, k) => { const u = k / (base.length - 1), t = k + 1 < base.length ? norm(sub(base[k + 1], p)) : norm(sub(p, base[k - 1])); return add(p, mul(perp(t), X(0.004) * Math.sin(Math.PI * u) * Math.sin(u * 14 + i))); });
-        pl[pl.length - 1] = tg[i + 1];
-        veins.push(pl);
-        L.wings.push(emitLocalPolyline(wing, pl, i % 2 === 0 ? (G.heavy ? SW.O : SW.D) : SW.F));
+      const g = wingGraph(wing, d.L);
+      const chordAt = x => { const r = wing.yRange(x); return r ? Math.max(1, r[1] - r[0]) : 1; };
+      const ss = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+      const x0 = X(0.03), nS = 40;
+      // wall lanes (never drawn) and the two costal offsets
+      const costaPl = [], edgePl = [], scPl = [], r1Pl = [];
+      for (let q = 0; q <= nS; q++) { const x = lerp(x0, apex[0], q / nS); costaPl.push([x, topAt(wing, x, 0.3)]); edgePl.push([x, botAt(wing, x, 0.3)]); }
+      costaPl.push(apex); edgePl.push(apex);
+      const uSc = d.hind ? 0.8 : 0.9;
+      for (let q = 0; q <= nS; q++) {
+        const u = lerp(0.03, 0.96, q / nS), x = X(u), top = topAt(wing, x), c = chordAt(x), gap = c * G.sub * (0.6 + 0.4 * Math.sin(Math.PI * u));
+        if (u <= uSc) scPl.push([x, top + gap]);
+        r1Pl.push([x, top + 2 * gap]);
       }
-      if (!d.hind) for (let i = 0; i + 1 < veins.length; i++) {
-        const a = veins[i], b = veins[i + 1];
-        const xEnd = Math.min(a[a.length - 1][0], b[b.length - 1][0]);
-        for (let x = X(0.12) + (i % 2) * 3; x < xEnd - 2; x += G.xStep + randRange(-1.5, 1.5)) {   // tilted ladder rungs
-          const ya = plYAt(a, x), xb = x + G.tilt * G.xStep, yb = plYAt(b, xb);
-          if (ya !== null && yb !== null && Math.abs(yb - ya) > 2) L.wings.push(emitLocalPolyline(wing, bowVein([x, ya], [xb, yb], randRange(-0.06, 0.06), 4), SW.F));
+      scPl.push(nearestOutlinePoint(poly, [X(uSc + 0.04), topAt(wing, X(uSc + 0.04))]));
+      r1Pl.push(poly[ia - 1]);
+      // fan targets by arc length from the apex back along the hind margin to 22% span (so every strip closes on the margin)
+      const nF = d.hind ? 3 : G.nV - 2;
+      const arc = [{ p: apex, dd: 0 }];
+      for (let i = ia + 1; i < poly.length && poly[i][0] >= X(d.hind ? 0.35 : 0.22); i++) arc.push({ p: poly[i], dd: arc[arc.length - 1].dd + vlen(sub(poly[i], arc[arc.length - 1].p)) });
+      const arcAt = f => { const dd = f * arc[arc.length - 1].dd; let best = arc[0]; for (const e of arc) if (Math.abs(e.dd - dd) < Math.abs(best.dd - dd)) best = e; return best.p; };
+      // fan veins radiate from the root as rays to their margin targets (so neighbours diverge evenly, as on the
+      // reference), each bent by a share of the costa's convexity that fades toward the trailing edge (`bowK`), measured
+      // against the ray's own chord so both ends stay put, and undulating with the cells
+      const r1At = x => { const y = plYAt(r1Pl, x); return y === null ? topAt(wing, x) + 2 : y; };
+      const xs = X(0.02), yRoot = wing.yRange(xs) || [-2, 2], gapRs = chordAt(X(0.45)) * G.sub * 1.3;
+      const bulge = x => topAt(wing, x) - lerp(topAt(wing, xs), apex[1], (x - xs) / (apex[0] - xs));   // the costa's rise above its base-apex chord (negative = up)
+      const fanVein = (i, f, tg) => {
+        const pl = [], steps = 48, yB = lerp(r1At(xs) + gapRs * 0.7, yRoot[1] - 1, lerp(0.12, 0.9, f)), bowK = Math.pow(1 - f, 1.2) * G.pow0 * jitter(0.08);
+        const b0 = bulge(xs), b1 = bulge(tg[0]);
+        for (let q = 0; q <= steps; q++) {
+          const u = q / steps, x = xs + (tg[0] - xs) * u;
+          pl.push([x, lerp(yB, tg[1], u) + bowK * (bulge(x) - lerp(b0, b1, u)) + X(G.und) * Math.sin(Math.PI * u) * Math.sin(u * 14 + i)]);
         }
-        if (G.inter && i % 2 === 0) {   // intercalary: a free vein between two longitudinals, from mid-wing to the margin
-          const pts = []; for (let t = 0.45; t <= 1.001; t += 0.11) pts.push(lerpP(plAt(a, t), plAt(b, t), 0.5 + randRange(-0.06, 0.06)));
-          L.wings.push(emitLocalPolyline(wing, vein(pts, 4), SW.F));
-        }
+        pl[steps] = tg;
+        return pl;
+      };
+      const wR = G.heavy ? SW.O : SW.D;
+      const lanes = [{ id: 'C', pl: costaPl, sw: SW.D, noDraw: true, noFork: true, stub: false }, { id: 'Sc', pl: scPl, sw: SW.O, noFork: true, stub: false }, { id: 'R1', pl: r1Pl, sw: wR, noFork: true, stub: false }];
+      const fans = [];
+      for (let i = 0; i < nF; i++) { const f = nF > 1 ? i / (nF - 1) : 0.5; fans.push(fanVein(i, f, arcAt(lerp(0.03, 0.96, f)))); lanes.push({ id: 'V' + i, pl: fans[i], sw: i < 3 ? wR : SW.F, noFork: true, stub: false }); }   // Rs, M, Cu1 D; Cu2 and the anals F
+      if (G.inter && !d.hind) for (let i = 0; i + 1 < nF; i += 2) {   // intercalary: a free vein between two longitudinals from mid-wing to the margin
+        const a = fans[i], b = fans[i + 1], pts = [], t0 = G.u0i * jitter(0.1);
+        for (let t = t0; t < 0.98; t += 0.1) pts.push(lerpP(plAt(a, t), plAt(b, t), 0.5 + randRange(-0.05, 0.05)));
+        pts.push(arcAt(lerp(0.03, 0.96, (i + 0.5) / (nF - 1))));
+        lanes.push({ id: 'I' + i, pl: vein(pts, 4), sw: SW.F, noFork: true, stub: false });
       }
+      lanes.push({ id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false });
+      // cell size (R-H): shrinking toward the tip and the trailing edge; the costal ladder has its own step; the hindwing coarser
+      const base = d.L * 0.035 * G.cells * (d.hind ? 1.6 : 1);
+      const cellFn = (u, sMid, A, B) => (A === 'C' || B === 'C') ? d.L * G.costStep * (d.hind ? 1.5 : 1) : base * (1 - 0.3 * u) * (1 - 0.25 * sMid);
+      const grown = growVeins(g, { lanes, named: [], forks: 0, uOpen: 1.0, k: G.k, minSep: 0.02, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0,
+        evenSites: true, gapNear: 0.2, reachW: 0.7, cell: cellFn, cellMin: 3.0, joinSw: SW.F });   // one-row ladders everywhere (a mayfly's strips stay one cell wide to the margin); every lane is shared by two ladders, so near ends need little clearance, and the slide grows with the strip so rungs across the wide apical strips still lean into the band
+      L.wings.push(...g.emit());
+      L.wings.push(...costaEls(wing, X(0), apex[0]));
+      const st = grown.stats;
+      S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle);
+      S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi;
+      if (!d.hind) foreGrown = grown;
     }
+    meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi };
+    meta.wingSig = ['eph', G.heavy ? 1 : 0, G.nV, G.inter ? 1 : 0, G.hasHind ? 1 : 0, foreGrown.joins.length, S.multi, Math.round(G.top * 10), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.pow0 * 4),
+      Math.round(G.cells * 4), Math.round(G.costStep * 300), Math.round(G.hindL * 20), Math.round(G.sub * 100), Math.round(G.u0i * 20)].join(',');
   }
 
   if (type === 'bee' || type === 'wasp') {
