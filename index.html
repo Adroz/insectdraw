@@ -1163,6 +1163,8 @@ function growVeins(g, G) {
     if (spec.pl) {   // a pre-built primary (odonate fan): used as is, never rebuilt; its last point may be an outline sample
       l.pl = spec.pl; l.x0 = l.pl[0][0]; l.x1 = l.pl[l.pl.length - 1][0]; l.uLast = 0; l.junc = [];
       l.u0 = l.x0 / Lw; l.uEnd = l.x1 / Lw; l.s0 = sAt(l.pl[0]); l.s1 = sAt(l.pl[l.pl.length - 1]);
+      const par = spec.parent && laneOf[spec.parent];   // a pre-built branch whose first point lies on another lane (lacewing Rs on R1): the root is a fork junction on both
+      if (par) { l.junc.push(l.x0); par.junc.push(l.x0); par.forkU = par.forkU === undefined ? l.u0 : Math.min(par.forkU, l.u0); par.uLast = Math.max(par.uLast, l.u0); forks++; }
     } else build(l);
     lanes.push(l); laneOf[l.id] = l;
     return l;
@@ -1198,6 +1200,7 @@ function growVeins(g, G) {
     const bow = o.bow === undefined ? randRange(-0.03, 0.03) : o.bow;
     const h0 = atX(lb.pl, xb), ln = h0 && sAt(A) < sAt(h0.p) ? lean : -lean;
     const lo = o.ang ? o.ang[0] : angLo, hi = o.ang ? o.ang[1] : angHi;   // o.ang: a structural oblique (triangle side, bridge) with its own band
+    const aT = o.angT === undefined ? angT : o.angT;   // o.angT: this crossvein's own target angle inside the band (lacewing gradates lean more than the ladders)
     let best = null;
     for (let j = -16; j <= 16; j++) {
       const x = xb + j / 16 * reach, h = atX(lb.pl, x);
@@ -1207,7 +1210,7 @@ function growVeins(g, G) {
       const pl = bowVein(A, h.p, bow, 6);
       const aA = obtuse(dA, norm(sub(pl[1], pl[0]))), aB = obtuse(h.d, norm(sub(pl[pl.length - 1], pl[pl.length - 2])));
       if (aA < lo || aA > hi || aB < lo || aB > hi) continue;
-      const score = Math.abs(aA - angT) + Math.abs(aB - angT) + Math.abs(j) / 16 * 6 + (Math.sign(h.p[0] - A[0]) === ln ? 0 : 12);
+      const score = Math.abs(aA - aT) + Math.abs(aB - aT) + Math.abs(j) / 16 * 6 + (Math.sign(h.p[0] - A[0]) === ln ? 0 : 12);
       if (!best || score < best.score) best = { score, p: h.p, pl, aA, aB };
     }
     if (!best) { stats.dropped++; return null; }
@@ -1230,7 +1233,7 @@ function growVeins(g, G) {
     const la = laneOf[nv.a], lb = laneOf[nv.b]; if (!la || !lb) return;
     const h = atX(la.pl, nv.ua * Lw); if (!h) return;
     const xb = (nv.ub === undefined ? nv.ua : nv.ub) * Lw;
-    const p = place(la, h.p, h.d, lb, xb, (nv.reach === undefined ? 0.05 : nv.reach) * Lw, { sw: nv.sw || joinSw(la, lb), bow: nv.bow, ang: nv.ang });
+    const p = place(la, h.p, h.d, lb, xb, (nv.reach === undefined ? 0.05 : nv.reach) * Lw, { sw: nv.sw || joinSw(la, lb), bow: nv.bow, ang: nv.ang, angT: nv.angT });
     if (p) { const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um);
       const wEntry = { u: um, pl: lastPl, from: la.id }; (namedW[pairKey(la, lb)] ||= []).push(wEntry); (namedW[pairKey(lb, la)] ||= []).push(wEntry); }
     if (nv.forkB) fork(lb, (p ? p[0] : xb) / Lw, nv.forkB);
@@ -2529,23 +2532,29 @@ function generateInsectDetailed(seed, opts) {
   }
 
   if (type === 'lacewing') {
-    // ---- Chrysopidae on the wing graph (docs/wing-venation-spec.md; refs neu-nothochrysa, neu-chrysoperla).
-    // Costal ladder between C and Sc; Sc and R1 parallel, fusing near the apex; Rs below R1 with 8-14 pectinate
-    // branches curving to the margin and forking at the tip; the intramedian cell (im) at the root of Rs; two
-    // gradate series as zigzag staircases through the branches; M and Cu short, to the hind margin. ----
+    // ---- Chrysopidae, grown by growVeins v2 (docs/wing-venation-spec.md, Neuroptera; refs neu-nothochrysa, neu-chrysoperla).
+    // Lanes: the costa as an undrawn wall, Sc and R1 hugging it as pre-built offsets (the costal field widest a third of
+    // the way out and closing at the apex, where Sc and R1 fuse), Rs a pre-built offset one cell under R1 rooted on it
+    // near the base (`parent`) and running to the apex, its 8-14 pectinate branches forks aimed at successive margin
+    // nodes along the hind margin (trailing edge first), M and Cu short to the hind margin. Named crossveins through
+    // `place`: the costal ladder C-Sc, the two rungs closing the intramedian cell between Rs and M, the 1-3 gradate
+    // series stepping outward through the branches, and a few m-cu rungs. Sites fill the R1-Rs strip and the outer
+    // parts of the inter-branch strips (k gene); uOpen 1.0, every longitudinal reaches the margin and end-twigs there. ----
     const theta = randRange(30, 54);
     const by0 = thorax.yAt(0.35);
     const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.0, 1.12);
     const G = {
-      spread: randRange(10, 24), heavy: rng() < 0.35, hw: randRange(0.16, 0.23), tipY: randRange(-0.1, 0.14), sharp: randRange(0, 1), hindL: randRange(0.82, 0.95), hindW: randRange(0.85, 1.0),
-      nB: randInt(8, 14), rsEnd: randRange(0.8, 0.9), ladder: randRange(0.022, 0.038), twig: randRange(1.5, 3.5), bowB: randRange(0.02, 0.07),
-      grad: [], im: rng() < 0.85, mFork: rng() < 0.5, mX: randRange(0.34, 0.48), cuX: randRange(0.2, 0.3), nmc: randInt(1, 4), zig: randRange(0.07, 0.12), drift: randRange(0, 0.01),   // gradate rung lean (fraction of a branch) and per-branch drift of the series
+      spread: randRange(10, 24), heavy: rng() < 0.35, hw: randRange(0.15, 0.2), tipY: randRange(-0.1, 0.14), sharp: randRange(0, 1), hindL: randRange(0.82, 0.95), hindW: randRange(0.85, 1.0),
+      nB: randInt(8, 14), rsEnd: randRange(0.78, 0.88), ladder: randRange(0.022, 0.038), twig: randRange(1.5, 3.5), bowB: randRange(0.03, 0.09),
+      grad: [], im: rng() < 0.85, mFork: rng() < 0.5, mX: randRange(0.28, 0.4), cuX: randRange(0.16, 0.26), nmc: randInt(1, 4), zig: randRange(0.07, 0.12), drift: randRange(0, 0.01), gradAng: randRange(108, 116),   // gradate rung lean (fraction of a branch), per-branch drift of the series, the rungs' target angle
+      costal: randRange(0.07, 0.11), sub: randRange(0.04, 0.06), rsGap: randRange(1.1, 1.5),                        // costal field depth at its widest and the Sc-R1 gap (chord fractions); R1-Rs gap in Sc-R1 gaps
+      k: randRange(1.4, 2.2), angle: randRange(110, 126), lean: rng() < 0.8 ? -1 : 1, rsFork: randRange(0.07, 0.12),   // site spacing / strip width; junction genes; where Rs leaves R1
     };
     { const ng = randInt(1, 3); for (let g = 0; g < ng; g++) G.grad.push(lerp(0.42, 0.78, (g + 0.5) / ng) * jitter(0.08)); }
-    meta.wingSig = ['neu', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), G.nB, G.grad.length, G.im ? 1 : 0, G.mFork ? 1 : 0, G.nmc, Math.round(G.hw * 50), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.bowB * 50),
-      Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100)].join(',');
-    const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.65 }, { L: Lw, k: 1, th: theta, t: 0.35 }];
+    const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.65, hind: true }, { L: Lw, k: 1, th: theta, t: 0.35, hind: false }];
     const s = G.sharp;
+    const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0 };
+    let foreGrown = null;
     for (const d of defs) {
       const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * 0.72;
       const X = f => f * d.L, Y = f => f * d.L * G.hw * d.k;
@@ -2554,45 +2563,70 @@ function generateInsectDetailed(seed, opts) {
       const wing = makeWing([bx, by], d.th, o, 0.9);
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
       L.wings.push(...fringe(wing, 2.4, 1.6, SW.F, p => p[0] > X(0.06)));
-      L.wings.push(...costaEls(wing, X(0), X(0.96)));
-      const g = wingGraph(wing, d.L);
-      // Sc and R1 just inside the costa, fusing near the apex; the costal ladder between C and Sc
-      const edge = leadingEdge(wing, X(0.06), X(0.93));
-      const sc = edge.map(p => [p[0], p[1] + 4.5]).concat([onTop(wing, X(0.95))]);
-      const r1 = edge.filter(p => p[0] < X(0.9)).map(p => [p[0], p[1] + 9]).concat([onTop(wing, X(0.98))]);
-      L.wings.push(emitLocalPolyline(wing, sc, G.heavy ? SW.H : SW.O), emitLocalPolyline(wing, r1, SW.D));
-      for (let x = X(0.08); x < X(0.9); x += X(G.ladder) * jitter(0.1)) { const ys = plYAt(sc, x); if (ys !== null) L.wings.push(lineEl(wing.T(onTop(wing, x)), wing.T([x + X(0.006), ys]), SW.F)); }
-      // Rs: below R1, from the im cell to the apex
-      g.nodeAt('b', [X(0.01), Y(0)]);
-      const nB = G.nB;
-      const rsIds = ['b'];
-      if (G.im) { g.nodeAt('im0', [X(0.1), Y(0.02)]); g.nodeAt('imT', [X(0.17), Y(-0.1)]); g.nodeAt('imB', [X(0.18), Y(0.14)]); g.nodeAt('im1', [X(0.25), Y(-0.05)]);
-        g.chain(['im0', 'imT', 'im1'], { vein: 'imU', sw: SW.D, bows: [-0.02, -0.02] }); g.chain(['im0', 'imB', 'im1'], { vein: 'imL', sw: SW.D, bows: [0.03, 0.02] }); g.chain(['b', 'im0'], { vein: 'Rs0', sw: SW.D, bow: 0 }); rsIds.length = 0; rsIds.push('im1'); }
-      for (let i = 0; i < nB; i++) { const u = lerp(G.im ? 0.3 : 0.14, G.rsEnd, i / (nB - 1)); g.nodeAt('rs' + i, [X(u), Y(lerp(0.05, -0.45, Math.pow(i / (nB - 1), 1.3)))]); rsIds.push('rs' + i); }
-      g.chain(rsIds, { vein: 'Rs', sw: G.heavy ? SW.O : SW.D, bow: -0.004 });
-      // pectinate branches: each curves from its Rs node to a margin target, bowing outward, and twigs at the tip
-      // margin targets from the hind margin round to the apex, never the costal side above the tip (a branch must not double back)
-      const cands = wing.localPoly.filter(p => p[0] > X(0.5) && p[1] >= Y(G.tipY) - 0.5).map(p => ({ p, a: Math.atan2(p[1] - Y(0.2), p[0] - X(0.3)) })).sort((a, b) => b.a - a.a);
-      const branches = [];
-      for (let i = 0; i < nB && cands.length; i++) {
-        const tgt = cands[Math.floor((i + 0.5) / nB * (cands.length - 1))].p;
-        g.nodeAt('be' + i, tgt);
-        g.chain(['rs' + i, 'be' + i], { vein: 'B' + i, sw: SW.D, bow: -G.bowB });
-        branches.push('B' + i);
-        L.wings.push(...twigEnd(wing, g.pl('B' + i), G.twig));
+      const g = wingGraph(wing, d.L), poly = wing.localPoly, apex = tipPoint(wing);
+      const chordAt = x => { const r = wing.yRange(x); return r ? Math.max(1, r[1] - r[0]) : 1; };
+      const ss = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
+      // the costa as an undrawn wall lane (R-B: the outline draws it); Sc and R1 under it as pre-built smooth offsets
+      const costaPl = [], scPl = [], r1Pl = [], nS = 40;
+      for (let q = 0; q <= nS; q++) {
+        const u = lerp(0.03, 0.94, q / nS), x = X(u), top = topAt(wing, x), c = chordAt(x);
+        const fc = 0.025 + G.costal * Math.pow(Math.sin(Math.PI * (u - 0.03) / 0.91), 0.7);
+        costaPl.push([x, top + 0.3]); scPl.push([x, top + c * fc]); r1Pl.push([x, top + c * (fc + G.sub)]);
       }
-      // gradate series (ref neu-nothochrysa): each rung leans outward from branch i to branch i+1, and the next rung
-      // leaves branch i+1 a little behind where the last one landed, so rung / riser / rung reads as a zigzag staircase
-      for (const g0 of G.grad) { let t = g0; for (let i = 0; i + 1 < branches.length; i++) { const t2 = Math.min(0.92, t + G.zig * jitter(0.3)), a = g.on(branches[i], t), b = g.on(branches[i + 1], t2); if (vlen(sub(a, b)) > 2.5) g.edge(a, b, { sw: SW.D, bow: 0 }); t = Math.min(0.9, t + G.drift); } }
-      // M and Cu, short, to the hind margin
-      g.nodeAt('bm', [X(0.01), Y(0.05)]); g.nodeAt('bc', [X(0.01), Y(0.1)]);
-      g.margin('mE', G.mX, 'bot'); g.nodeAt('mm', [X(G.mX * 0.55), Y(0.3)]); g.chain(['bm', 'mm', 'mE'], { vein: 'M', sw: SW.D, bows: [0.03, 0.02] });
-      g.margin('cuE', G.cuX, 'bot'); g.nodeAt('cm', [X(G.cuX * 0.5), Y(0.4)]); g.chain(['bc', 'cm', 'cuE'], { vein: 'Cu', sw: SW.F, bows: [0.03, 0.02] });
-      if (G.mFork) { g.margin('mfE', G.mX + 0.1, 'bot'); g.chain([g.nodeAt('mf', g.on('M', 0.5)), 'mfE'], { vein: 'Mf', sw: SW.D, bow: 0.03 }); }
-      for (let q = 0; q < G.nmc; q++) { const t = lerp(0.25, 0.7, (q + 0.5) / G.nmc); g.cross('M', t, 'Cu', t + randRange(-0.06, 0.06), { sw: SW.F }); }
+      scPl.push(nearestOutlinePoint(poly, [X(0.965), topAt(wing, X(0.965))]));
+      r1Pl.push(nearestOutlinePoint(poly, [X(0.978), topAt(wing, X(0.978))]));
+      // Rs: rooted on R1 at rsFork, running one cell under it (an absolute gap, so the R1-Rs strip is a one-row ladder
+      // to the tip as in the references) and blending into the apex over the last 15%
+      const r1At = x => { const y = plYAt(r1Pl, x); return y === null ? topAt(wing, x) + 2 : y; };
+      const gapRs = G.sub * G.rsGap * chordAt(X(0.45)), rsPl = [];
+      for (let q = 0; q <= nS; q++) {
+        const u = lerp(G.rsFork, 0.985, q / nS), x = X(u);
+        let y = r1At(x) + gapRs * ss((u - G.rsFork) / 0.14) * (1 + 0.25 * u);
+        const b = ss((u - 0.85) / 0.15); if (b > 0) y = lerp(y, apex[1], b);
+        rsPl.push([x, y]);
+      }
+      rsPl[nS] = apex;
+      // branch targets: outline samples along the hind margin from M's end to just short of the apex, trailing edge first
+      const nB = d.hind ? Math.max(5, G.nB - 3) : G.nB;
+      const xMinT = X(Math.max(0.4, G.mX + (G.mFork ? 0.14 : 0.05)));
+      const cands = poly.filter(p => p[0] > xMinT && p[0] < apex[0] - 0.5 && p[1] > apex[1]).map(p => ({ p, a: Math.atan2(p[1] - Y(0.2), p[0] - X(0.3)) })).sort((a, b) => b.a - a.a);
+      const tg = []; for (let i = 0; i < nB; i++) tg.push(cands[Math.floor((i + 0.5) / nB * (cands.length - 1))].p);
+      for (let i = 0; i < nB; i++) g.nodeAt('bT' + i, tg[i]);
+      const sOf = p => { const r = wing.yRange(p[0]); return r && r[1] > r[0] ? Math.max(0.05, Math.min(0.97, (p[1] - r[0]) / (r[1] - r[0]))) : 0.5; };
+      const uf = [], ut = [];   // where branch i leaves Rs and where it meets the margin (span fractions); the gradates step between them
+      for (let i = 0; i < nB; i++) { uf.push(lerp(G.rsFork + 0.12, G.rsEnd, i / (nB - 1)) * jitter(0.03)); ut.push(tg[i][0] / d.L); }
+      uf.push(uf[nB - 1]); ut.push(0.985);   // the last gradate step lands on Rs itself
+      const wR = G.heavy ? SW.O : SW.D;   // R-G: Sc O, R1 / Rs D (O when heavy; R1 before the Rs root is one level up), branches D, Cu F
+      const lanes = [
+        { id: 'C', pl: costaPl, sw: SW.D, noDraw: true, noFork: true, stub: false },
+        { id: 'Sc', pl: scPl, sw: SW.O, noFork: true, stub: false },
+        { id: 'R1', pl: r1Pl, sw: wR, noFork: true, stub: false },
+        { id: 'Rs', pl: rsPl, parent: 'R1', sw: wR, stub: false },
+        { id: 'M', u0: 0.02, s0: 0.36, s1: 0.97, end: g.margin('mE', G.mX, 'bot'), sw: SW.D, stub: false, ctrl: 2, ease: 'mid', bow: randRange(-0.12, -0.06) },
+        { id: 'Cu', u0: 0.02, s0: 0.5, s1: 0.97, end: g.margin('cuE', G.cuX, 'bot'), sw: SW.F, noFork: true, stub: false, ctrl: 1, ease: 'mid', bow: randRange(-0.1, -0.05) },
+      ];
+      const named = [];
+      for (let i = 0; i < nB; i++) named.push({ early: true, forkOn: 'Rs', u: uf[i], spec: { id: 'B' + i, end: 'bT' + i, s1: sOf(tg[i]), sw: SW.D, ctrl: 1, ease: 'mid', bow: -G.bowB * jitter(0.4), stub: false } });   // pectinate branches: one bowed arc each, leaving Rs at a shallow angle and bending down to the margin
+      if (G.mFork) named.push({ early: true, forkOn: 'M', u: G.mX * 0.5, spec: { id: 'Mf', end: g.margin('mfE', G.mX + 0.09, 'bot'), s1: 0.97, sw: SW.D, ctrl: 1, ease: 'mid', bow: -0.05, stub: false } });
+      for (let u = 0.07; u < 0.92; u += G.ladder * jitter(0.12)) named.push({ a: 'C', ua: u, b: 'Sc', ub: u + G.lean * 0.012, reach: 0.012, sw: SW.F, bow: 0 });   // costal ladder: 20-35 rungs leaning toward the apex
+      if (G.im) for (const u of [G.rsFork + 0.03, G.rsFork + 0.12]) named.push({ a: 'Rs', ua: u * jitter(0.08), b: 'M', reach: 0.03, sw: SW.D, bow: 0 });   // intramedian cell: a small closed cell at the root of Rs
+      // gradate series: each rung leaves branch i at t and lands on branch i+1 nearer Rs (guess t - zig; the slide settles it
+      // at the series' own target angle, steeper than the ladders), and the next rung leaves branch i+1 at t again, below
+      // where the last one landed, so rung / riser / rung reads as a zigzag staircase through the branches (ref neu-nothochrysa)
+      for (const g0 of G.grad) { let t = g0; for (let i = 0; i < nB; i++) { named.push({ a: 'B' + i, ua: lerp(uf[i], ut[i], t), b: i + 1 < nB ? 'B' + (i + 1) : 'Rs', ub: lerp(uf[i + 1], ut[i + 1], Math.max(0.08, t - G.zig)), reach: 0.03, sw: SW.D, bow: 0, angT: G.gradAng }); t = Math.min(0.9, t + G.drift); } }
+      for (let q = 0; q < G.nmc; q++) named.push({ a: 'M', ua: lerp(0.25, 0.85, (q + 0.5) / G.nmc) * G.cuX, b: 'Cu', reach: 0.03, sw: SW.F });   // m-cu rungs
+      const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.05, angle: G.angle, lean: G.lean, bowAmt: 0.02, grad: 0.15, stubProb: 0, stubLen: 0.08,
+        noPair: [['C', 'Sc'], ['Sc', 'R1'], ['M', 'Cu']] });   // the costal ladder and the m-cu rungs are named; the subcostal field is empty
       L.wings.push(...g.emit());
-      L.wings.push(...twigEnd(wing, g.pl('M'), 2), ...twigEnd(wing, g.pl('Cu'), 2));
+      L.wings.push(...costaEls(wing, X(0), X(0.96)));
+      for (const l of grown.lanes) if (l.id[0] === 'B' || l.id === 'Rs' || l.id === 'M' || l.id === 'Mf' || l.id === 'Cu') L.wings.push(...twigEnd(wing, l.pl, l.id === 'Cu' || l.id === 'M' ? 2 : G.twig));   // end-twigging on the outline
+      const st = grown.stats;
+      S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum;
+      if (!d.hind) foreGrown = grown;
     }
+    meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0 };
+    meta.wingSig = ['neu', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), G.nB, G.grad.length, G.im ? 1 : 0, G.mFork ? 1 : 0, G.nmc, foreGrown.joins.length, Math.round(G.hw * 50), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.bowB * 50),
+      Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100), Math.round(G.costal * 50), Math.round(G.k * 4)].join(',');
   }
 
   if (type === 'cicada') {
