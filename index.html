@@ -2198,8 +2198,9 @@ function generateInsectDetailed(seed) {
       const nS = G.nSub;
       const rsIds = [F.rsFromStig && stigBot ? g.nodeAt('rs0', plAt(stigBot, 0.42)) : 'bvT'];
       if (F.rsFromStig && stigBot) { g.chain(['bvT', g.nodeAt('rsx', lerpP(g.at('bvT'), g.at('rs0'), 0.55))], { vein: 'RsM', sw: SW.D, bow: 0.01 }); g.chain(['rsx', 'rs0'], { vein: 'RsM2', sw: SW.F, bow: 0.01 }); }
-      const tT = [], tB = [];
-      for (let k = 0; k < nS; k++) { const u = lerp(uBv, uEnd, (k + 1) / nS); tT.push(node('t' + k + 'T', u, 0.13 + 0.03 * (k + 1) / nS)); tB.push(node('t' + k + 'B', u - 0.02, 0.33 + 0.01 * k)); }
+      // r-m crossveins: the foot on M sits 12-30% of a cell length behind the head on Rs, so each leans toward the base (R2)
+      const tT = [], tB = [], cellL = (uEnd - uBv) / nS;
+      for (let k = 0; k < nS; k++) { const u = lerp(uBv, uEnd, (k + 1) / nS); tT.push(node('t' + k + 'T', u, 0.13 + 0.03 * (k + 1) / nS)); tB.push(g.node('t' + k + 'B', g.at(tT[k])[0] / Lw - cellL * randRange(0.12, 0.3), 0.33 + 0.01 * k + randRange(-0.03, 0.03))); }
       rsIds.push(...tT);
       if (G.margOpen) { rsIds.push(node('rsE', G.xMarg - 0.04, 0.17)); g.chain(rsIds, { vein: 'Rs', sw: SW.D }); g.stub('rsE', randRange(-25, -10), Lw * 0.05, SW.F); }
       else { rsIds.push(node('rsE', G.xMarg - 0.05, 0.15), 'MA'); g.chain(rsIds, { vein: 'Rs', sw: SW.D }); }
@@ -2210,12 +2211,13 @@ function generateInsectDetailed(seed) {
       for (let k = 0; k < nS; k++) g.edge(tT[k], tB[k], { sw: SW.D, bow: randRange(-0.06, 0.06) });                     // r-m: submarginal crossveins
       if (G.areolet) { const ta = randRange(0.38, 0.5); g.cross('Rs', ta, 'M', ta + randRange(-0.02, 0.02), { sw: SW.D }); g.cross('Rs', ta + 0.08, 'M', ta + 0.07, { sw: SW.D }); }   // areolet: a tiny closed cell
       // Cu: from the basal vein foot past the recurrent veins, then a stub
-      const uR1 = G.longDisc ? lerp(uBv - 0.12, uEnd, 0.8) : lerp(uBv - 0.12, uEnd, randRange(0.5, 0.6)), uR2 = uEnd - 0.01;
+      // recurrent veins lean the other way: their feet on Cu sit 2-5% of span beyond their heads on M (ref hym-apis ME1 / ME2)
+      const uR1 = G.longDisc ? lerp(uBv - 0.12, uEnd, 0.8) : lerp(uBv - 0.12, uEnd, randRange(0.5, 0.6)), uR2 = g.at(tB[nS - 1])[0] / Lw + randRange(0.02, 0.05);
       const cuIds = ['B', node('r1B', uR1, 0.55)];
-      if (G.disc2 && !G.longDisc) cuIds.push(node('r2B', uR2, 0.54));
+      if (G.disc2 && !G.longDisc) cuIds.push(g.node('r2B', uR2, 0.54 + randRange(-0.03, 0.03)));
       g.chain(cuIds, { vein: 'Cu', sw: SW.D });
       g.stub(cuIds[cuIds.length - 1], randRange(0, 14), Lw * randRange(0.04, 0.08), SW.F);
-      { const p = g.onX('M', uR1 * Lw + Lw * randRange(0.0, 0.03)); if (p) g.edge(p, 'r1B', { sw: SW.D }); }                // 1st recurrent (1m-cu)
+      { const p = g.onX('M', g.at('r1B')[0] - Lw * randRange(0.02, 0.05)); if (p) g.edge(p, 'r1B', { sw: SW.D }); }         // 1st recurrent (1m-cu)
       if (G.disc2 && !G.longDisc) g.edge(tB[nS - 1], 'r2B', { sw: SW.D });                                                 // 2nd recurrent closes the 2nd discoidal
       // anal: A along the hind edge; cu-a closes the first cubital cell; a second crossvein up to Cu closes the second
       node('cuaB', uBv - 0.14, 0.76); node('aE', uR1 - 0.03, 0.77);
