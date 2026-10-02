@@ -3097,40 +3097,78 @@ function generateInsectDetailed(seed, opts) {
   }
 
   if (type === 'grasshopper') {
+    // ---- Orthoptera, grown by growVeins v2 (docs/wing-venation-spec.md, Orthoptera; ref orth-grasshopper). The tegmen is
+    // a wing frame pointing down the body (local x along the tegmen, local -y toward its outer edge, which is the costa;
+    // the straight inner edge on the midline is the hind margin). C and the inner margin are undrawn wall lanes; Sc, R,
+    // M and Cu run nearly parallel, Cu forking near the base into CuA / CuP and R near the tip into R / Rs, an optional
+    // light intercalated vein between R and M. The archedictyon is the site regime with a small absolute cell size: one
+    // row of rungs where a strip is narrow, rows of near-rectangular polygons (low zig) where it is wider, finer toward
+    // the apex; uOpen 1.0. The folded hindwing fan is a second frame whose anal veins radiate from the root with ladder
+    // rungs between them. Both are drawn in `covers`, the fan first so the tegmen lies over it. ----
     const by = thorax.yBot - 6;
-    // ---- tegmen genes ----
-    const G = { nL: randInt(2, 4), cell: randRange(5, 10), tilt: randRange(0.15, 0.45), subRow: rng() < 0.6, wt: randRange(1.05, 1.28), tipX: randRange(0.1, 0.32), tipY: randRange(0.96, 1.0), fan: rng() < 0.7, rays: randInt(4, 8), bulge: randRange(0.72, 0.82), midX: randRange(0.4, 0.6) };
-    meta.wingSig = ['orth', G.nL, G.subRow ? 1 : 0, Math.round(G.tilt * 10), G.fan ? 1 : 0, G.rays, Math.round(G.cell), Math.round(G.wt * 20), Math.round(G.tipX * 10), Math.round(G.bulge * 20), Math.round(G.midX * 10)].join(',');
+    const G = {
+      cell: randRange(0.11, 0.16), subRow: rng() < 0.6, wt: randRange(1.05, 1.28), tipX: randRange(0.1, 0.32), tipY: randRange(0.94, 0.985), fan: rng() < 0.7, rays: randInt(5, 9), bulge: randRange(0.72, 0.82), midX: randRange(0.4, 0.6),
+      k: randRange(1.0, 1.4), angle: randRange(110, 124), lean: rng() < 0.7 ? -1 : 1, zig: randRange(0.04, 0.1), heavy: rng() < 0.3,   // cell size (fraction of the tegmen width: 6-9 cells across), junction genes (low zig: the grid is rhombic, not hexagonal)
+      cuFork: randRange(0.1, 0.2), rFork: randRange(0.58, 0.72), scEnd: randRange(0.68, 0.82), anal: rng() < 0.6, fanCell: randRange(0.05, 0.08),
+    };
     const Lt = P.abdLen * randRange(1.05, 1.18), wt = abdHW * G.wt;
-    if (G.fan) {   // folded hindwing fan peeking out
-      const fan = [[abdHW * 0.25, by + 4], [abdHW * 1.15, by + Lt * 0.25], [abdHW * 1.3, by + Lt * 0.5], [abdHW * 1.0, by + Lt * 0.72], [abdHW * 0.6, by + Lt * 0.82], [abdHW * 0.3, by + Lt * 0.6]];
-      L.covers.push(pathEl(smoothPath(fan, true, 1), SW.D, '#fff'));
-      for (let k = 1; k <= G.rays; k++) {
-        const tg = lerpP([abdHW * 1.3, by + Lt * 0.5], [abdHW * 0.6, by + Lt * 0.82], k / (G.rays + 1));
-        L.covers.push(lineEl([abdHW * 0.3, by + 6], tg, SW.F));
+    const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
+    const addStats = st => { S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi; };
+    // a frame pointing down the body: world = base + rot(local, 90 deg), so local x runs down the body and local -y outward
+    const frame = (base, worldPts) => makeWing(base, 90, worldPts.map(p => [p[1] - base[1], -(p[0] - base[0])]), 1);
+    let fanJoins = 0;
+    if (G.fan) {   // folded hindwing fan peeking out: anal veins radiating from the root, ladder rungs between them
+      const fb = [abdHW * 0.25, by + 4];
+      const fan = frame(fb, [fb, [abdHW * 1.15, by + Lt * 0.25], [abdHW * 1.3, by + Lt * 0.5], [abdHW * 1.0, by + Lt * 0.72], [abdHW * 0.6, by + Lt * 0.82], [abdHW * 0.3, by + Lt * 0.6]]);
+      L.covers.push(pathEl(fan.path, SW.D, '#fff'));
+      const g = wingGraph(fan, Lt), poly = fan.localPoly, apex = tipPoint(fan), ia = poly.indexOf(apex);
+      // targets by arc length along the outer margin from the apex back toward the leading corner
+      const arc = [{ p: apex, dd: 0 }];
+      for (let i = ia - 1; i >= 0 && poly[i][0] > Lt * 0.4; i--) arc.push({ p: poly[i], dd: arc[arc.length - 1].dd + vlen(sub(poly[i], arc[arc.length - 1].p)) });
+      const arcAt = f => { const dd = f * arc[arc.length - 1].dd; let best = arc[0]; for (const e of arc) if (Math.abs(e.dd - dd) < Math.abs(best.dd - dd)) best = e; return best.p; };
+      const P0 = [2, -1.5], lanes = [];
+      for (let k = 0; k < G.rays; k++) {
+        const tg = arcAt(lerp(0.08, 0.95, k / (G.rays - 1))), pl = [];
+        for (let q = 0; q <= 24; q++) { const t = q / 24; pl.push(add(lerpP(P0, tg, t), mul(perp(norm(sub(tg, P0))), vlen(sub(tg, P0)) * 0.02 * Math.sin(Math.PI * t) * (k % 2 ? 1 : -1)))); }
+        pl[24] = tg;
+        lanes.push({ id: 'F' + k, pl, sw: SW.F, noFork: true, stub: false });
       }
+      const grown = growVeins(g, { lanes, named: [], forks: 0, uOpen: 1.0, k: G.k, minSep: 0.03, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0,
+        evenSites: true, gapNear: 0.2, reachW: 0.7, cell: u => Lt * G.fanCell * (1 - 0.2 * u), cellMin: 3.0, joinSw: SW.F });
+      L.covers.push(...g.emit());
+      addStats(grown.stats); fanJoins = grown.joins.length;
     }
-    const teg = [[0, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * G.bulge, by + Lt * G.midX], [wt * 0.55, by + Lt * 0.85], [wt * G.tipX, by + Lt * G.tipY], [0, by + Lt]];
-    L.covers.push(pathEl(halfShield(teg), SW.O, '#fff'));
-    const vs = [];
-    for (let k = 0; k <= G.nL; k++) {   // k = 0 is the outer edge itself, used only as a strip boundary
-      const f = 1 - k / (G.nL + 1);
-      const pts = [[wt * 0.55 * f, by + 6], [wt * 0.75 * f, by + Lt * 0.12], [wt * G.bulge * f, by + Lt * G.midX], [wt * 0.55 * f, by + Lt * 0.85], [wt * G.tipX * f, by + Lt * (G.tipY - 0.02)]];
-      vs.push(sampleSmooth(pts, false, 1, 8));
-      if (k > 0) L.covers.push(pathEl(smoothPath(pts, false, 1), SW.D));
-    }
-    // archedictyon (ref orth-grasshopper): rows of square-ish cells between consecutive longitudinals, rungs a
-    // little tilted and bowed, finer toward the apex; a sub-row splits the strip where it is wider than two cells
-    for (let i = 0; i + 1 < vs.length; i++) {
-      const a = vs[i], b = vs[i + 1], n = Math.max(2, Math.round(Lt / G.cell));
-      const mids = [];
-      for (let k = 1; k < n; k++) {
-        const t = k / n, ta = Math.min(1, t + G.tilt * jitter(0.5) / n), pa = plAt(a, ta), pb = plAt(b, t);
-        L.covers.push(pathEl(smoothPath([pa, add(lerpP(pa, pb, 0.5), mul(perp(norm(sub(pb, pa))), vlen(sub(pb, pa)) * randRange(-0.08, 0.08))), pb], false, 1), SW.F));
-        mids.push(lerpP(pa, pb, 0.5));
-      }
-      if (G.subRow && i % 2 === 0) L.covers.push(pathEl(smoothPath(mids.filter((_, k) => k % 2 === 0), false, 1), SW.F));   // a lighter longitudinal splitting the row
-    }
+    // ---- tegmen ----
+    const tegPts = [[0, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * G.bulge, by + Lt * G.midX], [wt * 0.55, by + Lt * 0.85], [wt * G.tipX, by + Lt], [0, by + Lt * G.tipY], [0, by + Lt * G.tipY * 0.66], [0, by + Lt * G.tipY * 0.33]];
+    const teg = frame([0, by], tegPts), poly = teg.localPoly, apex = tipPoint(teg);
+    L.covers.push(pathEl(teg.path, SW.O, '#fff'));
+    const g = wingGraph(teg, Lt), X = f => f * Lt;
+    const costaPl = [], edgePl = [], nW = 50;
+    for (let q = 0; q < nW; q++) { const x = lerp(X(0.02), apex[0], q / nW); costaPl.push([x, topAt(teg, x, 0.3)]); edgePl.push([x, botAt(teg, x, 0.3)]); }
+    costaPl.push(apex); edgePl.push(apex);
+    const wR = G.heavy ? SW.O : SW.D;
+    g.margin('scE', G.scEnd, 'top'); g.margin('tip', 1, 'tip'); g.margin('rsE', 0.96, 'bot'); g.margin('mE', 0.9, 'bot'); g.margin('cuaE', 0.8, 'bot'); g.margin('cupE', 0.62, 'bot'); g.margin('aE', 0.36, 'bot'); g.margin('iE', 0.93, 'bot');
+    const lanes = [
+      { id: 'C', pl: costaPl, sw: SW.D, noDraw: true, noFork: true, stub: false },
+      { id: 'Sc', u0: 0.02, s0: 0.1, s1: 0.05, end: 'scE', sw: SW.O, noFork: true, stub: false, ctrl: 2, bow: randRange(0.0, 0.03) },              // Sc hugs the costa and meets it
+      { id: 'R', u0: 0.02, s0: 0.24, s1: 0.16, end: 'tip', sw: wR, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.02, 0.02) },              // R to the apex, Rs forking off near the tip
+      { id: 'M', u0: 0.02, s0: 0.42, s1: 0.46, end: 'mE', sw: wR, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.03, 0.03) },
+      { id: 'Cu', u0: 0.02, s0: 0.6, s1: 0.64, end: 'cuaE', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.02, 0.03),              // Cu forks near the base into CuA (on) and CuP
+        fork: { id: 'CuP', u: G.cuFork, s1: 0.82, end: 'cupE', sw: SW.D, noFork: true, stub: false, ctrl: 2, ease: 'mid', bow: randRange(0.0, 0.04) } },
+      { id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false },
+    ];
+    if (G.anal) lanes.push({ id: 'A', u0: 0.02, s0: 0.8, s1: 0.94, end: 'aE', sw: SW.F, noFork: true, stub: false, ctrl: 1, bow: randRange(0.0, 0.04) });
+    if (G.subRow) lanes.push({ id: 'I', u0: 0.3, s0: 0.33, s1: 0.33, end: 'iE', sw: SW.F, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.02, 0.02) });   // a light intercalated vein between R and M
+    const named = [{ early: true, forkOn: 'R', u: G.rFork, spec: { id: 'Rs', end: 'rsE', s1: 0.3, sw: SW.D, noFork: true, stub: false, ctrl: 1, ease: 'mid', bow: randRange(0.0, 0.03) } }];
+    const cellFn = (u, sMid, A, B) => wt * G.cell * (1 - 0.3 * u) * ((A === 'C' || B === 'C') ? 0.8 : 1);   // archedictyon cells, finer toward the apex and in the costal row
+    const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.02, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0,
+      rows2: true, rowsAt: 1.4, evenSites: true, gapNear: 0.25, reachW: 0.5, cell: cellFn, cellMin: 2.6, zig: G.zig, joinSw: SW.F });
+    L.covers.push(...g.emit());
+    L.covers.push(...costaEls(teg, X(0.01), X(0.96)));   // the costa, heavy, along the outer edge
+    addStats(grown.stats);
+    meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi };
+    meta.wingSig = ['orth', G.subRow ? 1 : 0, G.anal ? 1 : 0, G.fan ? 1 : 0, G.rays, grown.joins.length, fanJoins, grown.stats.multi, Math.round(G.cell * 200), Math.round(G.wt * 20), Math.round(G.tipX * 10), Math.round(G.bulge * 20), Math.round(G.midX * 10),
+      Math.round(G.cuFork * 20), Math.round(G.rFork * 20), Math.round(G.scEnd * 20), Math.round(G.k * 4), G.heavy ? 1 : 0].join(',');
   }
 
   partEnd('wings');
