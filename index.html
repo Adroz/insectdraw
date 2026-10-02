@@ -1557,14 +1557,70 @@ const TYPES = ['beetle', 'moth', 'fly', 'bee', 'dragonfly', 'grasshopper', 'cran
 function rollBodyGenes(type, P) {
   const fam = P.fam, isOdo = type === 'dragonfly' || type === 'damselfly';
   const B = { fam, sig: [], legs: [], abd: {}, thorax: {}, head: {}, ant: {} };
+  const rr = r => randRange(r[0], r[1]);
   // ---- thorax ----
   B.thorax.subSeg = { beetle: 1, grasshopper: 3, cicada: 2 }[type] || randInt(1, 3);
   // ---- abdomen ----
-  B.abd.seg = isOdo || type === 'cranefly' || type === 'mayfly' ? 8
-    : type === 'bee' || type === 'wasp' || type === 'cicada' ? randInt(5, 7)
-    : type === 'grasshopper' || type === 'lacewing' ? randInt(6, 8) : randInt(4, 8);
-  B.abd.startT = type === 'bee' ? 0.22 : type === 'wasp' ? 0.3 : 0.08;
-  B.abd.ovipositor = type === 'wasp' && rng() < 0.6 ? randRange(30, 70) : 0;
+  // Profile: the order's anchors with the widest point slid along the axis, the tip replaced by a rolled shape
+  // (pointed / rounded / truncate / clubbed), a rolled petiole on the wasp-waisted orders and a width factor.
+  // Then segmentation, a markings family (plain / banded / spotted / striped / tip-dark / hairy) and the terminalia.
+  const weighted = w => { const ks = Object.keys(w), tot = ks.reduce((a, k) => a + w[k], 0); let x = rng() * tot; for (const k of ks) { x -= w[k]; if (x < 0) return k; } return ks[ks.length - 1]; };
+  const AD = {   // tips / marks: weighted enums; peak: widest point t; wK: width factor; start: first segment line; ticks: side-tick odds
+    beetle:      { tips: { rounded: 3, truncate: 2, pointed: 1 }, marks: { plain: 1 }, peak: [0.25, 0.5], wK: [0.85, 1.15], start: [0.05, 0.12], seg: [4, 8], ticks: 0.6 },
+    moth:        { tips: { pointed: 3, rounded: 2 }, marks: { plain: 2, hairy: 3, banded: 2 }, peak: [0.25, 0.5], wK: [0.8, 1.2], start: [0.05, 0.15], seg: [4, 8], ticks: 0.8 },
+    fly:         { tips: { rounded: 3, pointed: 2, truncate: 2 }, marks: { plain: 2, banded: 3, spotted: 2, striped: 1, tipdark: 1 }, peak: [0.25, 0.55], wK: [0.8, 1.25], start: [0.05, 0.2], seg: [4, 7], ticks: 0.7 },
+    bee:         { tips: { pointed: 3, rounded: 2 }, marks: { banded: 5, plain: 1, tipdark: 1, hairy: 1 }, peak: [0.4, 0.62], wK: [0.85, 1.2], start: [0.15, 0.3], seg: [5, 7], ticks: 0.2, petiole: 1 },
+    wasp:        { tips: { pointed: 4, rounded: 1 }, marks: { banded: 3, plain: 2, tipdark: 1, spotted: 1 }, peak: [0.45, 0.65], wK: [0.8, 1.2], start: [0.2, 0.35], seg: [5, 7], ticks: 0.4, petiole: 1 },
+    dragonfly:   { tips: { pointed: 2, rounded: 2, clubbed: 2, truncate: 1 }, marks: { plain: 2, banded: 2, spotted: 2, striped: 1 }, peak: [0.1, 0.3], wK: [0.85, 1.2], start: [0.05, 0.1], seg: [8, 8], ticks: 0.5 },
+    damselfly:   { tips: { rounded: 2, truncate: 2, pointed: 1 }, marks: { plain: 2, striped: 2, banded: 2 }, peak: [0.1, 0.3], wK: [0.85, 1.2], start: [0.05, 0.1], seg: [8, 8], ticks: 0.3 },
+    grasshopper: { tips: { pointed: 3, truncate: 2 }, marks: { plain: 3, banded: 1, spotted: 1 }, peak: [0.2, 0.5], wK: [0.85, 1.15], start: [0.05, 0.15], seg: [6, 8], ticks: 0.6 },
+    cranefly:    { tips: { pointed: 2, clubbed: 2, rounded: 1 }, marks: { plain: 3, banded: 1, striped: 1 }, peak: [0.15, 0.4], wK: [0.85, 1.2], start: [0.05, 0.12], seg: [7, 9], ticks: 0.5 },
+    lacewing:    { tips: { rounded: 3, pointed: 1 }, marks: { plain: 3, hairy: 1 }, peak: [0.25, 0.5], wK: [0.85, 1.15], start: [0.05, 0.15], seg: [6, 8], ticks: 0.6 },
+    cicada:      { tips: { pointed: 3, rounded: 1 }, marks: { plain: 2, banded: 2 }, peak: [0.15, 0.35], wK: [0.85, 1.15], start: [0.05, 0.12], seg: [5, 7], ticks: 0.6 },
+    mayfly:      { tips: { pointed: 3, rounded: 1 }, marks: { plain: 3, banded: 1 }, peak: [0.15, 0.4], wK: [0.85, 1.2], start: [0.05, 0.12], seg: [8, 9], ticks: 0.5 },
+  }[type];
+  const A = B.abd;
+  A.tip = weighted(AD.tips); A.mark = weighted(AD.marks); A.peak = rr(AD.peak); A.wK = rr(AD.wK) * (P.variant === 'butterfly' ? 0.9 : 1);
+  A.seg = randInt(AD.seg[0], AD.seg[1]); A.startT = rr(AD.start); A.bow = randRange(0.08, 0.3); A.sw = rng() < 0.25 ? SW.F : SW.D; A.double = rng() < 0.25;
+  A.ticks = rng() < AD.ticks ? { spacing: randRange(2.5, 4), len: randRange(3, 5) } : null;
+  A.keel = isOdo || ((type === 'grasshopper' || type === 'cicada' || type === 'mayfly') && rng() < 0.4);
+  // profile anchors: slide the widest point, then replace the tail with the tip shape
+  {
+    const base = P.abdAnchors, peak0 = base.find(a => a[1] === 1)[0], peak = A.peak;
+    const remap = t => t <= peak0 ? t * peak / peak0 : peak + (t - peak0) * (1 - peak) / (1 - peak0);
+    const cut = A.tip === 'clubbed' ? 0.5 : 0.72;
+    let anchors = base.map(([t, f]) => [remap(t), f]).filter(a => a[0] < cut);
+    const tails = { pointed: [[0.8, 0.78], [0.92, 0.45], [0.98, 0.18], [1, 0]], rounded: [[0.8, 0.9], [0.93, 0.62], [0.99, 0.28], [1, 0]],
+      truncate: [[0.86, 0.9], [0.97, 0.78], [1, 0.35]], clubbed: [[0.62, randRange(0.55, 0.7)], [0.82, randRange(0.88, 1)], [0.94, 0.7], [1, 0]] };
+    const lastT = anchors[anchors.length - 1][0];
+    anchors = anchors.concat(tails[A.tip].filter(a => a[0] > lastT + 0.04));
+    if (AD.petiole) {   // waist: the first two anchors set its width and length
+      const k = randRange(0.6, 1.4), m = randRange(0.7, 1.5);
+      anchors[0] = [0, Math.min(0.5, anchors[0][1] * k)]; anchors[1] = [Math.min(anchors[2][0] - 0.05, anchors[1][0] * m), Math.min(0.55, anchors[1][1] * k)];
+      A.waist = Math.round(anchors[1][1] * 10);
+    }
+    A.anchors = anchors;
+  }
+  // markings parameters
+  A.band = { period: rng() < 0.7 ? 2 : 3, phase: randInt(0, 1), spacing: randRange(2.4, 3.2) };
+  A.spot = { pos: randRange(0.3, 0.6), rx: randRange(0.14, 0.26), every: rng() < 0.7 ? 1 : 2 };
+  A.stripe = { n: randInt(1, 3), k: randRange(0.3, 0.65), hatch: rng() < 0.5 };
+  A.tipDark = randInt(1, 3);
+  A.hair = { spacing: randRange(2, 3.5), len: randRange(4, 7) };
+  // terminalia
+  A.ovipositor = null; A.cerci = null; A.filaments = null; A.appendages = null;
+  if (type === 'wasp') {
+    if (fam === 'ichneumonid' && rng() < 0.95) A.ovipositor = { len: P.abdLen * randRange(0.6, 1.2), curve: randRange(-25, 25), sheath: true };
+    else if (fam === 'sawfly') { if (rng() < 0.5) A.ovipositor = { len: P.abdLen * randRange(0.08, 0.15), curve: 0, sheath: true }; }
+    else if (rng() < 0.6) A.ovipositor = { len: P.abdLen * randRange(0.15, 0.45), curve: randRange(-10, 10), sheath: rng() < 0.4 };
+  }
+  if (type === 'bee' && rng() < 0.3) A.ovipositor = { len: randRange(6, 12), curve: 0, sheath: false };   // sting
+  if (type === 'grasshopper') { A.cerci = { len: randRange(8, 14), spread: randRange(2, 5) }; if (rng() < 0.5) A.ovipositor = { len: randRange(8, 18), curve: 0, sheath: true, valves: true }; }
+  if (type === 'cranefly' && rng() < 0.4) A.cerci = { len: randRange(5, 10), spread: randRange(1.5, 3) };   // ovipositor valves
+  if (type === 'mayfly') A.filaments = { n: rng() < 0.6 ? 3 : 2, len: randRange(0.6, 1.0), splay: randRange(10, 18) };
+  if (isOdo) A.appendages = { len: randRange(8, 16), spread: randRange(3, 7) };
+  B.sig.push(A.tip, A.mark, Math.round(A.peak * 10), Math.round(A.startT * 10), A.sw === SW.F ? 'f' : 'd', A.double ? 1 : 0, A.ticks ? 1 : 0, A.keel ? 1 : 0, A.waist || 0,
+    A.ovipositor ? Math.round(A.ovipositor.len / 10) : '-', A.cerci ? 1 : 0, A.filaments ? A.filaments.n : 0, A.mark === 'banded' ? A.band.period + ':' + A.band.phase : A.mark === 'striped' ? A.stripe.n : A.mark === 'tipdark' ? A.tipDark : 0);
   // ---- head: [cx/headW, rx/headW, ry/headH, cy offset/headH, opts] -- see docs/research-legs-eyes-antennae.md ----
   B.head.eye = {
     beetle: [0.36, 0.12, 0.25, -0.02, { dent: [-125, 0.32, 0.8] }],                 // oval, notched at the antennal socket
@@ -1623,7 +1679,6 @@ function rollBodyGenes(type, P) {
     mayfly: { base: { spurs: [0, 0], tarsomeres: [4, 4], frontK: [1.4, 1.8], poses: { raised: 3, spread: 1, walking: 1 } } },
   };
   const LT = LEG_FAMS[type] || {}, F = Object.assign({}, LD, LT.base || {}, LT[fam] || {});
-  const rr = r => randRange(r[0], r[1]);
   const poseNames = Object.keys(F.poses), poseW = poseNames.map(k => F.poses[k]), wTot = poseW.reduce((a, b) => a + b, 0);
   let x = rng() * wTot; B.pose = poseNames[poseNames.length - 1];
   for (let k = 0; k < poseNames.length; k++) { x -= poseW[k]; if (x < 0) { B.pose = poseNames[k]; break; } }
@@ -1793,6 +1848,7 @@ function generateInsectDetailed(seed, opts) {
   const B = rollBodyGenes(type, P);
   meta.recipe = P.fam;
   meta.bodyGenes = B;
+  P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   // organic irregularity on profiles
   const wobble = a => a.map(([t, f]) => [t, f === 0 ? 0 : f * jitter(0.03)]);
   P.thoraxAnchors = wobble(P.thoraxAnchors);
@@ -1809,47 +1865,65 @@ function generateInsectDetailed(seed, opts) {
   partStart();
   L.abdomen.push(pathEl(abdomen.path, SW.O, '#fff'));
   {
-    const n = B.abd.seg, startT = B.abd.startT;
+    const A = B.abd, n = A.seg, startT = A.startT, bow = A.bow;
     const ys = [];
     for (let i = 0; i <= n; i++) ys.push(abdomen.yAt(startT + (1 - startT) * i / n));
-    for (let i = 1; i < n; i++) {
+    for (let i = 1; i < n; i++) {   // segment boundaries, optionally doubled (intersegmental membrane)
       const y = ys[i], hw = abdomen.hwAt(y);
       if (hw < 2) continue;
-      L.abdomen.push(bowLine(y, hw - 0.5, hw * 0.18, SW.D));
+      L.abdomen.push(bowLine(y, hw - 0.5, hw * bow, A.sw));
+      if (A.double && hw > 5) L.abdomen.push(bowLine(y + 1.6, hw - 1.5, hw * bow, SW.F));
     }
-    // hatching: fine curves parallel to each boundary, plus bee stripes
+    const hatchSeg = (y0, y1, spacing, inset) => { for (let y = y0 + 3; y < y1 - 2; y += spacing) { const hw = abdomen.hwAt(y) - inset; if (hw > 2) L.abdomen.push(bowLine(y, hw, hw * bow, SW.F)); } };
+    // markings family
     for (let i = 0; i < n; i++) {
       const y0 = ys[i], y1 = ys[i + 1], segH = y1 - y0;
-      if (type === 'bee' && i % 2 === 1) {
-        for (let y = y0 + 3; y < y1 - 2; y += 2.2) { const hw = abdomen.hwAt(y) - 2; if (hw > 2) L.abdomen.push(bowLine(y, hw, hw * 0.18, SW.F)); }
-      } else {
-        const k = Math.min(3, Math.floor(segH / 4));
-        for (let j = 1; j <= k; j++) {
-          const y = y1 - j * 3; const hw = abdomen.hwAt(y) - 3;
-          if (hw > 3) L.abdomen.push(bowLine(y, hw, hw * 0.18, SW.F));
+      const banded = A.mark === 'banded' && i % A.band.period === A.band.phase;
+      const dark = A.mark === 'tipdark' && i >= n - A.tipDark;
+      if (banded || dark) hatchSeg(y0, y1, banded ? A.band.spacing : 2.6, 2);
+      else if (A.mark !== 'hairy' || segH > 10) {   // plain: fine curves parallel to the boundary (one only under stripes, or they read as a grid)
+        const k = Math.min(A.mark === 'striped' ? 1 : 3, Math.floor(segH / 4));
+        for (let j = 1; j <= k; j++) { const y = y1 - j * 3, hw = abdomen.hwAt(y) - 3; if (hw > 3) L.abdomen.push(bowLine(y, hw, hw * bow, SW.F)); }
+      }
+      if (A.mark === 'spotted' && i % A.spot.every === 0 && i > 0 && segH > 7) {   // one hatched spot per side per segment
+        const yc = (y0 + y1) / 2, hw = abdomen.hwAt(yc), rx = Math.max(2, hw * A.spot.rx), ry = Math.min(rx, segH * 0.28);
+        if (hw * A.spot.pos + rx < hw - 1.5) for (const sgn of [-1, 1]) {
+          const c = [sgn * hw * A.spot.pos, yc];
+          L.abdomen.push(pathEl(ellipsePath(c, rx, ry, 0), SW.D, '#fff'));
+          for (let dy = -ry + 2; dy < ry - 1; dy += 2.2) { const w = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) * (dy / ry))) - 0.8; if (w > 0.8) L.abdomen.push(lineEl([c[0] - w, c[1] + dy], [c[0] + w, c[1] + dy], SW.F)); }
         }
       }
-      // side texture ticks
-      if (type !== 'bee') {
-        for (let y = y0 + 4; y < y1 - 3; y += 3) {
+      if (A.mark === 'hairy' || A.ticks) {   // side ticks (pilosity)
+        const tk = A.mark === 'hairy' ? A.hair : A.ticks;
+        for (let y = y0 + 4; y < y1 - 3; y += tk.spacing) {
           const hw = abdomen.hwAt(y);
-          if (hw > 6) { L.abdomen.push(lineEl([hw - 1, y], [hw - 5, y + 0.6], SW.F)); L.abdomen.push(lineEl([-hw + 1, y], [-hw + 5, y + 0.6], SW.F)); }
+          if (hw > 6) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * (hw - 1), y], [sgn * (hw - tk.len), y + 0.6], SW.F));
         }
       }
     }
-    if (B.abd.ovipositor) L.abdomen.push(lineEl([0, abdomen.yBot - 2], [0, abdomen.yBot + B.abd.ovipositor], SW.D));   // ovipositor
-    if (type === 'mayfly') L.abdomen.push(pathEl(smoothPath(shaftPoints([0, abdomen.yBot - 2], 90, P.abdLen * 0.8, 0, 6), false), SW.D));   // middle tail filament
-    if (type === 'dragonfly' || type === 'damselfly') {
-      L.abdomen.push(lineEl([0, abdomen.yTop + 4], [0, abdomen.yBot - 6], SW.F));
-      const tipY = abdomen.yBot;
-      L.abdomen.push(lineEl([2, tipY - 4], [5, tipY + 9], SW.D));
-      L.abdomen.push(lineEl([-2, tipY - 4], [-5, tipY + 9], SW.D));
+    if (A.mark === 'striped') {   // longitudinal dark lines following the profile: a median line, or one / two pairs; hatched only on broad abdomens
+      const yA = ys[0] + 3, yB = ys[n] - 4, wide = abdomen.hwAt(abdomen.yAt(A.peak)) > 18;
+      const ks = A.stripe.n === 1 ? [0] : A.stripe.n === 2 ? [A.stripe.k] : wide ? [A.stripe.k, A.stripe.k * 0.5] : [A.stripe.k];
+      for (const k of ks) for (const sgn of (k === 0 ? [1] : [-1, 1])) {
+        const pts = []; for (let y = yA; y <= yB; y += 6) pts.push([sgn * k * (abdomen.hwAt(y) - 2), y]);
+        if (pts.length > 2) { L.abdomen.push(pathEl(smoothPath(pts, false), SW.D)); if (A.stripe.hatch && wide) L.abdomen.push(pathEl(smoothPath(pts.map(p => [p[0] + sgn * 2.2, p[1]]), false), SW.F)); }
+      }
     }
-    if (type === 'grasshopper') {
-      const tipY = abdomen.yBot;
-      L.abdomen.push(lineEl([3, tipY - 6], [6, tipY + 6], SW.D));
-      L.abdomen.push(lineEl([-3, tipY - 6], [-6, tipY + 6], SW.D));
+    if (A.keel && !(A.mark === 'striped' && A.stripe.n === 1)) L.abdomen.push(lineEl([0, abdomen.yTop + 4], [0, abdomen.yBot - 6], SW.F));   // dorsal keel / mid line
+    // terminalia
+    const tipY = abdomen.yBot;
+    if (A.ovipositor) {
+      const o = A.ovipositor;
+      if (o.valves) { for (const sgn of [-1, 1]) L.abdomen.push(pathEl(cubicBezierPath([[sgn * 1.5, tipY - 4], [sgn * 2.5, tipY + o.len * 0.4], [sgn * 2, tipY + o.len * 0.8], [sgn * 0.6, tipY + o.len]], false), SW.D)); }
+      else {
+        const pts = shaftPoints([0, tipY - 2], 90, o.len, o.curve, 8);
+        L.abdomen.push(pathEl(smoothPath(pts, false), SW.D));
+        if (o.sheath) for (const sgn of [-1, 1]) L.abdomen.push(pathEl(smoothPath(pts.slice(0, 6).map(p => [p[0] + sgn * 1.3, p[1]]), false), SW.F));
+      }
     }
+    if (A.cerci) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * 2.5, tipY - 5], [sgn * A.cerci.spread, tipY - 5 + A.cerci.len], SW.D));
+    if (A.filaments && A.filaments.n === 3) L.abdomen.push(pathEl(smoothPath(shaftPoints([0, tipY - 2], 90, P.abdLen * A.filaments.len * 0.95, 0, 6), false), SW.D));   // middle tail filament
+    if (A.appendages) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * 2, tipY - 4], [sgn * A.appendages.spread, tipY - 4 + A.appendages.len], SW.D));
   }
 
   partEnd('abdomen');
@@ -1923,7 +1997,7 @@ function generateInsectDetailed(seed, opts) {
     const AB = B.ant.socket;   // antennal sockets sit on the front of the head between the eyes
     const base = [P.headW * AB[0], headTop + P.headH * AB[1]];
     L.antennae.push(...antennaEls(B.ant.kind, base, B.ant.len, P.headW));
-    if (type === 'mayfly') L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 72, P.abdLen * 0.85, 14, 8), false), SW.D));   // outer tail filaments
+    if (B.abd.filaments) L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 90 - B.abd.filaments.splay, P.abdLen * B.abd.filaments.len, 14, 8), false), SW.D));   // outer tail filaments (mirrored)
   }
 
   partEnd('antennae');
