@@ -7,23 +7,24 @@
 <style>
   html, body { margin: 0; background: #fff; color: #000; }
   body { font: 14px/1.4 Georgia, "Times New Roman", serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 12px 16px; box-sizing: border-box; }
-  #stage { width: min(92vw, 600px); aspect-ratio: 1 / 1; }
-  #stage svg { width: 100%; height: 100%; display: block; }
+  #panes { display: flex; gap: 16px; justify-content: center; align-items: flex-start; flex-wrap: wrap; width: 100%; }
+  .pane { display: flex; flex-direction: column; align-items: center; }
+  .stage { width: min(92vw, 600px); aspect-ratio: 1 / 1; }
+  body.compare .stage { width: min(92vw, 46vw, 600px); }
+  .stage svg { width: 100%; height: 100%; display: block; }
   .controls { display: flex; gap: 8px; align-items: center; margin: 14px 0 6px; flex-wrap: wrap; justify-content: center; }
+  #topbar { margin-bottom: 10px; }
   input, button { font: inherit; padding: 4px 10px; border: 1px solid #000; background: #fff; color: #000; border-radius: 0; }
   input { width: 10em; }
   button { cursor: pointer; }
-  button:active { background: #000; color: #fff; }
+  button:active, button.on { background: #000; color: #fff; }
+  button:disabled { opacity: 1; color: #888; border-color: #888; cursor: default; }
+  button:disabled:active { background: #fff; color: #888; }
 </style>
 </head>
 <body>
-<div id="stage"></div>
-<div class="controls">
-  <label>Seed <input id="seed" type="number" value="1" min="0" step="1"></label>
-  <button id="gen">Generate</button>
-  <button id="rnd">Random</button>
-  <button id="daily">Daily</button>
-</div>
+<div class="controls" id="topbar"><button id="compare">Compare</button></div>
+<div id="panes"></div>
 
 <script id="engine">
 'use strict';
@@ -616,7 +617,7 @@ function makeWing(base, thetaDeg, localPts, tension) {
   const localPoly = sampleSmooth(localPts, true, tension, 8);
   return {
     path: smoothPath(worldPts, true, tension),
-    T, localPoly, localPts,
+    T, inv: q => rot(sub(q, base), -th), localPoly, localPts,
     inside: p => pointInPoly(p, localPoly),
     yRange: x => outlineYRange(localPoly, x),
   };
@@ -953,13 +954,99 @@ function fringe(wing, spacing, len, sw, filter) {
 }
 // a vein that forks into two short twigs just before the margin (Neuroptera "end-twigging")
 function twigEnd(wing, pl, k) {
-  const end = pl[pl.length - 1], p = plAt(pl, 0.9), t = perp(norm(sub(end, p)));
-  return [lineEl(wing.T(p), wing.T(add(end, mul(t, k))), SW.F), lineEl(wing.T(p), wing.T(sub(end, mul(t, k))), SW.F)];
+  const end = pl[pl.length - 1], p = plAt(pl, 0.88), d = norm(sub(end, p)), t = perp(d), tip = add(end, mul(d, k * 0.4));
+  return [lineEl(wing.T(p), wing.T(add(tip, mul(t, k))), SW.F), lineEl(wing.T(p), wing.T(sub(tip, mul(t, k))), SW.F)];
 }
 // margin point at a given x on the leading (top) or trailing (bottom) edge, inset slightly
 function onTop(wing, x) { return [x, topAt(wing, x, 0.6)]; }
 function onBot(wing, x) { return [x, botAt(wing, x, 0.6)]; }
 function onTip(wing, x) { return [x, (topAt(wing, x) + botAt(wing, x)) / 2]; }
+// the outline sample furthest along the span (the apex), so a vein can end exactly on the margin
+function tipPoint(wing) { let t = wing.localPoly[0]; for (const p of wing.localPoly) if (p[0] > t[0]) t = p; return t; }
+// a slightly bowed vein between two points (k = bow as a fraction of the chord, + toward the trailing edge)
+function bowVein(p, q, k, n) { const c = lerpP(p, q, 0.5), nn = perp(norm(sub(q, p))); return vein([p, add(c, mul(nn, k * vlen(sub(q, p)))), q], n); }
+
+// ---------- wing graph: closed-cell venation (docs/wing-venation-spec.md) ----------
+// Nodes are named points in wing-local coordinates, placed in outline-relative space
+// (u along the span 0..1, s across the chord 0 = costa .. 1 = hind margin). Longitudinal
+// veins are chains of nodes emitted as one smooth curve with a bowed midpoint in every
+// segment, so they undulate through the cell corners instead of reading as rods. Crossveins
+// join two points on chains at a tilt, so junctions are Y-shaped rather than right-angled.
+function wingGraph(wing, Lw) {
+  const N = new Map(), chains = [], edges = [], extra = [], plCache = new Map();
+  const g = {
+    wing, N,
+    P(u, s) { const x = u * Lw, r = wing.yRange(x) || [0, 0]; return [x, lerp(r[0], r[1], s)]; },
+    node(id, u, s) { N.set(id, g.P(u, s)); return id; },
+    nodeAt(id, p) { N.set(id, p); return id; },
+    at(id) { const p = N.get(id); if (!p) throw new Error('wingGraph: no node ' + id); return p; },
+    margin(id, u, side) {   // node on the outline: top / bottom edge nearest span fraction u, or the apex
+      const x = u * Lw;
+      N.set(id, side === 'tip' ? tipPoint(wing) : nearestOutlinePoint(wing.localPoly, [x, side === 'top' ? topAt(wing, x) : botAt(wing, x)]));
+      return id;
+    },
+    // a longitudinal vein through the named nodes; bows alternate sides unless given
+    chain(ids, o) { o = o || {}; chains.push({ ids, vein: o.vein, sw: o.sw || SW.D, bows: ids.slice(1).map((_, i) => o.bows ? o.bows[i] : (o.bow !== undefined ? o.bow : (i % 2 ? -1 : 1) * randRange(0.02, 0.06))), taper: o.taper }); plCache.delete(o.vein); return o.vein; },
+    pl(name) {   // the emitted polyline of a chain (local coords), cached
+      if (plCache.has(name)) return plCache.get(name);
+      const c = chains.find(ch => ch.vein === name); if (!c) throw new Error('wingGraph: no chain ' + name);
+      const pts = [g.at(c.ids[0])];
+      for (let i = 0; i + 1 < c.ids.length; i++) { const p = g.at(c.ids[i]), q = g.at(c.ids[i + 1]); pts.push(add(lerpP(p, q, 0.5), mul(perp(norm(sub(q, p))), c.bows[i] * vlen(sub(q, p)))), q); }
+      const pl = c.ids.length > 2 ? vein(pts, 6) : vein(pts, 10);
+      plCache.set(name, pl); return pl;
+    },
+    on(name, t) { return plAt(g.pl(name), t); },                   // a point on a chain by parameter
+    onX(name, x) { const y = plYAt(g.pl(name), x); return y === null ? null : [x, y]; },
+    // a crossvein between two nodes (or explicit points), bowed a little
+    edge(a, b, o) { o = o || {}; edges.push({ a: Array.isArray(a) ? a : g.at(a), b: Array.isArray(b) ? b : g.at(b), sw: o.sw || SW.F, bow: o.bow === undefined ? randRange(-0.05, 0.05) : o.bow }); },
+    // crossvein between two chains at parameters ta / tb (tb defaults to ta shifted by `tilt`)
+    cross(veinA, ta, veinB, tb, o) { o = o || {}; const b = tb === undefined ? ta + (o.tilt === undefined ? randRange(-0.04, 0.04) : o.tilt) : tb; g.edge(g.on(veinA, ta), g.on(veinB, Math.max(0, Math.min(1, b))), o); },
+    // vein running from a node into open membrane and fading: drawn at a lighter weight, bowed
+    stub(id, dirDeg, len, sw) { const p = Array.isArray(id) ? id : g.at(id), d = dirv(dirDeg), q = add(p, mul(d, len)); extra.push(emitLocalPolyline(wing, vein([p, add(lerpP(p, q, 0.5), mul(perp(d), len * randRange(-0.06, 0.06))), q]), sw || SW.F)); },
+    // ladder regime: n rungs between two chains over t in [t0, t1], each tilted by `tilt` (in t)
+    ladder(veinA, veinB, n, tilt, sw, t0, t1) { t0 = t0 === undefined ? 0.05 : t0; t1 = t1 === undefined ? 0.95 : t1; for (let k = 0; k < n; k++) { const t = lerp(t0, t1, (k + 0.5) / n) * jitter(0.02); g.cross(veinA, t, veinB, Math.max(0, Math.min(1, t + tilt * jitter(0.3))), { sw: sw || SW.F, bow: randRange(-0.04, 0.04) }); } },
+    // reticulation regime: Poisson sites + Voronoi inside a polygon (local coords)
+    reticulate(poly, rFn, sw) { if (poly.length > 2) extra.push(...emitEdges(wing, voronoiEdges(poissonInPoly(poly, rFn, 600), poly), sw || SW.F)); },
+    // polygon bounded by chain A (ta0..ta1) and chain B (tb1..tb0)
+    strip(veinA, ta0, ta1, veinB, tb0, tb1) { const a = g.pl(veinA), b = g.pl(veinB), out = []; const n = 14; for (let k = 0; k <= n; k++) out.push(plAt(a, lerp(ta0, ta1, k / n))); for (let k = n; k >= 0; k--) out.push(plAt(b, lerp(tb0, tb1, k / n))); return out; },
+    // pterostigma: a lens on the costa from xa to xb, deepest (depth, local units) at fraction `peak`;
+    // `lower` overrides the lower edge (x -> y) for the odonate stigma that sits on R1; `skew` slants the ends.
+    // style: solid (the one black fill allowed), cross, axis, stipple. Returns the lower edge as a polyline.
+    stigma(xa, xb, depth, peak, style, lower, skew) {
+      skew = skew || 0;
+      const top = [[xa, topAt(wing, xa, 0.4)]].concat(leadingEdge(wing, xa + 0.6, xb - 0.6).map(p => [p[0], p[1] + 0.4]), [[xb, topAt(wing, xb, 0.4)]]);
+      let bot;
+      if (lower) bot = []; else {
+        const L = xb - xa, px = xa + L * peak;
+        bot = vein([[xa + skew, topAt(wing, xa + skew, 0.4)], [lerp(xa, px, 0.5) + skew * 0.5, topAt(wing, lerp(xa, px, 0.5), 0.4) + depth * 0.72], [px, topAt(wing, px, 0.4) + depth], [lerp(px, xb, 0.55), topAt(wing, lerp(px, xb, 0.55), 0.4) + depth * 0.72], [xb + skew, topAt(wing, xb + skew, 0.4)]], 8);
+      }
+      if (lower) for (let k = 0; k <= 16; k++) { const x = lerp(xa + skew, xb + skew, k / 16); bot.push([x, lower(x)]); }
+      const closed = top.concat(bot.slice().reverse());
+      const els = [];
+      const yT = x => topAt(wing, x, 0.4), yB = x => { const y = plYAt(bot, x); return y === null ? yT(x) : y; };
+      if (style === 'solid') els.push(polygonEl(closed.map(wing.T), SW.F, '#000'));
+      else {
+        els.push(polygonEl(closed.map(wing.T), SW.D, '#fff'));
+        if (style === 'cross' || style === 'axis') { const n = style === 'cross' ? 4 : 3; for (let k = 1; k <= n; k++) { const t = k / (n + 1), pl = []; for (let x = xa + 0.3; x <= xb - 0.3; x += 1.2) pl.push([x, lerp(yT(x), yB(x), t)]); if (pl.length > 1) els.push(emitLocalPolyline(wing, pl, style === 'cross' ? SW.D : SW.F)); } }
+        if (style === 'cross') for (let x = xa + 1; x < xb; x += 1.7) els.push(lineEl(wing.T([x, yT(x)]), wing.T([x, yB(x)]), SW.F));
+        if (style === 'stipple') for (let x = xa + 1; x < xb; x += 1.5) for (let y = yT(x) + 1; y < yB(x) - 0.5; y += 1.5) els.push(circleEl(wing.T([x + randRange(-0.3, 0.3), y]), 0.35, SW.F, '#000'));
+      }
+      extra.unshift(...els);
+      return bot;
+    },
+    emit() {
+      const out = extra.slice();
+      for (const c of chains) {
+        const pl = g.pl(c.vein);
+        if (c.taper) { const k = Math.floor(pl.length * 0.6); out.push(emitLocalPolyline(wing, pl.slice(0, k + 1), c.sw), emitLocalPolyline(wing, pl.slice(k), c.taper)); }
+        else out.push(emitLocalPolyline(wing, pl, c.sw));
+      }
+      for (const e of edges) out.push(emitLocalPolyline(wing, bowVein(e.a, e.b, e.bow, 6), e.sw));
+      return out;
+    },
+  };
+  return g;
+}
 
 // ============================================================
 //  Names — deterministic Latin-style binomials + a common name.
@@ -1412,38 +1499,83 @@ function generateInsectDetailed(seed) {
   // ---------- wings / covers ----------
   if (type === 'moth') {
     const isB = P.variant === 'butterfly';
-    const W = P.wingSpan, H = W * (isB ? 0.95 : 0.8);
+    const fam = isB ? pick(['nymphalid', 'satyrine', 'pierid', 'lycaenid', 'papilionid']) : pick(['noctuid', 'noctuid', 'geometrid', 'arctiid', 'saturniid', 'sphingid', 'plain']);
+    meta.recipe = fam;
+    // ---- wing-shape genes. The family biases the silhouette (rounded pierid, angular nymphalid, tailed
+    // papilionid, narrow noctuid, broad geometrid, long-winged sphingid); every value is still rolled per seed. ----
+    const FS = {   // len/h scale the span; apexY = apex height, sharp = apex pointedness, tornus = termen slant, odds of scallops / tails / falcate margin, hind size
+      nymphalid:  { len: 1.0, h: 0.95, apexY: [0.5, 0.66], sharp: [0.3, 0.9], tornus: [0.78, 0.9], scallop: 0.6, tail: 0.1, hind: [0.95, 1.1], concave: 0.5 },
+      satyrine:   { len: 0.96, h: 0.95, apexY: [0.48, 0.6], sharp: [0, 0.4], tornus: [0.8, 0.9], scallop: 0.4, tail: 0, hind: [1.0, 1.15], concave: 0.1 },
+      pierid:     { len: 1.0, h: 0.92, apexY: [0.5, 0.62], sharp: [0.1, 0.6], tornus: [0.8, 0.92], scallop: 0.1, tail: 0, hind: [0.95, 1.1], concave: 0.1 },
+      lycaenid:   { len: 0.9, h: 0.88, apexY: [0.46, 0.58], sharp: [0.2, 0.7], tornus: [0.78, 0.9], scallop: 0.15, tail: 0.35, hind: [0.9, 1.05], concave: 0.1 },
+      papilionid: { len: 1.08, h: 1.0, apexY: [0.56, 0.7], sharp: [0.4, 1], tornus: [0.72, 0.86], scallop: 0.5, tail: 0.75, hind: [1.0, 1.15], concave: 0.6 },
+      noctuid:    { len: 1.0, h: 0.72, apexY: [0.32, 0.44], sharp: [0.3, 0.9], tornus: [0.7, 0.86], scallop: 0.3, tail: 0, hind: [0.85, 1.0], concave: 0.2 },
+      geometrid:  { len: 1.0, h: 0.92, apexY: [0.42, 0.56], sharp: [0.2, 0.8], tornus: [0.78, 0.9], scallop: 0.5, tail: 0.05, hind: [1.0, 1.15], concave: 0.3 },
+      arctiid:    { len: 1.0, h: 0.8, apexY: [0.36, 0.48], sharp: [0.1, 0.6], tornus: [0.74, 0.88], scallop: 0.2, tail: 0, hind: [0.85, 1.0], concave: 0.1 },
+      saturniid:  { len: 1.05, h: 0.98, apexY: [0.46, 0.6], sharp: [0.4, 1], tornus: [0.72, 0.86], scallop: 0.4, tail: 0.3, hind: [1.0, 1.2], concave: 0.6 },
+      sphingid:   { len: 1.15, h: 0.62, apexY: [0.3, 0.4], sharp: [0.6, 1], tornus: [0.62, 0.78], scallop: 0.15, tail: 0, hind: [0.6, 0.75], concave: 0.4 },
+      plain:      { len: 1.0, h: 0.8, apexY: [0.36, 0.5], sharp: [0.2, 0.7], tornus: [0.74, 0.88], scallop: 0.3, tail: 0, hind: [0.85, 1.05], concave: 0.2 },
+    }[fam];
+    const rr = r => randRange(r[0], r[1]);
+    const W = P.wingSpan * FS.len, H = P.wingSpan * FS.h;
+    const G = {
+      apexX: randRange(0.94, 1.04), apexY: rr(FS.apexY), sharp: rr(FS.sharp), tornusX: rr(FS.tornus), tornusY: randRange(0.28, 0.46),
+      concave: rng() < FS.concave ? randRange(0.03, 0.08) : 0,                    // falcate: the termen is scooped just below the apex
+      scallop: rng() < FS.scallop, tail: rng() < FS.tail ? (fam === 'papilionid' ? randRange(0.14, 0.3) : randRange(0.07, 0.18)) : 0, hindK: rr(FS.hind), hindLobe: randRange(0.62, 0.78),
+      // discal cell corners (fractions of W / H), R-branch count and stalking, Sc and 1A endpoints
+      fU: [randRange(0.46, 0.6), randRange(0.2, 0.32)], fD: [randRange(0.4, 0.55), randRange(0.0, 0.12)],
+      hU: [randRange(0.34, 0.46), randRange(0.08, 0.17)], hD: [randRange(0.3, 0.42), randRange(0.26, 0.36)],
+      nR: randInt(3, 5), nRh: randInt(2, 3), stalk: randInt(1, 3), stemL: randRange(0.03, 0.08), scX: randRange(0.56, 0.7), aX: randRange(0.36, 0.5),
+      sweep: randRange(-8, 6), hindSweep: randRange(0, 10), heavy: rng() < 0.3,                  // posture: forewing sweep, hindwing drop; heavy veins
+    };
+    meta.wingSig = ['lep', isB ? 'b' : 'm', fam, G.heavy ? 1 : 0, Math.round(G.sweep / 4), Math.round(G.hindSweep / 4), G.nR, G.nRh, G.stalk, G.scallop ? 1 : 0, G.tail > 0 ? 1 : 0, G.concave > 0 ? 1 : 0, Math.round(G.apexY * 10), Math.round(G.sharp * 2),
+      Math.round(G.tornusX * 10), Math.round(G.fU[0] * 10), Math.round(G.fD[1] * 10), Math.round(G.hindK * 10)].join(',');
     const by = thorax.yAt(0.35), bx = thorax.hwAt(by) * 0.5;
-    const j = () => jitter(0.04);
-    let fwPts, hwPts;
-    if (isB) {
-      fwPts = [[0, 0], [W * 0.45 * j(), -H * 0.5 * j()], [W * 0.78 * j(), -H * 0.62 * j()], [W * 0.95, -H * 0.58 * j()], [W * 1.0 * j(), -H * 0.3 * j()],
-        [W * 0.93 * j(), -H * 0.02], [W * 0.78 * j(), H * 0.25 * j()], [W * 0.52 * j(), H * 0.42 * j()], [W * 0.25, H * 0.33]];
-      hwPts = [[0, 8], [W * 0.4 * j(), H * 0.02], [W * 0.68 * j(), H * 0.15 * j()], [W * 0.7 * j(), H * 0.45 * j()], [W * 0.5 * j(), H * 0.68 * j()], [W * 0.28 * j(), H * 0.74 * j()], [W * 0.06, H * 0.5]];
-    } else {
-      fwPts = [[0, 0], [W * 0.5 * j(), -H * 0.38 * j()], [W * 0.85 * j(), -H * 0.48 * j()], [W * 1.0, -H * 0.42 * j()], [W * 0.95 * j(), -H * 0.15 * j()],
-        [W * 0.82 * j(), H * 0.15 * j()], [W * 0.58 * j(), H * 0.38 * j()], [W * 0.3, H * 0.3]];
-      hwPts = [[0, 8], [W * 0.4 * j(), -H * 0.02], [W * 0.68 * j(), H * 0.12 * j()], [W * 0.66 * j(), H * 0.42 * j()], [W * 0.45 * j(), H * 0.65 * j()], [W * 0.22 * j(), H * 0.7 * j()], [W * 0.05, H * 0.5]];
-    }
-    if (rng() < (isB ? 0.6 : 0.3)) {   // scalloped outer margin
+    const j = () => jitter(0.03);
+    // forewing: base -> costa -> apex -> termen -> tornus -> inner margin
+    const ax = W * G.apexX, ay = -H * G.apexY, tor = [W * G.tornusX, H * G.tornusY];
+    let fwPts = [[0, 0], [W * 0.45 * j(), -H * G.apexY * 0.8 * j()], [W * lerp(0.78, 0.9, G.sharp) * j(), -H * G.apexY * 1.03], [ax, ay]];
+    const apexI = fwPts.length - 1;
+    if (G.sharp < 0.5) fwPts.push([ax + W * 0.02 * (1 - G.sharp), lerp(ay, tor[1], 0.3)]);         // rounded shoulder below the apex
+    const tm = lerpP([ax, ay], tor, G.concave ? lerp(0.5, 0.3, G.sharp) : 0.55);
+    fwPts.push([tm[0] - W * G.concave, tm[1] * j()]);
+    fwPts.push(tor);
+    const torI = fwPts.length - 1;
+    fwPts.push([W * 0.52 * j(), H * (G.tornusY + 0.02)], [W * 0.25, H * G.tornusY * 0.85]);
+    if (G.scallop) {   // scalloped termen: pull the midpoint of each termen segment in toward the base
       const out = [];
       for (let i = 0; i < fwPts.length; i++) {
         out.push(fwPts[i]);
-        if (i >= 3 && i <= 6) { const m = lerpP(fwPts[i], fwPts[(i + 1) % fwPts.length], 0.5); out.push(mul(m, 0.975)); }
+        if (i >= apexI && i < torI) out.push(mul(lerpP(fwPts[i], fwPts[i + 1], 0.5), 0.975));
       }
       fwPts = out;
     }
+    // hindwing, scaled by hindK; optional tail along the ray from the pattern origin through the tail root
+    const hk = G.hindK, hO = [W * 0.08, H * 0.14];
+    const hRaw = isB
+      ? [[W * 0.4 * j(), H * 0.02], [W * 0.68 * j(), H * 0.15 * j()], [W * 0.7 * j(), H * 0.45 * j()], [W * 0.5 * j(), H * (G.hindLobe - 0.06) * j()], [W * 0.28 * j(), H * G.hindLobe], [W * 0.06, H * 0.5]]
+      : [[W * 0.4 * j(), -H * 0.02], [W * 0.68 * j(), H * 0.12 * j()], [W * 0.66 * j(), H * 0.42 * j()], [W * 0.45 * j(), H * (G.hindLobe - 0.09) * j()], [W * 0.22 * j(), H * (G.hindLobe - 0.04)], [W * 0.05, H * 0.5]];
+    let hwPts = [[0, 8]].concat(hRaw.map(p => mul(p, hk)));
+    if (G.tail) {
+      const root = hwPts[3], dir = norm(sub(root, hO)), tip = add(root, mul(dir, W * G.tail));
+      const side = perp(dir);
+      hwPts.splice(3, 1, add(root, mul(side, -W * 0.025)), add(lerpP(root, tip, 0.9), mul(side, -W * 0.012)), tip, add(lerpP(root, tip, 0.9), mul(side, W * 0.012)), add(root, mul(side, W * 0.025)));
+    }
     const base = [bx, by];
-    const fore = makeWing(base, 0, fwPts, 1), hind = makeWing(base, 0, hwPts, 1);
+    const fore = makeWing(base, G.sweep, fwPts, 1), hind = makeWing(base, G.sweep + G.hindSweep, hwPts, 1);
 
     // Comstock-Needham layout: a closed discal cell near the wing centre; Sc+R1 runs
     // along the costa; R2-R5 fan from the cell's upper corner to the apex; M1-M3 leave
     // the discocellular crossvein; Cu1/Cu2 leave the lower edge; 1A runs to the inner margin.
-    function lepVeins(wing, b, U, D, nR, scX, aX, xMin) {
+    function lepVeins(wing, b, U, D, nR, scX, aX, xMin, nStalk, stemL) {
       const vs = [];
       const bowed = (p, q, k) => { const n = perp(norm(sub(q, p))); return vein([p, add(lerpP(p, q, 0.5), mul(n, k)), q]); };
-      const cellTop = bowed(b, U, -W * 0.015), cellBot = bowed(b, D, W * 0.012);
-      const dcv = bowed(U, D, W * 0.02);          // discocellular, concave toward the base
+      const cellTop = bowed(b, U, -W * randRange(0.005, 0.025)), cellBot = bowed(b, D, W * randRange(0.004, 0.02));
+      // discocellular: two or three pieces meeting at obtuse angles (ref lep-agrotis / lep-papilio), concave toward the base
+      const nDc = rng() < 0.5 ? 2 : 3, dcPts = [U];
+      for (let k = 1; k < nDc; k++) dcPts.push(add(lerpP(U, D, k / nDc), mul(perp(norm(sub(D, U))), W * randRange(0.015, 0.04) * (k === 1 ? 1 : 0.6))));
+      dcPts.push(D);
+      const dcv = []; for (let k = 0; k + 1 < dcPts.length; k++) { const seg = vein([dcPts[k], dcPts[k + 1]], 4); dcv.push(...(k ? seg.slice(1) : seg)); }
       vs.push(cellTop, cellBot, dcv);
       vs.push(bowed([b[0] + W * 0.03, b[1] - H * 0.04], [scX, topAt(wing, scX, 0.5)], -W * 0.01));
       const nT = nR + 3 + 2;
@@ -1452,33 +1584,32 @@ function generateInsectDetailed(seed) {
       // R branches: R2 from the corner, the rest from a short stem continuing the cell's top edge
       const stemDir = norm(sub(tg[0], U));
       for (let i = 0; i < nR; i++) {
-        const start = i === 0 ? U : add(U, mul(stemDir, W * 0.05 * Math.min(i, 2)));
-        if (i > 0 && i <= 2) vs.push([U, start]);
-        vs.push(bowed(start, tg[i], randRange(-1, 1) * W * 0.01));
+        const start = i === 0 ? U : add(U, mul(stemDir, W * stemL * Math.min(i, nStalk)));
+        if (i > 0 && i <= nStalk) vs.push([U, start]);
+        vs.push(bowed(start, tg[i], randRange(-1, 1) * W * 0.012));
       }
-      for (let i = 0; i < 3; i++) vs.push(bowed(plAt(dcv, 0.15 + i * 0.35), tg[nR + i], randRange(-1, 1) * W * 0.012));
-      vs.push(bowed(D, tg[nR + 3], W * 0.01));
-      vs.push(bowed(plAt(cellBot, 0.68), tg[nR + 4], W * 0.012));
-      vs.push(bowed([b[0], b[1] + H * 0.03], [aX, botAt(wing, aX, 0.5)], W * 0.012));
+      for (let i = 0; i < 3; i++) vs.push(bowed(plAt(dcv, 0.15 + i * 0.35), tg[nR + i], randRange(-1, 1) * W * 0.014));
+      vs.push(bowed(D, tg[nR + 3], W * randRange(0.004, 0.016)));
+      vs.push(bowed(plAt(cellBot, randRange(0.55, 0.75)), tg[nR + 4], W * randRange(0.006, 0.018)));
+      vs.push(bowed([b[0], b[1] + H * 0.03], [aX, botAt(wing, aX, 0.5)], W * 0.012));                                   // 2A to the tornus
+      if (rng() < 0.6) vs.push(bowed([b[0], b[1] + H * 0.05], [aX * 0.35, botAt(wing, aX * 0.35, 0.5)], W * 0.01));          // 3A, short, at the base
       return vs;
     }
 
     // ---- venation ----
-    const hB = [W * 0.01, H * 0.1], hU = [W * 0.4, H * 0.12], hD = [W * 0.36, H * 0.3];
-    const fB = [W * 0.01, H * 0.02], fU = [W * 0.52, -H * 0.26], fD = [W * 0.47, H * 0.06];
-    const hVeins = lepVeins(hind, hB, hU, hD, 2, W * 0.42, W * 0.28, W * 0.45);
-    const nR = randInt(3, 5);
-    const fVeins = lepVeins(fore, fB, fU, fD, nR, W * 0.62, W * 0.42, W * 0.62);
+    const hB = mul([W * 0.01, H * 0.1], hk), hU = [W * G.hU[0] * hk, H * G.hU[1] * hk], hD = [W * G.hD[0] * hk, H * G.hD[1] * hk];
+    const fB = [W * 0.01, H * 0.02], fU = [W * G.fU[0], -H * G.fU[1]], fD = [W * G.fD[0], H * G.fD[1]];
+    const hVeins = lepVeins(hind, hB, hU, hD, G.nRh, W * 0.42 * hk, W * 0.28 * hk, W * 0.45 * hk, 1, 0.05);
+    const nR = G.nR;
+    const fVeins = lepVeins(fore, fB, fU, fD, nR, W * G.scX, W * G.aX, W * Math.min(0.62, G.tornusX - 0.06), G.stalk, G.stemL);
     const ends = vs => vs.slice(4).filter(v => v.length > 2).map(v => v[v.length - 1]);   // marginal vein tips, apex -> inner margin
     const SF = lepSpace(fore, [W * 0.1, 0], ends(fVeins), nR + 3);       // cells posterior to M3 start at nR+3
-    const SH = lepSpace(hind, [W * 0.08, H * 0.14], ends(hVeins), 5);
+    const SH = lepSpace(hind, hO, ends(hVeins), G.nRh + 3);
 
     // ---- pattern: a compositional ground plan (docs/research-lepidoptera-wings.md). Every element
     // (basal field, bands, cross-lines, discal element, ocelli, spot rows, submarginal, margin, apical
     // patch, oblique streaks, vein tips, dusting, fringe, hatch geometry) is rolled independently with its
     // own position, tone and shape; the family only biases the odds, so no two seeds share a layout. ----
-    const fam = isB ? pick(['nymphalid', 'satyrine', 'pierid', 'lycaenid', 'papilionid']) : pick(['noctuid', 'noctuid', 'geometrid', 'arctiid', 'saturniid', 'sphingid', 'plain']);
-    meta.recipe = fam;
     const P01 = p => rng() < p;
     const F = {   // ground tone weights [white, light, mid]; element odds; bands = weighted counts
       nymphalid:  { ground: [0.4, 0.45, 0.15], basal: 0.8, bands: [0, 1, 2, 2, 3], lines: 0.2, discal: ['none', 'none', 'dot', 'lunule'], ocelli: 0.6, row: 0.2, submarg: 0.8, margin: 0.9, apical: 0.3, streaks: 0.1, tips: 0.3, cheq: 0.15 },
@@ -1645,7 +1776,7 @@ function generateInsectDetailed(seed) {
     // draw order: white outline -> hatching (fan with the veins, cross set parallel to the margin for the darks)
     // -> band edges -> costa + veins -> cross-lines/stigmata outlines -> fringe
     function drawLepWing(wing, S, veins, o, hindW) {
-      const tone = lepTone(S, o.ground, o.elems, o.spots), mask = hindW ? fore.localPoly : null;
+      const tone = lepTone(S, o.ground, o.elems, o.spots), mask = hindW ? fore.localPoly.map(p => hind.inv(fore.T(p))) : null;   // forewing outline in hindwing-local coordinates
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
       const clsFan = lv => lv <= 0 ? 0 : lv === 1 ? (Q.hatch.stipple ? 3 : 1) : lv === 2 ? 1 : 2;   // light = stipple or fine lines, mid = fine lines, dark = heavier lines
       const clsX = lv => lv < 3 ? 0 : lv === 3 ? 1 : 2;                                        // cross-hatch only in the darks
@@ -1653,7 +1784,7 @@ function generateInsectDetailed(seed) {
       L.wings.push(...lepHatch(wing, lepParallel(wing, hindW ? Q.hatch.crossH : Q.hatch.crossF, Q.hatch.xSpacing), tone, clsX, 1.2, mask));
       for (const pl of o.fine) L.wings.push(pathEl(smoothPath(pl.map(wing.T), false, 1), SW.F));
       if (!hindW) L.wings.push(...costaEls(wing, 0, W * 0.9));
-      for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, SW.D));
+      for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, G.heavy ? SW.O : SW.D));
       for (const pl of o.det) L.wings.push(pathEl(smoothPath(pl.map(wing.T), false, 1), SW.D));
       L.wings.push(...o.after);
       const a0 = S.bounds[0] + 0.3 * (S.bounds[1] - S.bounds[0]);
@@ -1664,53 +1795,85 @@ function generateInsectDetailed(seed) {
   }
 
   if (type === 'fly' || type === 'cranefly') {
-    // Dipteran wing: long fused stalk, veins hugging the costa then sweeping to the margin.
-    // Nematoceran plan (M forked, as in crane flies) or Muscid (single M1+2 with a bend).
-    const nemato = type === 'cranefly' || rng() < 0.35;
-    const spurious = !nemato && rng() < 0.15, bend = nemato ? 0 : randRange(0, 0.1), spines = rng() < 0.65;   // syrphid vena spuria; muscid M bend strength
-    const E = { sc: randRange(0.4, 0.55), r1: randRange(0.55, 0.72), r23: randRange(0.78, 0.9), fork: randRange(0.5, 0.64), forkY: randRange(-0.14, -0.05), mFork: randRange(0.55, 0.66), cu1: randRange(0.58, 0.72), cu2: randRange(0.28, 0.4), a: randRange(0.15, 0.25), rm: randRange(0.4, 0.52), dmcu: randRange(0.6, 0.72) };
+    // ---- Diptera on the wing graph (docs/wing-venation-spec.md; refs dip-eristalis, dip-asilid-photo, dip-limonia).
+    // C heavy to the apex; Sc, R1, R2+3 end on the costa in turn; R4+5 reaches the apex; M1 bends forward (muscids),
+    // forks (nematocerans) or runs straight to the margin (asilids); closed cells br, bm, cup (CuA2 meets A1) and
+    // dm (closed by dm-cu); a small dark stigma where Sc ends; an alula at the base. ----
+    const fam = type === 'cranefly' ? 'tipulid' : pick(['muscid', 'muscid', 'nemato', 'syrphid', 'tabanid', 'asilid']);
+    const nemato = fam === 'tipulid' || fam === 'nemato';
+    const E = { sc: randRange(0.4, 0.55), r1: randRange(0.58, 0.72), r23: randRange(0.8, 0.9), fork: randRange(0.48, 0.6), rm: randRange(0.42, 0.5), dmcu: randRange(0.6, 0.7), cu1: randRange(0.6, 0.74), cu2: randRange(0.3, 0.42), a: randRange(0.14, 0.24), bmcu: randRange(0.33, 0.4) };
+    const G = {
+      tipY: randRange(-0.08, 0.1), sharp: randRange(0, 1), lobe: randRange(0.82, 1.18), stalk: type === 'cranefly' ? randRange(0.5, 0.8) : randRange(0.7, 1.15),
+      bend: fam === 'muscid' ? randRange(0.05, 0.14) : 0, spines: rng() < 0.65, spurious: fam === 'syrphid' || (fam === 'muscid' && rng() < 0.1),
+      r45closed: fam === 'syrphid' || (fam === 'muscid' && rng() < 0.5), fork: fam === 'tabanid', m3: nemato && rng() < 0.5, a2: rng() < 0.45,
+      stig: pick(['solid', 'solid', 'stipple', 'none']), heavy: rng() < 0.4, bmcu: rng() < 0.8, h: rng() < 0.7,
+    };
+    meta.wingSig = ['dip', fam, G.heavy ? 1 : 0, G.bend > 0 ? 1 : 0, G.spurious ? 1 : 0, G.spines ? 1 : 0, G.r45closed ? 1 : 0, G.fork ? 1 : 0, G.m3 ? 1 : 0, G.a2 ? 1 : 0, G.stig, G.bmcu ? 1 : 0,
+      Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.lobe * 10), Math.round(G.stalk * 5), Math.round(E.fork * 10), Math.round(E.r1 * 10), Math.round(E.dmcu * 10)].join(',');
     const by = thorax.yAt(0.42), bx = thorax.hwAt(by) * 0.72;
-    const theta = type === 'cranefly' ? randRange(50, 62) : randRange(30, 45);
-    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * (type === 'cranefly' ? randRange(0.95, 1.05) : randRange(1.1, 1.25));
-    const ky = (type === 'cranefly' ? 0.62 : 1) * randRange(0.9, 1.1);         // crane-fly wings are narrower
+    const theta = type === 'cranefly' ? randRange(44, 68) : randRange(24, 56);
+    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * (type === 'cranefly' ? randRange(0.95, 1.05) : fam === 'asilid' ? randRange(1.2, 1.35) : randRange(1.05, 1.28));
+    const ky = (type === 'cranefly' ? 0.62 : fam === 'asilid' ? 0.78 : fam === 'tabanid' ? 1.12 : 1) * randRange(0.9, 1.1);
     const X = f => f * Lw, Y = f => f * Lw * ky;
-    const o = [[0, 0], [0.08, -0.05], [0.18, -0.14], [0.35, -0.27], [0.55, -0.33], [0.78, -0.3], [0.93, -0.17], [1.0, 0.02], [0.93, 0.17], [0.75, 0.3], [0.5, 0.37], [0.3, 0.35 * randRange(0.85, 1.15)], [0.16, 0.22 * randRange(0.6, 1.3)], [0.08, 0.08]]
+    const s = G.sharp;
+    const o = [[0, 0], [0.08, -0.05 * G.stalk], [0.18, -0.14 * G.stalk], [0.35, -0.27], [0.55, -0.33], [0.78, -0.3], [lerp(0.9, 0.95, s), -lerp(0.2, 0.1, s)], [1.0, G.tipY], [lerp(0.9, 0.95, s), lerp(0.2, 0.1, s) + G.tipY * 0.5],
+      [0.75, 0.3 * G.lobe], [0.5, 0.37 * G.lobe], [0.3, 0.35 * randRange(0.85, 1.15)], [0.16, 0.22 * G.stalk * randRange(0.6, 1.3)], [0.08, 0.08 * G.stalk]]
       .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
     const wing = makeWing([bx, by], theta, o, 0.9);
     L.wings.push(pathEl(wing.path, SW.O, '#fff'));
     L.wings.push(...fringe(wing, 2.2, 1.8, SW.F, p => p[0] > X(0.08)));
-    L.wings.push(...costaEls(wing, X(0), X(0.97)));
-    if (spines) L.wings.push(...costalSpines(wing, X(0.2), X(0.75), 3.2, 2.6));
-    const V = [];
-    const put = (pl, sw) => { V.push({ pl, sw }); return pl; };
-    put(sweep([X(0.01), Y(-0.02)], onTop(wing, X(E.sc)), -5, 0.55, 0.3, -32), SW.O);              // Sc
-    const rSplit = [X(0.25), Y(-0.14)];
-    put(sweep([X(0.01), Y(-0.01)], rSplit, -25, 0.5, 0.3, -30), SW.O);                            // R stem
-    put(sweep(rSplit, onTop(wing, X(E.r1)), -6, 0.55, 0.3, -22), SW.O);                            // R1
-    const rsFork = [X(E.fork), Y(E.forkY)];
-    const rs = put(sweep(rSplit, rsFork, 4, 0.55, 0.3, -8), SW.O);                                 // Rs
-    put(sweep(rsFork, onTop(wing, X(E.r23)), -20, 0.5, 0.3, -6), SW.O);                             // R2+3
-    put(sweep(rsFork, onTip(wing, X(0.985)), 5, 0.5, 0.3, 2), SW.O);                               // R4+5
-    const mFork = [X(E.mFork), Y(0.06)];
-    let m;
+    if (G.spines) L.wings.push(...costalSpines(wing, X(0.2), X(0.75), 3.2, 2.6));
+    const g = wingGraph(wing, Lw), wO = G.heavy ? SW.O : SW.D;
+    const node = (id, u, s_) => g.node(id, u, Math.max(0.03, Math.min(0.97, s_ + randRange(-0.03, 0.03))));
+    node('b', 0.02, 0.45); node('bL', 0.02, 0.6);
+    // Sc and R1 to the costa; the stigma sits where Sc ends
+    g.margin('scE', E.sc, 'top'); node('sc1', E.sc * 0.55, 0.2);
+    g.chain(['b', 'sc1', 'scE'], { vein: 'Sc', sw: SW.O, bows: [-0.02, -0.01] });
+    if (G.stig !== 'none') g.stigma(X(E.sc) - X(0.035), X(E.sc) + X(0.03), Y(0.035), 0.4, G.stig);
+    g.margin('r1E', E.r1, 'top'); node('rs0', 0.2, 0.32); node('r1m', lerp(0.2, E.r1, 0.55), 0.17);
+    g.chain(['b', 'rs0', 'r1m', 'r1E'], { vein: 'R1', sw: SW.O, bows: [-0.01, -0.02, -0.01] });
+    // Rs from R1, forking into R2+3 (to the costa) and R4+5 (to the apex)
+    node('rsF', E.fork, 0.3); node('rs1', lerp(0.2, E.fork, 0.5), 0.33);
+    g.chain(['rs0', 'rs1', 'rsF'], { vein: 'Rs', sw: wO, bows: [0.01, 0.0] });
+    g.margin('r23E', E.r23, 'top'); node('r23m', lerp(E.fork, E.r23, 0.5), 0.2);
+    g.chain(['rsF', 'r23m', 'r23E'], { vein: 'R23', sw: wO, bows: [-0.02, -0.02] });
+    if (fam === 'asilid') { g.margin('r4E', 0.9, 'top'); node('r4m', 0.75, 0.22); g.chain(['rsF', 'r4m', 'r4E'], { vein: 'R4', sw: wO, bows: [-0.02, -0.01] }); }
+    g.margin('tip', 1, 'tip'); node('r45m', 0.78, fam === 'syrphid' ? 0.3 : 0.28);
+    g.chain(['rsF', 'r45m', 'tip'], { vein: 'R45', sw: wO, bows: [0.01, fam === 'syrphid' ? 0.06 : 0.01] });
+    if (G.fork) { g.margin('r4fE', 0.93, 'top'); const p = g.on('R45', 0.6); g.nodeAt('r4f', p); g.chain(['r4f', 'r4fE'], { vein: 'R4f', sw: wO, bow: -0.03 }); }   // tabanid: R4 forks off to the costa
+    // M stem through r-m and dm-cu, then M1 (bent, forked or straight) to the margin
+    node('bm0', 0.3, 0.5); node('rm', E.rm, 0.44); node('dmcu', E.dmcu, 0.5);
+    g.chain(['b', 'bm0', 'rm', 'dmcu'], { vein: 'M', sw: wO, bows: [0.01, -0.01, 0.01] });
+    g.cross('Rs', 0.96, 'M', 0.68, { sw: SW.D, bow: -0.02 });                                                              // r-m
     if (nemato) {
-      m = put(sweep([X(0.01), Y(0.0)], mFork, 8, 0.55, 0.3, -12), SW.D);                            // M stem
-      put(sweep(mFork, onBot(wing, X(0.95)), 25, 0.5, 0.3, 6), SW.D);                              // M1
-      put(sweep(mFork, onBot(wing, X(0.86)), 45, 0.5, 0.3, 12), SW.D);                             // M2
+      g.margin('m1E', 0.95, 'bot'); g.margin('m2E', 0.86, 'bot');
+      node('mF', lerp(E.dmcu, 0.95, 0.35), 0.48);
+      g.chain(['dmcu', 'mF'], { vein: 'Mst', sw: wO, bow: 0.01 });
+      node('m1m', lerp(E.dmcu, 0.95, 0.7), 0.45); g.chain(['mF', 'm1m', 'm1E'], { vein: 'M1', sw: SW.D, bows: [0.01, 0.02] });
+      node('m2m', lerp(E.dmcu, 0.86, 0.7), 0.6); g.chain(['mF', 'm2m', 'm2E'], { vein: 'M2', sw: SW.D, bows: [0.02, 0.02] });
+      if (G.m3) { g.margin('m3E', 0.78, 'bot'); node('m3m', lerp(E.dmcu, 0.78, 0.6), 0.68); g.chain(['dmcu', 'm3m', 'm3E'], { vein: 'M3', sw: SW.D, bows: [0.02, 0.02] }); }
+    } else if (fam === 'asilid') {
+      for (let k = 0; k < 3; k++) { const uE = [0.96, 0.9, 0.82][k]; g.margin('m' + k + 'E', uE, 'bot'); node('m' + k + 'm', lerp(E.dmcu, uE, 0.55), 0.42 + 0.12 * k); g.chain(['dmcu', 'm' + k + 'm', 'm' + k + 'E'], { vein: 'M' + k, sw: SW.D, bows: [0.01, 0.02] }); }
     } else {
-      m = put(vein([[X(0.01), Y(0)], [X(0.3), Y(-0.02)], [X(0.5), Y(0.05)], mFork, [X(0.72), Y(0.06 + bend * 0.3)], [X(0.8), Y(0.06 - bend)], onBot(wing, X(0.955))], 10), SW.D);   // M1+2, bent forward by `bend`
+      const uB = lerp(E.dmcu, 0.96, 0.6);
+      node('m1b', uB, 0.42 - G.bend * 1.2);
+      if (G.r45closed) { g.nodeAt('m1E', g.on('R45', 0.9)); } else g.margin('m1E', 0.95, 'bot');
+      g.chain(['dmcu', 'm1b', 'm1E'], { vein: 'M1', sw: wO, bows: [-G.bend * 0.6, G.bend] });
     }
-    const cu1 = put(sweep([X(0.01), Y(0.01)], onBot(wing, X(E.cu1)), 55, 0.5, 0.35, -2), SW.D);     // CuA1 (M3+4)
-    const cu2 = put(sweep([X(0.01), Y(0.02)], onBot(wing, X(E.cu2)), 65, 0.45, 0.35, 12), SW.D);    // CuA2
-    put(sweep([X(0.01), Y(0.03)], onBot(wing, X(E.a)), 75, 0.4, 0.35, 28), SW.F);                   // A1
-    if (spurious) put(vein([[X(0.3), Y(0.0)], [X(0.55), Y(0.02)], [X(0.85), Y(0.0)]]), SW.F);          // vena spuria (hoverflies)
-    for (const v of V) L.wings.push(emitLocalPolyline(wing, v.pl, v.sw));
-    const cross = (va, xa, vb, xb, sw) => { const ya = plYAt(va, xa), yb = plYAt(vb, xb); if (ya !== null && yb !== null) L.wings.push(lineEl(wing.T([xa, ya]), wing.T([xb, yb]), sw)); };
-    L.wings.push(lineEl(wing.T(onTop(wing, X(0.14))), wing.T([X(0.14), plYAt(V[0].pl, X(0.14)) || Y(-0.04)]), SW.D));   // h
-    cross(rs, X(E.rm), m, X(E.rm + 0.02), SW.D);                                                // r-m
-    if (rng() < 0.85) cross(m, X(E.dmcu), cu1, X(E.dmcu - 0.06), SW.D);                         // dm-cu
-    if (rng() < 0.7) cross(cu1, X(0.32), cu2, X(0.3), SW.D);                                     // bm-cu
-    if (rng() < 0.6) cross(m, X(E.rm - 0.12), cu1, X(E.rm - 0.14), SW.D);                        // closes the basal medial cell
+    // CuA1 with bm-cu and dm-cu (closing bm and dm); CuA2 bends back to meet A1 and close cup; A1, A2 to the hind margin
+    g.margin('cu1E', E.cu1, 'bot'); node('cu0', 0.3, 0.62); node('cu1m', lerp(0.3, E.cu1, 0.55), 0.62);
+    g.chain(['bL', 'cu0', 'cu1m', 'cu1E'], { vein: 'CuA1', sw: wO, bows: [0.02, 0.015, 0.01] });
+    g.cross('M', 0.98, 'CuA1', 0.72, { sw: SW.D, bow: 0.04 });                                                             // dm-cu
+    if (G.bmcu) g.cross('M', 0.44, 'CuA1', 0.44, { sw: SW.D, bow: -0.02 });                                               // bm-cu
+    node('cupJ', E.cu2 - 0.04, 0.8); g.margin('cu2E', E.cu2, 'bot'); node('cu2m', E.cu2 * 0.55, 0.72);
+    g.chain(['bL', 'cu2m', 'cupJ', 'cu2E'], { vein: 'CuA2', sw: SW.D, bows: [0.02, 0.03, 0.0] });
+    node('a1m', E.cu2 * 0.4, 0.85);
+    g.chain(['bL', 'a1m', 'cupJ'], { vein: 'A1', sw: SW.F, bows: [0.02, 0.0] });                                             // cup closed where A1 meets CuA2
+    if (G.a2) { g.margin('a2E', E.a * 0.9, 'bot'); node('a2m', E.a * 0.5, 0.9); g.chain(['bL', 'a2m', 'a2E'], { vein: 'A2', sw: SW.F, bows: [0.03, 0.01] }); }
+    if (G.h) g.cross('Sc', 0.3, 'R1', 0.3, { sw: SW.D, bow: 0 });                                                           // h crossvein
+    if (G.spurious) g.chain([g.nodeAt('sv0', [X(0.28), Y(-0.02)]), g.nodeAt('sv1', [X(0.55), Y(0.04)]), g.nodeAt('sv2', [X(0.85), Y(0.05)])], { vein: 'sv', sw: SW.F, bows: [0.01, -0.01] });   // vena spuria
+    L.wings.push(...g.emit());
+    L.wings.push(...costaEls(wing, X(0), X(0.97)));
     // halteres
     const hy = thorax.yAt(0.8), hx = thorax.hwAt(hy) * 0.8;
     const hd = dirv(theta + 20);
@@ -1719,237 +1882,428 @@ function generateInsectDetailed(seed) {
   }
 
   if (type === 'lacewing') {
-    // Neuroptera: costal crossvein ladder, many parallel Rs branches, two gradate series, twigged margins
-    const theta = randRange(36, 46);
+    // ---- Chrysopidae on the wing graph (docs/wing-venation-spec.md; refs neu-nothochrysa, neu-chrysoperla).
+    // Costal ladder between C and Sc; Sc and R1 parallel, fusing near the apex; Rs below R1 with 8-14 pectinate
+    // branches curving to the margin and forking at the tip; the intramedian cell (im) at the root of Rs; two
+    // gradate series as zigzag staircases through the branches; M and Cu short, to the hind margin. ----
+    const theta = randRange(30, 54);
     const by0 = thorax.yAt(0.35);
     const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.0, 1.12);
-    const defs = [{ L: Lw * 0.9, k: 0.9, th: theta + 16, t: 0.65 }, { L: Lw, k: 1, th: theta, t: 0.35 }];
+    const G = {
+      spread: randRange(10, 24), heavy: rng() < 0.35, hw: randRange(0.16, 0.23), tipY: randRange(-0.1, 0.14), sharp: randRange(0, 1), hindL: randRange(0.82, 0.95), hindW: randRange(0.85, 1.0),
+      nB: randInt(8, 14), rsEnd: randRange(0.8, 0.9), ladder: randRange(0.022, 0.038), twig: randRange(1.5, 3.5), bowB: randRange(0.02, 0.07),
+      grad: [], im: rng() < 0.85, mFork: rng() < 0.5, mX: randRange(0.34, 0.48), cuX: randRange(0.2, 0.3), nmc: randInt(1, 4), zig: randRange(0.02, 0.05),
+    };
+    { const ng = randInt(1, 3); for (let g = 0; g < ng; g++) G.grad.push(lerp(0.42, 0.78, (g + 0.5) / ng) * jitter(0.08)); }
+    meta.wingSig = ['neu', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), G.nB, G.grad.length, G.im ? 1 : 0, G.mFork ? 1 : 0, G.nmc, Math.round(G.hw * 50), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.bowB * 50),
+      Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100)].join(',');
+    const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.65 }, { L: Lw, k: 1, th: theta, t: 0.35 }];
+    const s = G.sharp;
     for (const d of defs) {
       const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * 0.72;
-      const X = f => f * d.L, Y = f => f * d.L * 0.19 * d.k;    // half-width 0.19 L
-      const o = [[0, 0], [0.08, -0.45], [0.3, -0.8], [0.6, -0.96], [0.85, -0.8], [0.97, -0.4], [1, 0.04], [0.9, 0.5], [0.7, 0.84], [0.45, 1], [0.2, 0.8], [0.06, 0.36]]
+      const X = f => f * d.L, Y = f => f * d.L * G.hw * d.k;
+      const o = [[0, 0], [0.08, -0.45], [0.3, -0.8], [0.6, -0.96], [0.85, -0.8], [lerp(0.95, 0.98, s), -lerp(0.45, 0.22, s)], [1, G.tipY], [lerp(0.88, 0.94, s), lerp(0.52, 0.3, s)], [0.7, 0.84], [0.45, 1], [0.2, 0.8], [0.06, 0.36]]
         .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
       const wing = makeWing([bx, by], d.th, o, 0.9);
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
       L.wings.push(...fringe(wing, 2.4, 1.6, SW.F, p => p[0] > X(0.06)));
       L.wings.push(...costaEls(wing, X(0), X(0.96)));
-      // Sc and R1 run parallel just inside the costa; costal crossveins ladder between C and Sc
+      const g = wingGraph(wing, d.L);
+      // Sc and R1 just inside the costa, fusing near the apex; the costal ladder between C and Sc
       const edge = leadingEdge(wing, X(0.06), X(0.93));
       const sc = edge.map(p => [p[0], p[1] + 4.5]).concat([onTop(wing, X(0.95))]);
       const r1 = edge.filter(p => p[0] < X(0.9)).map(p => [p[0], p[1] + 9]).concat([onTop(wing, X(0.98))]);
-      L.wings.push(emitLocalPolyline(wing, sc, SW.O), emitLocalPolyline(wing, r1, SW.D));
-      for (let x = X(0.08); x < X(0.9); x += X(0.028)) { const ys = plYAt(sc, x); if (ys !== null) L.wings.push(lineEl(wing.T(onTop(wing, x)), wing.T([x, ys]), SW.F)); }
-      // Rs runs below R1; its branches peel off in turn and sweep to the margin, trailing edge first, apex last
-      const rs = sweep([X(0.01), Y(0.0)], [X(0.85), Y(-0.45)], -8, 0.55, 0.3, -10);
-      L.wings.push(emitLocalPolyline(wing, rs, SW.D));
-      const nB = randInt(8, 11);
-      const cands = wing.localPoly.filter(p => p[0] > X(0.5) && p[1] > Y(-0.9))
-        .map(p => ({ p, a: Math.atan2(p[1] - Y(0.2), p[0] - X(0.3)) })).sort((a, b) => b.a - a.a);   // trailing edge -> apex
+      L.wings.push(emitLocalPolyline(wing, sc, G.heavy ? SW.H : SW.O), emitLocalPolyline(wing, r1, SW.D));
+      for (let x = X(0.08); x < X(0.9); x += X(G.ladder) * jitter(0.1)) { const ys = plYAt(sc, x); if (ys !== null) L.wings.push(lineEl(wing.T(onTop(wing, x)), wing.T([x + X(0.006), ys]), SW.F)); }
+      // Rs: below R1, from the im cell to the apex
+      g.nodeAt('b', [X(0.01), Y(0)]);
+      const nB = G.nB;
+      const rsIds = ['b'];
+      if (G.im) { g.nodeAt('im0', [X(0.1), Y(0.02)]); g.nodeAt('imT', [X(0.17), Y(-0.1)]); g.nodeAt('imB', [X(0.18), Y(0.14)]); g.nodeAt('im1', [X(0.25), Y(-0.05)]);
+        g.chain(['im0', 'imT', 'im1'], { vein: 'imU', sw: SW.D, bows: [-0.02, -0.02] }); g.chain(['im0', 'imB', 'im1'], { vein: 'imL', sw: SW.D, bows: [0.03, 0.02] }); g.chain(['b', 'im0'], { vein: 'Rs0', sw: SW.D, bow: 0 }); rsIds.length = 0; rsIds.push('im1'); }
+      for (let i = 0; i < nB; i++) { const u = lerp(G.im ? 0.3 : 0.14, G.rsEnd, i / (nB - 1)); g.nodeAt('rs' + i, [X(u), Y(lerp(0.05, -0.45, Math.pow(i / (nB - 1), 1.3)))]); rsIds.push('rs' + i); }
+      g.chain(rsIds, { vein: 'Rs', sw: G.heavy ? SW.O : SW.D, bow: -0.004 });
+      // pectinate branches: each curves from its Rs node to a margin target, bowing outward, and twigs at the tip
+      const cands = wing.localPoly.filter(p => p[0] > X(0.5) && p[1] > Y(-0.9)).map(p => ({ p, a: Math.atan2(p[1] - Y(0.2), p[0] - X(0.3)) })).sort((a, b) => b.a - a.a);
       const branches = [];
       for (let i = 0; i < nB && cands.length; i++) {
-        const sx = X(0.15 + 0.62 * i / nB), sy = plYAt(rs, sx);
-        if (sy === null) continue;
-        const target = cands[Math.floor((i + 0.5) / nB * (cands.length - 1))].p;
-        const pl = sweep([sx, sy], target, lerp(72, 12, i / (nB - 1)), 0.5, 0.3, -6);
-        branches.push(pl);
-        L.wings.push(emitLocalPolyline(wing, pl, SW.D), ...twigEnd(wing, pl, 2.5));
+        const tgt = cands[Math.floor((i + 0.5) / nB * (cands.length - 1))].p;
+        g.nodeAt('be' + i, tgt);
+        g.chain(['rs' + i, 'be' + i], { vein: 'B' + i, sw: SW.D, bow: -G.bowB });
+        branches.push('B' + i);
+        L.wings.push(...twigEnd(wing, g.pl('B' + i), G.twig));
       }
-      for (const g of [0.5, 0.74]) for (let i = 0; i + 1 < branches.length; i++) {
-        L.wings.push(lineEl(wing.T(plAt(branches[i], g + i * 0.015)), wing.T(plAt(branches[i + 1], g + (i + 1) * 0.015)), SW.F));
-      }
-      const m = sweep([X(0.01), Y(0.05)], onBot(wing, X(0.4)), 60, 0.4, 0.35), cu = sweep([X(0.01), Y(0.1)], onBot(wing, X(0.25)), 70, 0.4, 0.35);
-      L.wings.push(emitLocalPolyline(wing, m, SW.D), emitLocalPolyline(wing, cu, SW.F), ...twigEnd(wing, m, 2), ...twigEnd(wing, cu, 2));
-      for (let x = X(0.1); x < X(0.22); x += X(0.05)) { const ya = plYAt(m, x), yb = plYAt(cu, x); if (ya !== null && yb !== null) L.wings.push(lineEl(wing.T([x, ya]), wing.T([x, yb]), SW.F)); }
+      // gradate series: zigzag staircases, each rung meeting the next branch a little further out
+      for (const g0 of G.grad) { let t = g0; for (let i = 0; i + 1 < branches.length; i++) { const t2 = Math.min(0.92, t + G.zig * jitter(0.3)); g.edge(g.on(branches[i], t), g.on(branches[i + 1], t2), { sw: SW.D, bow: 0 }); t = t2; } }
+      // M and Cu, short, to the hind margin
+      g.nodeAt('bm', [X(0.01), Y(0.05)]); g.nodeAt('bc', [X(0.01), Y(0.1)]);
+      g.margin('mE', G.mX, 'bot'); g.nodeAt('mm', [X(G.mX * 0.55), Y(0.3)]); g.chain(['bm', 'mm', 'mE'], { vein: 'M', sw: SW.D, bows: [0.03, 0.02] });
+      g.margin('cuE', G.cuX, 'bot'); g.nodeAt('cm', [X(G.cuX * 0.5), Y(0.4)]); g.chain(['bc', 'cm', 'cuE'], { vein: 'Cu', sw: SW.F, bows: [0.03, 0.02] });
+      if (G.mFork) { g.margin('mfE', G.mX + 0.1, 'bot'); g.chain([g.nodeAt('mf', g.on('M', 0.5)), 'mfE'], { vein: 'Mf', sw: SW.D, bow: 0.03 }); }
+      for (let q = 0; q < G.nmc; q++) { const t = lerp(0.25, 0.7, (q + 0.5) / G.nmc); g.cross('M', t, 'Cu', t + randRange(-0.06, 0.06), { sw: SW.F }); }
+      L.wings.push(...g.emit());
+      L.wings.push(...twigEnd(wing, g.pl('M'), 2), ...twigEnd(wing, g.pl('Cu'), 2));
     }
   }
 
   if (type === 'cicada') {
-    // Hemiptera: heavy costa, basal cells closed by a nodal line of crossveins, 8 apical cells, ambient vein inside the margin
-    const theta = randRange(32, 42);
+    // ---- Cicadidae (docs/wing-venation-spec.md; ref cic-cicada). Sc+R, M, CuA, CuP run heavy and nearly
+    // parallel from the base and are closed by the nodal line; RA, RP, M1-M4, CuA1, CuA2 fan from the nodal
+    // nodes to the ambient vein, which runs inside the outline round the apex and hind margin; the peripheral
+    // membrane outside it stays blank. Anal veins are short, to the clavus. ----
+    const theta = randRange(28, 46);
     const by0 = thorax.yAt(0.4);
-    const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.15, 1.3);
-    const defs = [{ L: Lw * 0.55, k: 1.3, th: theta + 18, t: 0.68, hind: true }, { L: Lw, k: 1, th: theta, t: 0.4, hind: false }];
+    const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.12, 1.32);
+    const G = {
+      hw: randRange(0.13, 0.21), tipY: randRange(-0.25, 0.15), sharp: randRange(0, 1), bulge: randRange(0.82, 1.12),
+      hindL: randRange(0.48, 0.64), hindW: randRange(1.1, 1.45), spread: randRange(10, 26), heavy: rng() < 0.4,
+      nM: randInt(2, 4), cuFork: rng() < 0.8, nx0: randRange(0.46, 0.6), slant: randRange(0.06, 0.2), inset: randRange(0.05, 0.1),
+      ulnar: rng() < 0.6, nxb: randInt(1, 3), apexBow: randRange(-0.04, 0.04), anal: randInt(1, 3), ambGap: rng() < 0.25,
+    };
+    const nA = 2 + G.nM + (G.cuFork ? 2 : 1);
+    meta.wingSig = ['cic', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), nA, G.nM, G.cuFork ? 1 : 0, G.ulnar ? 1 : 0, G.nxb, G.anal, G.ambGap ? 1 : 0, Math.round(G.tipY * 5), Math.round(G.sharp * 2),
+      Math.round(G.nx0 * 10), Math.round(G.slant * 10), Math.round(G.hw * 50), Math.round(G.hindL * 10), Math.round(G.inset * 20)].join(',');
+    const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.68, hind: true }, { L: Lw, k: 1, th: theta, t: 0.4, hind: false }];
+    const s = G.sharp;
     for (const d of defs) {
       const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * 0.72;
-      const X = f => f * d.L, Y = f => f * d.L * 0.165 * d.k;    // half-width 0.165 L
-      const o = [[0, 0], [0.06, -0.5], [0.3, -0.85], [0.6, -1], [0.85, -0.85], [0.97, -0.45], [1, 0.0], [0.94, 0.45], [0.75, 0.85], [0.45, 1], [0.2, 0.85], [0.06, 0.36]]
+      const X = f => f * d.L, Y = f => f * d.L * G.hw * d.k;
+      const o = [[0, 0], [0.06, -0.5], [0.3, -0.85], [0.6, -1], [0.85, -0.85], [lerp(0.95, 0.98, s), -lerp(0.5, 0.25, s)], [1, G.tipY], [lerp(0.92, 0.97, s), lerp(0.5, 0.25, s) * G.bulge],
+        [0.75, 0.85 * G.bulge], [0.45, 1 * G.bulge], [0.2, 0.85 * G.bulge], [0.06, 0.36]]
         .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
       const wing = makeWing([bx, by], d.th, o, 0.9);
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
       L.wings.push(...costaEls(wing, X(0), X(0.97)));
-      // ambient vein: a line just inside the margin from the apex round the trailing edge
+      const g = wingGraph(wing, d.L);
+      // ambient vein: the outline from the costa near the apex round to the clavus, inset by the peripheral membrane
       const poly = wing.localPoly;
       let cx = 0, cy = 0; for (const p of poly) { cx += p[0]; cy += p[1]; } cx /= poly.length; cy /= poly.length;
-      const amb = poly.filter(p => p[0] > X(0.45) || (p[1] > 0 && p[0] > X(0.2))).map(p => add(p, mul(norm(sub([cx, cy], p)), 3)));
       let tipI = 0; for (let i = 1; i < poly.length; i++) if (poly[i][0] > poly[tipI][0]) tipI = i;
-      const ambPl = poly.slice(tipI - Math.floor(poly.length * 0.08), tipI + Math.floor(poly.length * 0.42)).map(p => add(p, mul(norm(sub([cx, cy], p)), 3)));
-      if (ambPl.length > 2 && rng() < 0.7) L.wings.push(emitLocalPolyline(wing, ambPl, SW.D));
-      // basal longitudinals to the nodal line, then apical veins to the margin
-      const nA = d.hind ? randInt(3, 5) : randInt(6, 9), nx0 = randRange(0.52, 0.66), slant = randRange(0.14, 0.3);
-      const nodal = [];
-      for (let i = 0; i < nA; i++) nodal.push([X(nx0 - slant * i / (nA - 1)) * jitter(0.03), Y(lerp(-0.72, 0.75, i / (nA - 1)))]);
-      const basal = [sweep([X(0.01), Y(-0.08)], nodal[0], -5, 0.6, 0.3), sweep([X(0.01), Y(0.0)], nodal[Math.floor(nA * randRange(0.3, 0.5))], 10, 0.6, 0.3), sweep([X(0.01), Y(0.08)], nodal[nA - 2], 30, 0.5, 0.3)];
-      if (rng() < 0.25) basal.splice(1, 1);   // two basal cells instead of three
-      for (const b of basal) L.wings.push(emitLocalPolyline(wing, b, SW.O));
-      L.wings.push(emitLocalPolyline(wing, nodal, SW.D));
-      const tg = marginTargets(poly, [X(0.5), 0], nA + 2, X(0.62));
-      for (let i = 0; i < nA && i + 1 < tg.length; i++) {
-        const pl = sweep(nodal[i], tg[i + 1], lerp(-10, 65, i / (nA - 1)), 0.4, 0.35);
-        L.wings.push(emitLocalPolyline(wing, pl, SW.D));
+      const i0 = tipI - Math.floor(poly.length * 0.07), i1 = tipI + Math.floor(poly.length * 0.4);
+      const amb = []; for (let i = i0; i <= i1; i++) { const p = poly[(i + poly.length) % poly.length]; amb.push(add(p, mul(norm(sub([cx, cy], p)), Y(G.inset) * 1.6))); }
+      const ambPl = vein(amb.filter((_, k) => k % 3 === 0).concat([amb[amb.length - 1]]), 4);
+      L.wings.push(emitLocalPolyline(wing, ambPl, SW.D));
+      // basal longitudinals to the nodal line (s = chord fraction from the costa)
+      const nx = G.nx0, nodal = ['N0', 'N1', 'N2', 'N3'].map((id, i) => g.node(id, nx - G.slant * i / 3, lerp(0.14, 0.72, i / 3)));
+      g.node('bScR', 0.02, 0.3); g.node('bM', 0.02, 0.42); g.node('bCuA', 0.02, 0.52); g.node('bCuP', 0.02, 0.62); g.node('bA', 0.02, 0.74);
+      const wB = G.heavy ? SW.H : SW.O;
+      g.chain(['bScR', g.node('sr1', nx * 0.5, 0.17), 'N0'], { vein: 'ScR', sw: wB, bows: [-0.02, -0.01] });
+      g.chain(['bM', g.node('m1', nx * 0.5, 0.36), 'N1'], { vein: 'M', sw: wB, bows: [0.015, 0.01] });
+      g.chain(['bCuA', g.node('ca1', nx * 0.5, 0.52), 'N2'], { vein: 'CuA', sw: SW.O, bows: [0.02, 0.01] });
+      g.chain(['bCuP', g.node('cp1', nx * 0.45, 0.66), 'N3'], { vein: 'CuP', sw: SW.D, bows: [0.02, 0.01] });
+      for (let i = 0; i + 1 < nodal.length; i++) g.edge(nodal[i], nodal[i + 1], { sw: SW.D, bow: randRange(-0.08, 0.08) });        // nodal line
+      for (let q = 0; q < G.nxb; q++) { const t = lerp(0.3, 0.8, (q + 0.5) / G.nxb); g.cross('M', t, 'CuA', t + randRange(-0.05, 0.05), { sw: SW.F }); }
+      if (rng() < 0.5) g.cross('ScR', 0.6, 'M', 0.62, { sw: SW.F });
+      // apical veins: from the nodal nodes (M and Cu through short stems that fork) to targets spaced along the ambient vein
+      const nApex = d.hind ? Math.max(3, nA - 3) : nA;
+      const apArc = ambPl.filter(p => p[0] > X(d.hind ? 0.6 : 0.68));                      // the apical arc of the ambient vein
+      const targets = []; for (let k = 0; k < nApex; k++) targets.push(apArc[Math.min(apArc.length - 1, Math.floor((k + 0.5) / nApex * apArc.length))]);
+      const sources = [];                                             // [node id, target index]
+      const plan = d.hind ? [['N0', 1], ['N1', 1], ['N2', 1]] : [['N0', 2], ['N1', G.nM], ['N2', G.cuFork ? 2 : 1]];
+      let ti = 0;
+      for (const [src, n] of plan) {
+        if (n === 1) { sources.push([src, ti++]); continue; }
+        const mean = pts => pts.reduce((a, p) => add(a, p), [0, 0]).map(v => v / pts.length);
+        const tg = targets.slice(ti, ti + n), st = g.nodeAt(src + 's', lerpP(g.at(src), mean(tg), randRange(0.2, 0.32)));   // short stem, then the fork tree
+        g.chain([src, st], { vein: src + 'stem', sw: SW.D, bow: 0.01 });
+        if (n <= 2) { for (let k = 0; k < n && ti < nApex; k++) sources.push([st, ti++]); }
+        else {   // two sub-stems, each forking again
+          const half = Math.ceil(n / 2);
+          for (const grp of [tg.slice(0, half), tg.slice(half)]) { if (!grp.length) continue; const st2 = g.nodeAt(src + 's' + ti, lerpP(g.at(st), mean(grp), randRange(0.3, 0.45))); g.chain([st, st2], { vein: src + 'st' + ti, sw: SW.D, bow: 0.01 }); for (let k = 0; k < grp.length; k++) sources.push([st2, ti++]); }
+        }
       }
-      for (let k = 0; k + 1 < basal.length; k++) { const x = X(randRange(0.22, 0.4)); const ya = plYAt(basal[k], x), yb = plYAt(basal[k + 1], x); if (ya !== null && yb !== null) L.wings.push(lineEl(wing.T([x, ya]), wing.T([x, yb]), SW.D)); }
-      L.wings.push(emitLocalPolyline(wing, sweep([X(0.01), Y(0.14)], onBot(wing, X(0.3)), 70, 0.4, 0.35), SW.D));
+      const apical = [];
+      for (const [src, k] of sources) {
+        if (k >= nApex) continue;
+        const a = g.at(src), b = targets[k], mid = add(lerpP(a, b, randRange(0.4, 0.6)), mul(perp(norm(sub(b, a))), vlen(sub(b, a)) * (G.apexBow + randRange(-0.04, 0.04))));
+        const name = 'ap' + k; g.nodeAt(name + 'm', mid); g.nodeAt(name + 'e', b);
+        g.chain([src, name + 'm', name + 'e'], { vein: name, sw: SW.D, bow: 0 });
+        apical.push(name);
+      }
+      if (G.ulnar && !d.hind) { const t0 = randRange(0.4, 0.6); for (let i = 0; i + 1 < apical.length; i++) g.cross(apical[i], t0 + randRange(-0.05, 0.05), apical[i + 1], t0 + randRange(-0.05, 0.05), { sw: SW.F }); }   // a row of crossveins across the apical cells
+      // anal veins to the clavus
+      for (let k = 0; k < G.anal; k++) { const uE = 0.34 - k * 0.09; g.margin('aE' + k, uE, 'bot'); g.chain(['bA', g.node('a' + k, uE * 0.5, lerp(0.8, 0.95, k / 2)), 'aE' + k], { vein: 'A' + k, sw: k === 0 ? SW.D : SW.F, bows: [0.02, 0.01] }); }
+      L.wings.push(...g.emit());
     }
   }
 
   if (type === 'mayfly') {
-    // Ephemeroptera: triangular forewing with many fanning longitudinals and dense crossveins; tiny hindwing
+    // ---- Ephemeroptera (docs/wing-venation-spec.md; ref eph-mayfly-1956). Triangular forewing with 9-15 fanning
+    // longitudinals that bow toward the trailing edge, intercalaries between them that start mid-wing, and ladders
+    // of crossveins tilted toward the apex between every pair; tiny rounded hindwing, often lost. ----
     const by = thorax.yAt(0.45), bx = thorax.hwAt(by) * 0.8;
     const Lw = P.abdLen * randRange(0.9, 1.05);
-    const defs = [{ L: Lw * 0.3, th: randRange(14, 24), t: 0.78, hind: true }, { L: Lw, th: randRange(-14, -2), t: 0.45, hind: false }];
+    const G = {
+      nV: randInt(9, 15), xStep: randRange(4.5, 9), inter: rng() < 0.6, hasHind: rng() < 0.8, hindL: randRange(0.22, 0.36),
+      top: randRange(0.85, 1.15), tipY: randRange(-0.12, 0.08), sharp: randRange(0, 1), k1: randRange(0.3, 0.5), fan: randRange(60, 85), heavy: rng() < 0.3, tilt: randRange(0.1, 0.3),
+    };
+    meta.wingSig = ['eph', G.heavy ? 1 : 0, G.nV, G.inter ? 1 : 0, G.hasHind ? 1 : 0, Math.round(G.xStep), Math.round(G.top * 10), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.k1 * 10), Math.round(G.fan / 5), Math.round(G.tilt * 10)].join(',');
+    const defs = [{ L: Lw * G.hindL, th: randRange(10, 30), t: 0.78, hind: true }, { L: Lw, th: randRange(-22, 4), t: 0.45, hind: false }];
+    const s = G.sharp;
     for (const d of defs) {
+      if (d.hind && !G.hasHind) continue;
       const byy = thorax.yAt(d.t), bxx = thorax.hwAt(byy) * 0.72;
       const X = f => f * d.L, Y = f => f * d.L * 0.8;
       const o = d.hind
         ? [[0, 0], [0.1, -0.3], [0.5, -0.45], [0.9, -0.25], [1, 0.05], [0.8, 0.35], [0.4, 0.45], [0.1, 0.3]].map(p => [X(p[0]), Y(p[1])])
-        : [[0, 0.01], [0.04, -0.12], [0.3, -0.3], [0.6, -0.36], [0.85, -0.3], [0.97, -0.15], [1, 0], [0.9, 0.15], [0.7, 0.3], [0.45, 0.42], [0.2, 0.45], [0.05, 0.3]].map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+        : [[0, 0.01], [0.04, -0.12], [0.3, -0.3 * G.top], [0.6, -0.36 * G.top], [0.85, -0.3 * G.top], [lerp(0.95, 0.98, s), -lerp(0.17, 0.08, s)], [1, G.tipY], [lerp(0.88, 0.94, s), lerp(0.17, 0.1, s)], [0.7, 0.3], [0.45, 0.42], [0.2, 0.45], [0.05, 0.3]].map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
       const wing = makeWing([bxx, byy], d.th, o, 0.9);
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
       L.wings.push(...costaEls(wing, X(0), X(0.97)));
-      const nV = d.hind ? 3 : randInt(10, 14);
+      const nV = d.hind ? 3 : G.nV;
       const tg = marginTargets(wing.localPoly, [X(0.1), 0], nV + 2, X(d.hind ? 0.5 : 0.3));
       const veins = [];
       const yr = wing.yRange(X(0.06)) || [-2, 2];
       for (let i = 0; i < nV && i + 1 < tg.length; i++) {
-        const pl = sweep([X(0.04), lerp(yr[0] + 1, yr[1] - 1, i / (nV - 1))], tg[i + 1], lerp(-5, 80, i / (nV - 1)), 0.35, 0.3);
+        // sweep to the target, then undulate so the vein reads as a chain of cell sides
+        const base = sweep([X(0.04), lerp(yr[0] + 1, yr[1] - 1, i / (nV - 1))], tg[i + 1], lerp(-5, G.fan, i / (nV - 1)), G.k1, 0.3);
+        const pl = base.map((p, k) => { const u = k / (base.length - 1), t = k + 1 < base.length ? norm(sub(base[k + 1], p)) : norm(sub(p, base[k - 1])); return add(p, mul(perp(t), X(0.004) * Math.sin(Math.PI * u) * Math.sin(u * 14 + i))); });
+        pl[pl.length - 1] = tg[i + 1];
         veins.push(pl);
-        L.wings.push(emitLocalPolyline(wing, pl, i % 2 === 0 ? SW.D : SW.F));
+        L.wings.push(emitLocalPolyline(wing, pl, i % 2 === 0 ? (G.heavy ? SW.O : SW.D) : SW.F));
       }
       if (!d.hind) for (let i = 0; i + 1 < veins.length; i++) {
-        const xEnd = Math.min(veins[i][veins[i].length - 1][0], veins[i + 1][veins[i + 1].length - 1][0]);
-        for (let x = X(0.12) + (i % 2) * 3; x < xEnd - 2; x += 6 + randRange(-1.5, 1.5)) {
-          const ya = plYAt(veins[i], x), yb = plYAt(veins[i + 1], x);
-          if (ya !== null && yb !== null && Math.abs(yb - ya) > 2) L.wings.push(lineEl(wing.T([x, ya]), wing.T([x, yb]), SW.F));
+        const a = veins[i], b = veins[i + 1];
+        const xEnd = Math.min(a[a.length - 1][0], b[b.length - 1][0]);
+        for (let x = X(0.12) + (i % 2) * 3; x < xEnd - 2; x += G.xStep + randRange(-1.5, 1.5)) {   // tilted ladder rungs
+          const ya = plYAt(a, x), xb = x + G.tilt * G.xStep, yb = plYAt(b, xb);
+          if (ya !== null && yb !== null && Math.abs(yb - ya) > 2) L.wings.push(emitLocalPolyline(wing, bowVein([x, ya], [xb, yb], randRange(-0.06, 0.06), 4), SW.F));
+        }
+        if (G.inter && i % 2 === 0) {   // intercalary: a free vein between two longitudinals, from mid-wing to the margin
+          const pts = []; for (let t = 0.45; t <= 1.001; t += 0.11) pts.push(lerpP(plAt(a, t), plAt(b, t), 0.5 + randRange(-0.06, 0.06)));
+          L.wings.push(emitLocalPolyline(wing, vein(pts, 4), SW.F));
         }
       }
     }
   }
 
   if (type === 'bee' || type === 'wasp') {
-    const theta = randRange(38, 50);
+    // ---- Hymenoptera on the wing graph (docs/wing-venation-spec.md; refs hym-apis, hym-bombus, hym-ross,
+    // hym-ichneumonidae-diagram). The family picks the cell plan; node positions, bows, cell counts, the
+    // stigma's shape and shading, posture and line weight are rolled per seed. Cells: the basal "R" wedge
+    // between Sc+R and M+Cu closed by the basal vein; marginal cell between R1 and Rs; 1-3 submarginals
+    // between Rs and M (r-m crossveins); 1-2 discoidals between M and Cu (recurrent veins); cubital cells
+    // along the hind edge (cu-a); M and Cu end as stubs in the open apical membrane. ----
+    const fam = type === 'bee' ? pick(['apid', 'apid', 'apid', 'sawfly', 'vespid']) : pick(['vespid', 'vespid', 'ichneumonid', 'ichneumonid', 'sawfly', 'apid', 'chalcid']);
+    const F = {   // w = breadth / Lw; stig styles (none = no stigma); counts [min,max]; odds
+      apid:        { w: [0.26, 0.34], nSub: [2, 3], disc2: 0.9, stig: ['solid', 'cross', 'axis'], stigL: [0.03, 0.07], stigD: [0.06, 0.1], xStig: [0.44, 0.52], xMarg: [0.9, 0.97], margOpen: 0.05, basalHeavy: 1, anal: 0.5, areolet: 0, longDisc: 0, hind: [0.58, 0.72], rsFromStig: 0 },
+      vespid:      { w: [0.2, 0.26], nSub: [3, 3], disc2: 0.7, stig: ['axis', 'stipple', 'none', 'solid'], stigL: [0.03, 0.05], stigD: [0.04, 0.06], xStig: [0.46, 0.54], xMarg: [0.94, 0.99], margOpen: 0.15, basalHeavy: 0, anal: 0.3, areolet: 0, longDisc: 1, hind: [0.5, 0.66], rsFromStig: 0 },
+      ichneumonid: { w: [0.22, 0.3], nSub: [1, 2], disc2: 1, stig: ['solid', 'solid', 'cross'], stigL: [0.09, 0.14], stigD: [0.1, 0.16], xStig: [0.48, 0.56], xMarg: [0.94, 0.99], margOpen: 0, basalHeavy: 0, anal: 0.4, areolet: 0.8, longDisc: 0, hind: [0.52, 0.68], rsFromStig: 1 },
+      sawfly:      { w: [0.3, 0.37], nSub: [3, 3], disc2: 1, stig: ['solid', 'cross'], stigL: [0.08, 0.12], stigD: [0.08, 0.12], xStig: [0.42, 0.5], xMarg: [0.88, 0.95], margOpen: 0, basalHeavy: 1, anal: 1, areolet: 0, longDisc: 0, hind: [0.7, 0.84], rsFromStig: 0 },
+      chalcid:     { w: [0.26, 0.34], nSub: [0, 0], disc2: 0, stig: ['solid', 'cross'], stigL: [0.03, 0.06], stigD: [0.04, 0.07], xStig: [0.5, 0.62], xMarg: [0.7, 0.8], margOpen: 1, basalHeavy: 0, anal: 0, areolet: 0, longDisc: 0, hind: [0.5, 0.62], rsFromStig: 0 },
+    }[fam];
+    const ri = r => randInt(r[0], r[1]), rr = r => randRange(r[0], r[1]);
+    const G = {
+      fam, theta: randRange(28, 58), spread: randRange(6, 24), len: randRange(0.85, 1.08),
+      w: rr(F.w), tipY: randRange(-0.14, 0.2), sharp: randRange(0, 1), bulge: randRange(0.38, 0.62), costaPeak: randRange(0.55, 0.78),
+      hindL: rr(F.hind), hindW: randRange(0.62, 0.9), hv: randInt(2, 3), nhx: randInt(1, 3), nh: randInt(3, 9),
+      nSub: ri(F.nSub), disc2: rng() < F.disc2, stig: pick(F.stig), stigL: rr(F.stigL), stigD: rr(F.stigD), stigPeak: randRange(0.3, 0.48),
+      xStig: rr(F.xStig), xMarg: rr(F.xMarg), margOpen: rng() < F.margOpen, anal: rng() < F.anal, areolet: rng() < F.areolet, longDisc: !!F.longDisc,
+      heavy: rng() < 0.4, basalHeavy: !!F.basalHeavy,
+    };
+    meta.wingSig = ['hym', fam, G.nSub, G.disc2 ? 1 : 0, G.stig, G.margOpen ? 1 : 0, G.anal ? 1 : 0, G.areolet ? 1 : 0, G.hv, G.nhx, G.heavy ? 1 : 0,
+      Math.round(G.theta / 6), Math.round(G.spread / 6), Math.round(G.tipY * 6), Math.round(G.sharp * 2), Math.round(G.bulge * 10), Math.round(G.xStig * 10), Math.round(G.xMarg * 20), Math.round(G.len * 10)].join(',');
+    const LV = [SW.F, SW.D, SW.O], wgt = k => LV[Math.min(2, k + (G.heavy ? 1 : 0))];
+    const theta = G.theta;
     const by = thorax.yAt(0.4), bx = thorax.hwAt(by) * 0.72;
-    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(0.92, 1.0);
-    const w = Lw * (type === 'wasp' ? 0.26 : 0.3);
-    const fPts = [[0, 0], [Lw * 0.3, -w * 0.35], [Lw * 0.7, -w * 0.45], [Lw * 0.95, -w * 0.25], [Lw, w * 0.05], [Lw * 0.8, w * 0.4], [Lw * 0.45, w * 0.5], [Lw * 0.12, w * 0.25]];
+    const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(0.92, 1.0) * G.len;
+    const w = Lw * G.w, s = G.sharp;
+    const fPts = [[0, 0], [Lw * 0.3, -w * 0.35], [Lw * G.costaPeak, -w * 0.46], [Lw * lerp(0.9, 0.95, s), -w * lerp(0.3, 0.12 - G.tipY * 0.3, s)], [Lw, w * G.tipY],
+      [Lw * lerp(0.9, 0.95, s), w * lerp(0.3, 0.14 + G.tipY * 0.6, s)], [Lw * 0.74, w * G.bulge * 0.92], [Lw * 0.42, w * G.bulge], [Lw * 0.12, w * G.bulge * 0.5]];
     const fore = makeWing([bx, by], theta, fPts, 1);
     const hy = thorax.yAt(0.62), hx = thorax.hwAt(hy) * 0.72;
-    const Lh = Lw * 0.62, wh = w * 0.75;
-    const hPts = [[0, 0], [Lh * 0.3, -wh * 0.35], [Lh * 0.7, -wh * 0.45], [Lh, -wh * 0.05], [Lh * 0.8, wh * 0.4], [Lh * 0.45, wh * 0.5], [Lh * 0.12, wh * 0.25]];
-    const hind = makeWing([hx, hy], theta + 14, hPts, 1);
-    const cross = (wg, va, xa, vb, xb) => { const ya = plYAt(va, xa), yb = plYAt(vb, xb); if (ya !== null && yb !== null) L.wings.push(lineEl(wg.T([xa, ya]), wg.T([xb, yb]), SW.D)); };
-    // Venation varies by family: number of submarginal / discoidal cells, open or closed marginal
-    // cell, stigma size, vein curvature; small wasps have reduced venation.
-    const reduced = type === 'wasp' ? rng() < 0.3 : rng() < 0.1;
-    // hindwing: 2-3 longitudinals, 1-3 crossveins, a row of hamuli (hooks) on the leading edge
+    const Lh = Lw * G.hindL, wh = w * G.hindW;
+    const hPts = [[0, 0], [Lh * 0.3, -wh * 0.35], [Lh * 0.7, -wh * 0.45], [Lh, wh * randRange(-0.12, 0.08)], [Lh * 0.8, wh * G.bulge * 0.85], [Lh * 0.45, wh * G.bulge], [Lh * 0.12, wh * 0.25]];
+    const hind = makeWing([hx, hy], theta + G.spread, hPts, 1);
+
+    // ---- hindwing: R, M, Cu chains, 1-3 r-m crossveins, an m-cu, hamuli on the leading edge ----
     L.wings.push(pathEl(hind.path, SW.O, '#fff'));
     {
-      const b = [Lh * 0.01, 0];
-      const r = vein([b, [Lh * 0.4, -wh * randRange(0.12, 0.28)], [Lh * randRange(0.82, 0.95), topAt(hind, Lh * 0.9, 0.5)]]);
-      const m = vein([b, [Lh * 0.5, wh * randRange(-0.05, 0.12)], [Lh * 0.985, (topAt(hind, Lh * 0.985) + botAt(hind, Lh * 0.985)) / 2]]);
-      const cu = vein([b, [Lh * 0.25, wh * randRange(0.18, 0.32)], [Lh * randRange(0.4, 0.6), botAt(hind, Lh * 0.5, 0.5)]]);
-      const hv = reduced || rng() < 0.3 ? [r, m] : [r, m, cu];
-      for (const v of hv) L.wings.push(emitLocalPolyline(hind, v, SW.D));
-      const nx = reduced ? 1 : randInt(1, 3);
-      for (let k = 0; k < nx; k++) { const x = Lh * lerp(0.35, 0.68, (k + 0.5) / nx) * jitter(0.06); cross(hind, r, x, m, x + Lh * randRange(-0.03, 0.03)); }
-      if (hv.length > 2 && rng() < 0.7) { const x = Lh * randRange(0.28, 0.4); cross(hind, m, x, cu, x - Lh * 0.02); }
-      const nh = randInt(3, 8), hx0 = Lh * randRange(0.38, 0.48);
-      for (let k = 0; k < nh; k++) { const x = hx0 + k * Lh * 0.04; const p = [x, topAt(hind, x, 0.3)]; L.wings.push(lineEl(hind.T(p), hind.T([p[0] + 1.2, p[1] - 2.2]), SW.D)); }
+      const h = wingGraph(hind, Lh);
+      h.node('A', 0.02, 0.4); h.node('B', 0.02, 0.6);
+      h.node('r1', 0.3, 0.16 * jitter(0.3)); h.node('r2', 0.58, 0.1 * jitter(0.3)); h.margin('rE', randRange(0.8, 0.95), 'top');
+      h.chain(['A', 'r1', 'r2', 'rE'], { vein: 'R', sw: wgt(1) });
+      h.node('m1', 0.36, 0.44 * jitter(0.15)); h.node('m2', 0.66, 0.42 * jitter(0.15)); h.margin('mE', 1, 'tip');
+      h.chain(['B', 'm1', 'm2', 'mE'], { vein: 'M', sw: SW.D });
+      if (G.hv === 3) { h.node('c1', 0.25, 0.72); h.margin('cE', randRange(0.4, 0.62), 'bot'); h.chain(['B', 'c1', 'cE'], { vein: 'Cu', sw: SW.F }); if (rng() < 0.7) h.cross('M', randRange(0.3, 0.45), 'Cu', randRange(0.5, 0.7), { sw: SW.F }); }
+      h.ladder('R', 'M', G.nhx, randRange(-0.08, 0.08), SW.F, 0.32, 0.72);
+      L.wings.push(...h.emit());
+      const hx0 = Lh * randRange(0.36, 0.5), hsp = Lh * randRange(0.03, 0.05);
+      for (let k = 0; k < G.nh; k++) { const x = hx0 + k * hsp; const p = [x, topAt(hind, x, 0.3)]; L.wings.push(lineEl(hind.T(p), hind.T([p[0] + 1.2, p[1] - 2.2]), SW.D)); }
     }
-    // forewing: costal vein to the stigma, marginal cell, 1-3 submarginal cells, 1-3 discoidal cells
+
+    // ---- forewing ----
     L.wings.push(pathEl(fore.path, SW.O, '#fff'));
-    L.wings.push(...costaEls(fore, 0, Lw * 0.5));
-    {
-      const b1 = [Lw * 0.01, -w * 0.03], b2 = [Lw * 0.01, 0], b3 = [Lw * 0.01, w * 0.03];
-      const xStig = Lw * randRange(0.4, 0.52), stigW = Lw * randRange(0.05, 0.1), hasStig = rng() < 0.8;
-      const xMarg = Lw * randRange(0.84, 0.96), margOpen = rng() < 0.3;
-      const sc = vein([b1, [Lw * 0.25, -w * randRange(0.22, 0.34)], [xStig, topAt(fore, xStig, 0.5)]]);
-      const r1 = vein([[xStig + stigW, topAt(fore, xStig + stigW, w * randRange(0.06, 0.12))], [Lw * 0.75, topAt(fore, Lw * 0.75, w * randRange(0.12, 0.22))], [xMarg, topAt(fore, xMarg, margOpen ? w * 0.08 : 0.5)]]);
-      const rs = vein([b1, [Lw * 0.4, -w * randRange(0.0, 0.12)], [Lw * 0.7, -w * randRange(-0.04, 0.06)], [Lw * 0.97, (topAt(fore, Lw * 0.97) + botAt(fore, Lw * 0.97)) / 2]], 12);
-      const xM = Lw * randRange(0.82, 0.92), xCu = Lw * randRange(0.48, 0.62), xA = Lw * randRange(0.22, 0.34);
-      const m = vein([b2, [Lw * 0.35, w * randRange(0.08, 0.16)], [Lw * 0.7, w * randRange(0.06, 0.18)], [xM, botAt(fore, xM, 0.5)]]);
-      const cu = vein([b3, [Lw * 0.25, w * randRange(0.22, 0.32)], [xCu, botAt(fore, xCu, 0.5)]]);
-      const a = vein([b3, [Lw * 0.12, w * randRange(0.3, 0.4)], [xA, botAt(fore, xA, 0.5)]]);
-      for (const v of (reduced ? [sc, rs, m, cu] : [sc, r1, rs, m, cu, a])) L.wings.push(emitLocalPolyline(fore, v, SW.D));
-      if (hasStig) for (let x = xStig; x <= xStig + stigW; x += 1.3) L.wings.push(lineEl(fore.T([x, topAt(fore, x, 0.4)]), fore.T([x, topAt(fore, x, w * 0.08)]), SW.F));   // pterostigma
-      if (!reduced) { const nSub = randInt(1, 3); for (let k = 0; k <= nSub; k++) { const x = lerp(xStig + stigW + Lw * 0.04, xMarg - Lw * 0.06, k / nSub) * jitter(0.02); cross(fore, r1, x, rs, x - Lw * randRange(0, 0.03)); } }   // submarginal cells
-      { const nD = reduced ? 1 : randInt(1, 3); for (let k = 0; k < nD; k++) { const x = Lw * lerp(0.32, 0.72, (k + 0.5) / nD) * jitter(0.05); cross(fore, rs, x, m, x + Lw * randRange(-0.03, 0.03)); } }   // discoidal cells
-      if (!reduced) { const nM = randInt(1, 2); for (let k = 0; k < nM; k++) { const x = Lw * lerp(0.26, 0.5, (k + 0.5) / nM) * jitter(0.05); cross(fore, m, x, cu, x - Lw * 0.02); } }
-      if (!reduced && rng() < 0.7) { const x = Lw * randRange(0.16, 0.24); cross(fore, cu, x, a, x); }
+    const g = wingGraph(fore, Lw);
+    const node = (id, u, s_) => g.node(id, Math.max(0.02, Math.min(0.97, u * jitter(0.04))), Math.max(0.03, Math.min(0.97, s_ + randRange(-0.035, 0.035))));
+    const xStig = Lw * G.xStig, xStig1 = xStig + Lw * G.stigL, xMarg = Lw * G.xMarg;
+    const stigBot = G.stig !== 'none' ? g.stigma(xStig, xStig1, w * G.stigD, G.stigPeak, G.stig) : null;
+    const S0 = stigBot ? stigBot[0] : [xStig, topAt(fore, xStig, 0.6)], S1 = stigBot ? stigBot[stigBot.length - 1] : S0;
+    g.nodeAt('S0', S0); g.nodeAt('S1', S1);
+    node('A', 0.02, 0.36); node('B0', 0.02, 0.54); node('Z', 0.02, 0.72);
+    const uBv = G.xStig - randRange(0.05, 0.09);                               // basal vein top: just before the stigma
+    node('sr1', 0.16, 0.22); node('sr2', uBv * 0.72, 0.13); node('bvT', uBv, 0.08);
+    g.chain(['A', 'sr1', 'sr2', 'bvT', 'S0'], { vein: 'ScR', sw: wgt(1), bows: [0.03, 0.02, 0.01, 0.005] });   // Sc+R into the stigma's base
+    if (fam === 'chalcid') {
+      // chalcid plan: a thick submarginal vein into a small stigma, a short postmarginal, a hooked stigmal vein; the rest are faint folds
+      g.margin('MA', G.xMarg, 'top');
+      g.chain(['S1', 'MA'], { vein: 'R1', sw: SW.D, bow: 0.02 });
+      const p0 = plAt(stigBot, 0.6);
+      g.stub(p0, 60 + randRange(-15, 15), w * randRange(0.16, 0.26), SW.D);
+      node('fm', 0.72, 0.42); node('fc', 0.62, 0.6);
+      g.chain(['B0', 'fm'], { vein: 'M', sw: SW.F, bow: -0.03 }); g.chain(['B0', 'fc'], { vein: 'Cu', sw: SW.F, bow: 0.03 });
+    } else {
+      // Measured on ref/hym-apis.png (u = span fraction, s = chord fraction from the costa): basal vein from
+      // (0.42, 0.10) to (0.29, 0.55); submarginals between Rs (s 0.12-0.2) and M (s 0.33) from u 0.42 to 0.76;
+      // discoidals between M and Cu (s 0.55) from 0.33 to 0.75; cubital cells along A (s 0.75) to 0.52;
+      // marginal cell under the costa from the stigma to 0.92; M and Cu stubs 0.05 long.
+      g.margin('MA', G.xMarg, 'top');
+      const uS1 = G.xStig + G.stigL, uEnd = G.longDisc ? randRange(0.76, 0.84) : randRange(0.7, 0.78);   // distal end of the closed cells
+      node('r1a', lerp(uS1, G.xMarg, 0.4), 0.05); node('r1b', lerp(uS1, G.xMarg, 0.75), 0.07);
+      g.chain(['S1', 'r1a', 'r1b', 'MA'], { vein: 'R1', sw: SW.D, bows: [0.01, 0.015, 0.02] });
+      // basal vein (slanted back toward the base) and the M+Cu stem
+      node('bvM', uBv - 0.05, 0.3); node('B', uBv - 0.12, 0.54);
+      g.chain(['B0', 'B'], { vein: 'MCu', sw: wgt(1), bow: 0.015 });
+      g.chain(['bvT', 'bvM', 'B'], { vein: 'bv', sw: G.basalHeavy ? wgt(1) : SW.D, bows: [0.02, 0.01] });
+      // Rs: from the basal vein top (or from under the stigma in ichneumonids) through the submarginal corners to MA
+      const nS = G.nSub;
+      const rsIds = [F.rsFromStig && stigBot ? g.nodeAt('rs0', plAt(stigBot, 0.42)) : 'bvT'];
+      if (F.rsFromStig && stigBot) { g.chain(['bvT', g.nodeAt('rsx', lerpP(g.at('bvT'), g.at('rs0'), 0.55))], { vein: 'RsM', sw: SW.D, bow: 0.01 }); g.chain(['rsx', 'rs0'], { vein: 'RsM2', sw: SW.F, bow: 0.01 }); }
+      const tT = [], tB = [];
+      for (let k = 0; k < nS; k++) { const u = lerp(uBv, uEnd, (k + 1) / nS); tT.push(node('t' + k + 'T', u, 0.13 + 0.03 * (k + 1) / nS)); tB.push(node('t' + k + 'B', u - 0.02, 0.33 + 0.01 * k)); }
+      rsIds.push(...tT);
+      if (G.margOpen) { rsIds.push(node('rsE', G.xMarg - 0.04, 0.17)); g.chain(rsIds, { vein: 'Rs', sw: SW.D }); g.stub('rsE', randRange(-25, -10), Lw * 0.05, SW.F); }
+      else { rsIds.push(node('rsE', G.xMarg - 0.05, 0.15), 'MA'); g.chain(rsIds, { vein: 'Rs', sw: SW.D }); }
+      // M: along the submarginal feet, then a short stub into the open membrane
+      const mIds = ['bvM', ...tB];
+      g.chain(mIds, { vein: 'M', sw: SW.D });
+      g.stub(tB[nS - 1], randRange(-5, 12), Lw * randRange(0.04, 0.08), SW.F);
+      for (let k = 0; k < nS; k++) g.edge(tT[k], tB[k], { sw: SW.D, bow: randRange(-0.06, 0.06) });                     // r-m: submarginal crossveins
+      if (G.areolet) { const ta = randRange(0.38, 0.5); g.cross('Rs', ta, 'M', ta + randRange(-0.02, 0.02), { sw: SW.D }); g.cross('Rs', ta + 0.08, 'M', ta + 0.07, { sw: SW.D }); }   // areolet: a tiny closed cell
+      // Cu: from the basal vein foot past the recurrent veins, then a stub
+      const uR1 = G.longDisc ? lerp(uBv - 0.12, uEnd, 0.8) : lerp(uBv - 0.12, uEnd, randRange(0.5, 0.6)), uR2 = uEnd - 0.01;
+      const cuIds = ['B', node('r1B', uR1, 0.55)];
+      if (G.disc2 && !G.longDisc) cuIds.push(node('r2B', uR2, 0.54));
+      g.chain(cuIds, { vein: 'Cu', sw: SW.D });
+      g.stub(cuIds[cuIds.length - 1], randRange(0, 14), Lw * randRange(0.04, 0.08), SW.F);
+      { const p = g.onX('M', uR1 * Lw + Lw * randRange(0.0, 0.03)); if (p) g.edge(p, 'r1B', { sw: SW.D }); }                // 1st recurrent (1m-cu)
+      if (G.disc2 && !G.longDisc) g.edge(tB[nS - 1], 'r2B', { sw: SW.D });                                                 // 2nd recurrent closes the 2nd discoidal
+      // anal: A along the hind edge; cu-a closes the first cubital cell; a second crossvein up to Cu closes the second
+      node('cuaB', uBv - 0.14, 0.76); node('aE', uR1 - 0.03, 0.77);
+      g.chain(['Z', 'cuaB', 'aE'], { vein: 'A', sw: SW.F, bows: [0.02, 0.01] });
+      g.edge('B', 'cuaB', { sw: SW.D, bow: 0.03 });                                                                       // cu-a
+      if (rng() < 0.75) g.edge('aE', 'r1B', { sw: SW.F, bow: 0.02 }); else g.stub('aE', randRange(0, 12), Lw * 0.05, SW.F);
+      if (G.anal) { node('a2', 0.1, 0.9); node('a2E', uBv - 0.16, 0.92); g.chain(['Z', 'a2', 'a2E'], { vein: 'A2', sw: SW.F }); g.edge('cuaB', 'a2E', { sw: SW.F }); }
     }
+    L.wings.push(...g.emit());
+    L.wings.push(...costaEls(fore, 0, G.stig !== 'none' ? xStig : Lw * 0.5));
   }
 
   if (type === 'dragonfly' || type === 'damselfly') {
-    const Lw = P.wingLen, dam = type === 'damselfly';
-    const nodusX = Lw * (dam ? randRange(0.38, 0.45) : randRange(0.42, 0.5));
+    // ---- Odonata (docs/wing-venation-spec.md; refs odo-dragonfly, odo-anax-ris1921, odo-damsel-ris1921).
+    // Longitudinals undulate through the cell rows; cells sit on a row lattice (one row = a ladder of
+    // quadrilaterals near the costa and base, several rows = hexagonal mesh toward the margin); the
+    // pterostigma is a rounded parallelogram between C and R1 with a thickened crossvein at each end. ----
+    const dam = type === 'damselfly';
+    const G = {
+      nodus: dam ? randRange(0.36, 0.47) : randRange(0.4, 0.52),
+      wF: dam ? randRange(0.13, 0.19) : randRange(0.16, 0.23), wH: dam ? randRange(0.95, 1.1) : randRange(1.12, 1.45),
+      anal: dam ? 0.05 : randRange(0.2, 0.42), petiole: dam ? randRange(0.12, 0.26) : 0,
+      tipY: randRange(-0.2, 0.12), sharp: randRange(0, 1), bulge: randRange(0.9, 1.1),
+      nV: randInt(5, 8), pow0: randRange(1.3, 1.9), wig: randRange(-0.06, 0.06), und: randRange(0.0015, 0.005), period: randRange(0.12, 0.24),
+      antStep: randRange(0.028, 0.05), postStep: randRange(0.02, 0.036), tilt: randRange(-0.012, 0.012),
+      ps0: randRange(0.72, 0.85), psL: randRange(0.05, 0.11), psStyle: pick(['solid', 'solid', 'cross', 'axis']), psSkew: randRange(0.004, 0.014),
+      cells: dam ? randRange(0.9, 1.3) : randRange(0.7, 1.3), rows: dam ? 1 : randInt(2, 4),
+      triangle: !dam && rng() < 0.8, bridge: rng() < 0.5, subnodus: rng() < 0.85,
+      len: randRange(0.88, 1.12), heavy: rng() < 0.35,
+    };
+    const Lw = P.wingLen * G.len, nodusX = Lw * G.nodus;
+    meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, G.rows, G.psStyle, G.triangle ? 1 : 0, G.bridge ? 1 : 0, G.subnodus ? 1 : 0, Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
+      Math.round(G.pow0 * 4), Math.round(G.antStep * 100), Math.round(G.ps0 * 20), Math.round(G.cells * 3), Math.round(G.wH * 5), Math.round(G.anal * 5), Math.round(G.period * 50)].join(',');
     const wingDefs = dam
-      ? [{ t: 0.5, theta: randRange(-12, -4), w: Lw * 0.16, baseW: 0.05, hind: false }, { t: 0.78, theta: randRange(4, 12), w: Lw * 0.16, baseW: 0.05, hind: true }]
-      : [{ t: 0.5, theta: randRange(-10, -3), w: Lw * 0.19, baseW: 0.14, hind: false }, { t: 0.8, theta: randRange(6, 14), w: Lw * 0.24, baseW: 0.3, hind: true }];
+      ? [{ t: 0.5, theta: randRange(-16, -1), w: Lw * G.wF, baseW: 0.05, hind: false }, { t: 0.78, theta: randRange(2, 16), w: Lw * G.wF * G.wH, baseW: 0.05, hind: true }]
+      : [{ t: 0.5, theta: randRange(-14, -1), w: Lw * G.wF, baseW: 0.14, hind: false }, { t: 0.8, theta: randRange(3, 18), w: Lw * G.wF * G.wH, baseW: G.anal, hind: true }];
     for (const wd of wingDefs) {
-      const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * 0.6;   // odonate wing bases sit near the midline
-      const w = wd.w;
-      // costa with a small notch at the nodus
-      const pts = dam   // damselfly wings are petiolate: a long narrow stalk
-        ? [[0, -w * 0.05], [Lw * 0.18, -w * 0.36], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.48], [Lw * 0.9, -w * 0.38], [Lw, -w * 0.05], [Lw * 0.92, w * 0.33], [Lw * 0.65, w * 0.5], [Lw * 0.35, w * 0.4], [Lw * 0.18, w * 0.12], [0, w * 0.05]]
-        : [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], [Lw * 0.9, -w * 0.38], [Lw, -w * 0.05],
-        [Lw * 0.92, w * 0.33], [Lw * 0.6, w * 0.5], [Lw * 0.25, w * (wd.hind ? 0.55 : 0.5)], [Lw * 0.06, w * (wd.hind ? 0.45 : 0.3)], [0, w * wd.baseW]];
+      const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * 0.6;
+      const w = wd.w, s = G.sharp, bl = G.bulge;
+      const apex = [[Lw * lerp(0.88, 0.94, s), -w * lerp(0.38, 0.22, s)], [Lw, w * G.tipY], [Lw * lerp(0.9, 0.95, s), w * lerp(0.33, 0.18, s) * bl]];
+      const pts = dam
+        ? [[0, -w * 0.05], [Lw * G.petiole, -w * 0.34], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.48], ...apex, [Lw * 0.65, w * 0.5 * bl], [Lw * 0.35, w * 0.4 * bl], [Lw * G.petiole, w * 0.1], [0, w * 0.05]]
+        : [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], ...apex,
+        [Lw * 0.6, w * 0.5 * bl], [Lw * 0.25, w * (wd.hind ? 0.55 : 0.5) * bl], [Lw * 0.06, w * (wd.hind ? 0.45 : 0.3)], [0, w * wd.baseW]];
       const wing = makeWing([bx, by], wd.theta, pts, 0.8);
       const poly = wing.localPoly;
       L.wings.push(pathEl(wing.path, SW.O, '#fff'));
-      L.wings.push(...costaEls(wing, 0, Lw * 0.97));
-      // primary longitudinal veins, all fused at the base. Sc ends at the nodus; R1 runs
-      // under the costa to the tip; the rest (R2-R4, MA, MP, CuA, CuP) fan to the margin.
+      // primary longitudinals, fused at the base: Sc to the nodus, R1 under the costa to the tip, R2..CuP fanning to the margin,
+      // each undulating with the cell period so it reads as a chain of cell sides rather than a rod
       const x0 = Lw * 0.01, yr0 = wing.yRange(x0 + Lw * 0.02) || [-w * 0.3, w * 0.1];
-      const nV = randInt(5, 7);
+      const nV = G.nV, period = Lw * G.period;
       const tipTargets = marginTargets(poly, [Lw * 0.05, 0], nV + 1, Lw * 0.55);
       const scTarget = nearestOutlinePoint(poly, [nodusX, topAt(wing, nodusX)]);
-      const makeVein = (y0, tg, pow) => {
-        const pl = [], steps = 40;
-        for (let k = 0; k <= steps; k++) { const x = x0 + (tg[0] - x0) * k / steps; pl.push([x, y0 + (tg[1] - y0) * Math.pow(k / steps, pow)]); }
-        pl[pl.length - 1] = tg;          // exact outline point, so strips can walk the margin
+      const makeVein = (y0, tg, pow, wig, und, phase) => {
+        const pl = [], steps = 48;
+        for (let k = 0; k <= steps; k++) { const u = k / steps, x = x0 + (tg[0] - x0) * u; pl.push([x, y0 + (tg[1] - y0) * Math.pow(u, pow) + wig * w * Math.sin(Math.PI * u) + und * Lw * Math.sin(Math.PI * u) * Math.sin(2 * Math.PI * x / period + phase)]); }
+        pl[pl.length - 1] = tg;
         return pl;
       };
       const veins = [];
-      veins.push(makeVein(yr0[0] + 1.5, scTarget, 1.0));                                  // Sc
-      veins.push(makeVein(yr0[0] + 3.5, tipTargets[0], 1.6));                             // R1
-      for (let i = 1; i <= nV; i++) veins.push(makeVein(lerp(yr0[0] + 5, yr0[1] - 1.5, i / nV), tipTargets[i], 1.5));
-      for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, SW.D));
-      // antenodal crossveins (C-Sc and Sc-R1, aligned), postnodals (C-R1), pterostigma
-      const stepA = Lw * 0.035;
-      for (let x = Lw * (dam ? 0.2 : 0.09); x < nodusX - 2; x += stepA) {
-        const t = topAt(wing, x, 0.3), ys = plYAt(veins[0], x), yr = plYAt(veins[1], x);
-        if (ys !== null) L.wings.push(lineEl(wing.T([x, t]), wing.T([x, ys]), SW.F));
-        if (ys !== null && yr !== null) L.wings.push(lineEl(wing.T([x, ys]), wing.T([x, yr]), SW.F));
+      veins.push(makeVein(yr0[0] + 1.5, scTarget, 1.0, 0, 0, 0));                                                        // Sc
+      veins.push(makeVein(yr0[0] + 3.5, tipTargets[0], G.pow0 + 0.1, 0, G.und * 0.4, 1));                                   // R1
+      for (let i = 1; i <= nV; i++) veins.push(makeVein(lerp(yr0[0] + 5, yr0[1] - 1.5, i / nV), tipTargets[i], G.pow0 * jitter(0.07), G.wig, G.und, i * 1.7));
+      veins.forEach((v, i) => L.wings.push(emitLocalPolyline(wing, v, i === 1 ? SW.O : (G.heavy && i < 4 ? SW.O : SW.D))));
+      // antenodal crossveins (C-Sc and Sc-R1, aligned; the first two heavier), postnodals (C-R1), tilted a little
+      const stepA = Lw * G.antStep, tl = Lw * G.tilt;
+      let kA = 0;
+      for (let x = Lw * (dam ? G.petiole + 0.03 : 0.09); x < nodusX - 2; x += stepA, kA++) {
+        const t = topAt(wing, x, 0.3), ys = plYAt(veins[0], x + tl), yr = plYAt(veins[1], x + 2 * tl), sw = kA < 2 && !dam ? SW.D : SW.F;
+        if (ys !== null) L.wings.push(lineEl(wing.T([x, t]), wing.T([x + tl, ys]), sw));
+        if (ys !== null && yr !== null) L.wings.push(lineEl(wing.T([x + tl, ys]), wing.T([x + 2 * tl, yr]), sw));
       }
-      const psx0 = Lw * 0.78, psx1 = Lw * 0.86;
-      for (let x = nodusX + Lw * 0.02; x < Lw * 0.97; x += Lw * 0.028) {
+      if (G.subnodus) { const yr = plYAt(veins[1], nodusX); if (yr !== null) L.wings.push(lineEl(wing.T([nodusX, topAt(wing, nodusX, 0.3)]), wing.T([nodusX + Lw * 0.015, yr]), SW.O)); }
+      const psx0 = Lw * G.ps0, psx1 = psx0 + Lw * G.psL;
+      for (let x = nodusX + Lw * 0.02; x < Lw * 0.97; x += Lw * G.postStep) {
         if (x > psx0 - 2 && x < psx1 + 2) continue;
-        const yr = plYAt(veins[1], x);
-        if (yr !== null) L.wings.push(lineEl(wing.T([x, topAt(wing, x, 0.3)]), wing.T([x, yr]), SW.F));
+        const yr = plYAt(veins[1], x + tl);
+        if (yr !== null) L.wings.push(lineEl(wing.T([x, topAt(wing, x, 0.3)]), wing.T([x + tl, yr]), SW.F));
       }
-      for (let x = psx0; x <= psx1; x += 1.3) { const yr = plYAt(veins[1], x); if (yr !== null) L.wings.push(lineEl(wing.T([x, topAt(wing, x, 0.4)]), wing.T([x, yr]), SW.F)); }
-      L.wings.push(lineEl(wing.T([psx0, topAt(wing, psx0, 0.3)]), wing.T([psx0, plYAt(veins[1], psx0) || 0]), SW.D));
-      L.wings.push(lineEl(wing.T([psx1, topAt(wing, psx1, 0.3)]), wing.T([psx1, plYAt(veins[1], psx1) || 0]), SW.D));
-      // secondary venation: Voronoi cells in each strip from R1 down to the trailing edge;
-      // cells about one strip-width across, shrinking toward the tip and the hind margin
+      // pterostigma: between the costa and R1, slanted ends, thickened end crossveins
+      { const g = wingGraph(wing, Lw); const r1y = x => { const y = plYAt(veins[1], x); return y === null ? topAt(wing, x, 3) : y; };
+        g.stigma(psx0, psx1, 0, 0, G.psStyle, r1y, Lw * G.psSkew); L.wings.push(...g.emit());
+        L.wings.push(lineEl(wing.T([psx0, topAt(wing, psx0, 0.3)]), wing.T([psx0 + Lw * G.psSkew, r1y(psx0 + Lw * G.psSkew)]), SW.O));
+        L.wings.push(lineEl(wing.T([psx1, topAt(wing, psx1, 0.3)]), wing.T([psx1 + Lw * G.psSkew, r1y(psx1 + Lw * G.psSkew)]), SW.O)); }
+      // arculus, discoidal triangle and bridge vein: heavier landmarks
+      const xv = (va, x) => { const y = plYAt(va, x); return y === null ? null : wing.T([x, y]); };
+      { const xa = Lw * (dam ? G.petiole + 0.06 : 0.17), j = Math.min(veins.length - 2, 2 + (nV >> 1)); const a = xv(veins[2], xa), b = xv(veins[j], xa + Lw * 0.01); if (a && b) L.wings.push(lineEl(a, b, SW.O)); }   // arculus
+      if (G.triangle) {
+        const j = Math.min(veins.length - 2, 2 + (nV >> 1)), xT = Lw * (wd.hind ? 0.14 : 0.2), xT2 = xT + Lw * (wd.hind ? 0.1 : 0.07);
+        const a1 = xv(veins[j], xT), b1 = xv(veins[j + 1], xT), b2 = xv(veins[j + 1], xT2);
+        if (a1 && b1 && b2) L.wings.push(lineEl(a1, b1, SW.D), lineEl(a1, b2, SW.D));
+      }
+      if (G.bridge) { const a = xv(veins[1], nodusX + Lw * 0.03), b = xv(veins[2], nodusX + Lw * 0.09); if (a && b) L.wings.push(lineEl(a, b, SW.D)); }
+      // secondary venation: Voronoi of a row lattice in each strip from R1 down to the trailing edge. Rows follow
+      // the strip, one row where it is narrow (a ladder), up to G.rows where it is wide (hexagonal mesh);
+      // cells shrink toward the tip and grow toward the hind margin.
       const basePt = nearestOutlinePoint(poly, [0, w * wd.baseW]);
       for (let i = 1; i < veins.length; i++) {
         const a = veins[i], b = i + 1 < veins.length ? veins[i + 1] : [basePt];
-        const rFn = p => {
-          const ya = plYAt(a, p[0]), yb = i + 1 < veins.length ? plYAt(b, p[0]) : botAt(wing, p[0]);
-          const width = (ya !== null && yb !== null) ? Math.abs(yb - ya) : 8;
-          return Math.max(4.5, Math.min(11, width * 0.9)) * (1 - 0.25 * p[0] / Lw);
-        };
-        L.wings.push(...emitEdges(wing, voronoiStrip(poly, a, b, rFn), SW.F));
+        const strip = stripPolygon(poly, a, b);
+        if (strip.length < 3) continue;
+        const yA = x => plYAt(a, x), yB = x => i + 1 < veins.length ? plYAt(b, x) : botAt(wing, x);
+        let minX = Infinity, maxX = -Infinity; for (const p of strip) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); }
+        const sites = [];
+        const cellAt = x => Math.max(3.2, Math.min(12, (5.5 + 4 * (i / veins.length)) * G.cells)) * (1 - 0.3 * x / Lw);
+        let col = 0;
+        for (let x = minX + 2; x < maxX - 1; col++) {
+          const c = cellAt(x), ya = yA(x), yb = yB(x);
+          if (ya === null || yb === null) { x += c; continue; }
+          const width = yb - ya, rows = Math.max(1, Math.min(G.rows, Math.round(width / c)));
+          for (let r = 0; r < rows; r++) {
+            const p = [x + ((r + col) % 2) * c * 0.5 + randRange(-0.12, 0.12) * c, ya + width * (r + 0.5) / rows + randRange(-0.1, 0.1) * c];
+            if (pointInPoly(p, strip)) sites.push(p);
+          }
+          x += c;
+        }
+        if (sites.length > 1) L.wings.push(...emitEdges(wing, voronoiEdges(sites, strip), SW.F));
       }
     }
   }
@@ -1988,28 +2342,38 @@ function generateInsectDetailed(seed) {
 
   if (type === 'grasshopper') {
     const by = thorax.yBot - 6;
-    const Lt = P.abdLen * randRange(1.05, 1.18), wt = abdHW * 1.15;
-    if (rng() < 0.7) {   // folded hindwing fan peeking out
+    // ---- tegmen genes ----
+    const G = { nL: randInt(2, 4), cell: randRange(5, 10), tilt: randRange(0.05, 0.3), subRow: rng() < 0.6, wt: randRange(1.05, 1.28), tipX: randRange(0.1, 0.32), tipY: randRange(0.96, 1.0), fan: rng() < 0.7, rays: randInt(4, 8), bulge: randRange(0.72, 0.82), midX: randRange(0.4, 0.6) };
+    meta.wingSig = ['orth', G.nL, G.subRow ? 1 : 0, Math.round(G.tilt * 10), G.fan ? 1 : 0, G.rays, Math.round(G.cell), Math.round(G.wt * 20), Math.round(G.tipX * 10), Math.round(G.bulge * 20), Math.round(G.midX * 10)].join(',');
+    const Lt = P.abdLen * randRange(1.05, 1.18), wt = abdHW * G.wt;
+    if (G.fan) {   // folded hindwing fan peeking out
       const fan = [[abdHW * 0.25, by + 4], [abdHW * 1.15, by + Lt * 0.25], [abdHW * 1.3, by + Lt * 0.5], [abdHW * 1.0, by + Lt * 0.72], [abdHW * 0.6, by + Lt * 0.82], [abdHW * 0.3, by + Lt * 0.6]];
       L.covers.push(pathEl(smoothPath(fan, true, 1), SW.D, '#fff'));
-      for (let k = 1; k <= 6; k++) {
-        const tg = lerpP([abdHW * 1.3, by + Lt * 0.5], [abdHW * 0.6, by + Lt * 0.82], k / 7);
+      for (let k = 1; k <= G.rays; k++) {
+        const tg = lerpP([abdHW * 1.3, by + Lt * 0.5], [abdHW * 0.6, by + Lt * 0.82], k / (G.rays + 1));
         L.covers.push(lineEl([abdHW * 0.3, by + 6], tg, SW.F));
       }
     }
-    const teg = [[0, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * 0.78, by + Lt * 0.5], [wt * 0.55, by + Lt * 0.85], [wt * 0.2, by + Lt * 0.99], [0, by + Lt]];
+    const teg = [[0, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * G.bulge, by + Lt * G.midX], [wt * 0.55, by + Lt * 0.85], [wt * G.tipX, by + Lt * G.tipY], [0, by + Lt]];
     L.covers.push(pathEl(halfShield(teg), SW.O, '#fff'));
     const vs = [];
-    for (let k = 0; k <= 3; k++) {   // k = 0 is the outer edge itself, used only as a strip boundary
-      const f = 1 - k / 4;
-      const pts = [[wt * 0.55 * f, by + 6], [wt * 0.75 * f, by + Lt * 0.12], [wt * 0.78 * f, by + Lt * 0.5], [wt * 0.55 * f, by + Lt * 0.85], [wt * 0.2 * f, by + Lt * 0.97]];
+    for (let k = 0; k <= G.nL; k++) {   // k = 0 is the outer edge itself, used only as a strip boundary
+      const f = 1 - k / (G.nL + 1);
+      const pts = [[wt * 0.55 * f, by + 6], [wt * 0.75 * f, by + Lt * 0.12], [wt * G.bulge * f, by + Lt * G.midX], [wt * 0.55 * f, by + Lt * 0.85], [wt * G.tipX * f, by + Lt * (G.tipY - 0.02)]];
       vs.push(sampleSmooth(pts, false, 1, 8));
       if (k > 0) L.covers.push(pathEl(smoothPath(pts, false, 1), SW.D));
     }
-    const ident = { T: p => p };
-    for (let i = 0; i + 1 < vs.length; i++) {   // irregular reticulation between the longitudinal veins
-      const strip = vs[i].concat(vs[i + 1].slice().reverse());
-      L.covers.push(...emitEdges(ident, voronoiEdges(poissonInPoly(strip, () => randRange(6, 9), 400), strip), SW.F));
+    // archedictyon (ref orth-grasshopper): rows of square-ish cells between consecutive longitudinals, rungs a
+    // little tilted and bowed, finer toward the apex; a sub-row splits the strip where it is wider than two cells
+    for (let i = 0; i + 1 < vs.length; i++) {
+      const a = vs[i], b = vs[i + 1], n = Math.max(2, Math.round(Lt / G.cell));
+      const mids = [];
+      for (let k = 1; k < n; k++) {
+        const t = k / n, ta = Math.min(1, t + G.tilt * jitter(0.5) / n), pa = plAt(a, ta), pb = plAt(b, t);
+        L.covers.push(pathEl(smoothPath([pa, add(lerpP(pa, pb, 0.5), mul(perp(norm(sub(pb, pa))), vlen(sub(pb, pa)) * randRange(-0.08, 0.08))), pb], false, 1), SW.F));
+        mids.push(lerpP(pa, pb, 0.5));
+      }
+      if (G.subRow && i % 2 === 0) L.covers.push(pathEl(smoothPath(mids.filter((_, k) => k % 2 === 0), false, 1), SW.F));   // a lighter longitudinal splitting the row
     }
   }
 
@@ -2060,26 +2424,92 @@ if (typeof module !== 'undefined' && module.exports) {
 
 <script>
 (function () {
-  const seedInput = document.getElementById('seed');
-  const stage = document.getElementById('stage');
+  // Two independent panes (A always shown, B behind the Compare toggle), each with its own
+  // seed, controls and Back history. The URL hash carries one seed (#123) or both (#123|456).
+  const HISTORY_MAX = 100;
+  const panesEl = document.getElementById('panes');
+  const compareBtn = document.getElementById('compare');
+  const panes = [];
+  let compare = false;
+  let hashLock = false;   // set while we write the hash ourselves (replaceState never fires hashchange, but keep it explicit)
 
-  function render(seed) {
-    seed = Number(seed) >>> 0;
-    seedInput.value = seed;
-    const r = generateInsectDetailed(seed);
-    stage.innerHTML = r.svg;
-    history.replaceState(null, '', '#' + seed);
-    document.title = r.meta.name.binomial + ' \u00b7 insectdraw #' + seed;
+  function makePane(id) {
+    const el = document.createElement('div');
+    el.className = 'pane';
+    el.innerHTML = '<div class="stage"></div><div class="controls">' +
+      '<button class="back" disabled>Back</button>' +
+      '<label>Seed <input class="seed" type="number" value="1" min="0" step="1"></label>' +
+      '<button class="gen">Generate</button><button class="rnd">Random</button><button class="daily">Daily</button></div>';
+    panesEl.appendChild(el);
+    const q = c => el.querySelector('.' + c);
+    const pane = { id, el, stage: q('stage'), seedInput: q('seed'), backBtn: q('back'), history: [], seed: null, meta: null };
+
+    // render(seed) pushes the previously displayed seed onto the pane's history;
+    // render(seed, false) renders without recording (used by Back itself).
+    pane.render = (seed, push = true) => {
+      seed = Number(seed) >>> 0;
+      if (push && pane.seed !== null && pane.seed !== seed) {
+        pane.history.push(pane.seed);
+        if (pane.history.length > HISTORY_MAX) pane.history.shift();
+      }
+      pane.seed = seed;
+      pane.backBtn.disabled = pane.history.length === 0;
+      pane.seedInput.value = seed;
+      const r = generateInsectDetailed(seed);
+      pane.stage.innerHTML = r.svg;
+      pane.meta = r.meta;
+      syncHash();
+    };
+    pane.goBack = () => { if (pane.history.length) pane.render(pane.history.pop(), false); };
+
+    pane.backBtn.addEventListener('click', pane.goBack);
+    q('gen').addEventListener('click', () => pane.render(pane.seedInput.value));
+    pane.seedInput.addEventListener('keydown', e => { if (e.key === 'Enter') pane.render(pane.seedInput.value); });
+    q('rnd').addEventListener('click', () => pane.render(Math.floor(Math.random() * 4294967296)));
+    q('daily').addEventListener('click', () => pane.render(dailySeed()));
+    return pane;
   }
 
-  document.getElementById('gen').addEventListener('click', () => render(seedInput.value));
-  seedInput.addEventListener('keydown', e => { if (e.key === 'Enter') render(seedInput.value); });
-  document.getElementById('rnd').addEventListener('click', () => render(Math.floor(Math.random() * 4294967296)));
-  document.getElementById('daily').addEventListener('click', () => render(dailySeed()));
+  function syncHash() {
+    const shown = panes.filter(p => p.seed !== null && (p.id === 0 || compare));
+    if (!shown.length) return;
+    hashLock = true;
+    history.replaceState(null, '', '#' + shown.map(p => p.seed).join('|'));
+    hashLock = false;
+    const a = panes[0].meta;
+    document.title = (a ? a.name.binomial + ' \u00b7 ' : '') + 'insectdraw #' + shown.map(p => p.seed).join('|');
+  }
 
-  const fromHash = location.hash.slice(1);
-  render(/^\d+$/.test(fromHash) ? fromHash : dailySeed());
-  window.render = render;
+  function setCompare(on) {
+    compare = on;
+    document.body.classList.toggle('compare', on);
+    compareBtn.classList.toggle('on', on);
+    panes[1].el.style.display = on ? '' : 'none';
+    if (on && panes[1].seed === null) panes[1].render(Math.floor(Math.random() * 4294967296));
+    syncHash();
+  }
+
+  // #123 or #123|456 -> [123] / [123, 456]; anything else -> null
+  function parseHash() {
+    const m = location.hash.slice(1).match(/^(\d+)(?:\|(\d+))?$/);
+    return m ? [m[1], m[2]].filter(x => x !== undefined) : null;
+  }
+  function applyHash(seeds) {
+    seeds.forEach((s, i) => { if ((Number(s) >>> 0) !== panes[i].seed) panes[i].render(s); });
+    if (seeds.length === 2 && !compare) setCompare(true);
+  }
+
+  panes.push(makePane(0), makePane(1));
+  panes[1].el.style.display = 'none';
+  compareBtn.addEventListener('click', () => setCompare(!compare));
+  // External hash edits (a pasted #seed or #a|b) render and are back-able.
+  window.addEventListener('hashchange', () => { if (hashLock) return; const s = parseHash(); if (s) applyHash(s); });
+
+  const initial = parseHash();
+  if (initial) applyHash(initial); else panes[0].render(dailySeed());
+  window.render = panes[0].render;
+  window.goBack = panes[0].goBack;
+  window.panes = panes;
 })();
 </script>
 </body>
