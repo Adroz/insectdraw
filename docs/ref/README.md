@@ -49,3 +49,15 @@ Dorsal-view head references for `../research-head-eyes.md` (step 5 of the body p
 | thorax-orth-grasshopper.jpg | Grasshopper thorax, lateral: saddle pronotum with sulci and lateral lobe over the pleura | [Grasshopper thorax lateral.jpg](https://commons.wikimedia.org/wiki/File:Grasshopper_thorax_lateral.jpg) (Giancarlodessi / Alvesgaspar) | CC BY 2.5 |
 | thorax-col-engraving.jpg | Nine carabid beetles in dorsal view, Curtis del., Janson 1863: pronotum shapes and proportions against head and elytra | [British beetles (Plate I) (5987271987).jpg](https://commons.wikimedia.org/wiki/File:British_beetles_(Plate_I)_(5987271987).jpg) | Public domain |
 | thorax-hem-heteroptera.png | Shield bug dorsal scheme: wide pronotum, large triangular scutellum | [Heteroptera morphology-d.svg](https://commons.wikimedia.org/wiki/File:Heteroptera_morphology-d.svg) (Giancarlodessi) | CC BY-SA 3.0 |
+## Antennae (`ant-` prefix)
+
+References for `../research-antennae.md`. All from Wikimedia Commons; downscaled to ≤1200 px.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| ant-types-shyamal.png | The eleven antenna types with an example insect each (aristate, lamellate, serrate, flabellate, moniliform, setaceous, geniculate, plumose, pectinate, clavate, stylate) | [Insect antennae.svg](https://commons.wikimedia.org/wiki/File:Insect_antennae.svg), L. Shyamal | CC BY-SA 2.5 |
+| ant-moth-biston.jpg | Biston antennae: ♂ bipectinate long rami, ♂ bipectinate short rami, ♀ filiform; scale bar 1 mm | [Biston antennae.JPG](https://commons.wikimedia.org/wiki/File:Biston_antennae.JPG), Jiang, Xue & Han | CC BY 3.0 |
+| ant-moths-south.jpg | Richard South, *Moths of the British Isles*, fig. 2: hooked, simple, ciliate, fasciculate, serrate, dentate, pectinate, bipectinate moth antennae | [Moths of the British Isles Fig02.jpg](https://commons.wikimedia.org/wiki/File:Moths_of_the_British_Isles_Fig02.jpg) | Public domain |
+| ant-butterfly-tips-bingham.png | C. T. Bingham, butterfly antenna tips: Danais, Orsotriaena, Hypolimnas, Pareba, Libythea, Abisara, Papilio, Pieris, Lampides, Tagiades (skipper apiculus) | [Antennae ctb.png](https://commons.wikimedia.org/wiki/File:Antennae_ctb.png) | Public domain |
+| ant-longhorn-dorcadion.jpg | Carinatodorcadion fulvum head, dorsal: scape / pedicel / first flagellomere lengths marked, eyes notched around the sockets, antennae swept back beside the body | [Carinatodorcadion fulvum detail1.jpg](https://commons.wikimedia.org/wiki/File:Carinatodorcadion_fulvum_detail1.jpg), Siga | CC BY-SA 3.0 |
+| ant-lucanus-curtis.jpg | John Curtis, *British Entomology*: Lucanus plate with the geniculate lamellate antenna drawn in detail and the set habitus | [Lucanus Curtis.jpg](https://commons.wikimedia.org/wiki/File:Lucanus_Curtis.jpg) | Public domain |
