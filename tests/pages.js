@@ -28,9 +28,11 @@ const server = http.createServer((req, res) => {
 
 // Rendered DOM of a URL after scripts (and any redirect) have run. Chromium's --dump-dom prints the
 // document once the load event has fired and the virtual time budget is spent.
-// Async, because the server answering Chromium runs in this same process.
-const dom = async url => (await promisify(execFile)(bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--virtual-time-budget=8000',
-  '--dump-dom', url], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })).stdout
+// Async, because the server answering Chromium runs in this same process. In CI (GitHub's Ubuntu 24.04 runners)
+// Chrome's sandbox cannot start (unprivileged user namespaces are off), so it runs with --no-sandbox there; the
+// pages are local files, nothing untrusted is loaded.
+const flags = ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--virtual-time-budget=8000', ...(process.env.CI ? ['--no-sandbox'] : [])];
+const dom = async url => (await promisify(execFile)(bin, [...flags, '--dump-dom', url], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 })).stdout
   .replace(/<script[\s\S]*?<\/script>/g, '');   // the pages' own scripts contain the pane markup as strings; count only the DOM
 
 const failures = [];
