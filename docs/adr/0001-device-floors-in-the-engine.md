@@ -19,7 +19,10 @@ density settings were measured to change nothing, since the loss is coverage, no
 
 - The default output (no `devicePx`) is unchanged byte-for-byte; the web plate keeps its floors.
 - A device plate of a seed is a coarser drawing of the same insect, never a different one.
-- The caption subtitle is dropped when it would fall under 10 device px; text is filled, not
+- The caption binomial is floored at 24 device px (measured 2026-10-07: at the default 16 px the
+  thresholded letters split in two and shed specks at 440; from about 20 device px they hold, 24
+  reads at arm's length and the longest name still fits with margin), and the subtitle is dropped
+  when it would fall under 10 device px; text is filled, not
   stroked, so a stroke floor cannot save it.
 - The plate scale is known only after the insect is drawn, so a device plate is drawn twice:
   pass 1 is the default plate and gives the scale, pass 2 redraws with the floors. A clamped site

@@ -105,7 +105,10 @@ stays live. The consumer contract:
 The seed is `hashString(date)`, the seed the web page's **Daily** button
 picks on that day, so the two never disagree. Any day's files are reproduced
 locally with `node scripts/render-daily.js 2026-01-01` (writes `daily/`;
-`--out DIR` elsewhere), and `npm run check:daily` tests that script. The SVG
+`--out DIR` elsewhere), and `npm run check:daily` tests that script. On a
+device plate the binomial is floored at 24 device px (32.7 plate px at 440, so
+it reads at arm's length) and the common name is dropped; the survival gate
+checks the thresholded caption does not fragment its letters. The SVG
 and JSON match the published ones byte for byte; the device raster's caption
 glyphs can differ where the local machine has Georgia and the runner (DejaVu
 Serif) does not.

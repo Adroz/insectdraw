@@ -101,8 +101,9 @@ const SW_PX = { H: 2.2, O: 1.5, D: 0.8, F: 0.5 };             // the weights in 
 // The device contract, exported so the gates (tests/check.js, tests/eink.js) assert the numbers the engine draws to:
 // a device plate (generateInsectDetailed(seed, { devicePx })) is the default plate's insect with every stroke weight
 // clamped to >= strokePx device px and every hatch / mesh pitch to >= pitchPx device px, i.e. floor x 600 / devicePx
-// in plate units; the caption subtitle (11 px) is dropped where it would fall under subtitleMinPx device px.
-const DEVICE = { strokePx: 1.0, pitchPx: 2.5, subtitleMinPx: 10 };
+// in plate units; the caption subtitle (11 px) is dropped where it would fall under subtitleMinPx device px, and the
+// binomial grows to at least captionMinPx device px so it reads at arm's length on the panel (ticket #38).
+const DEVICE = { strokePx: 1.0, pitchPx: 2.5, subtitleMinPx: 10, captionMinPx: 24 };
 // Strokes are clamped at the token substitution; pitches at draw time through floorPitch(v) (body units; the floor is
 // pitchFloor, 0 on a default plate), which also records the smallest pitch drawn for meta.minPitch. Every repeated
 // mark at a spacing (hatch bands, lattice, mesh cell, pile, fringe, limb shading / spines / comb rows, antenna rami
@@ -3970,12 +3971,16 @@ function drawPlate(seed, opts, dev) {
   meta.weights = { H: Math.max(SW_PX.H, strokeFloor), O: Math.max(SW_PX.O, strokeFloor), D: Math.max(SW_PX.D, strokeFloor), F: Math.max(SW_PX.F, strokeFloor) };
 
   // plate caption: italic binomial and a letter-spaced small-caps common name; the common name (11 px) is dropped on a
-  // device plate where it would fall under DEVICE.subtitleMinPx device px (devicePx < 546 at 10), the binomial stays where it is
+  // device plate where it would fall under DEVICE.subtitleMinPx device px (devicePx < 546 at 10)
   const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const nm = meta.name;
   const subtitle = !device || 11 * device.px / 600 >= DEVICE.subtitleMinPx;
+  // the binomial is 16 px on the default plate; a device plate floors it at DEVICE.captionMinPx device px (32.7 plate px at
+  // 440) and lowers the baseline with the size so the glyph box stays inside the 45 px band (top 555, descenders < 600)
+  const capSize = device ? Math.max(16, Math.round(DEVICE.captionMinPx * 600 / device.px * 10) / 10) : 16;
+  const capY = capSize === 16 ? 571 : Math.round((571 + (capSize - 16) * 0.75) * 10) / 10;
   const caption =
-    '<text x="300" y="571" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="16" fill="#000">' +
+    '<text x="300" y="' + capY + '" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="' + capSize + '" fill="#000">' +
     '<tspan font-style="italic">' + esc(nm.binomial) + '</tspan></text>' +
     (subtitle ? '<text x="300" y="587" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="11" font-variant="small-caps" letter-spacing="1.5" fill="#000">' +
     esc(nm.common) + '</text>' : '');
