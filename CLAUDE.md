@@ -79,6 +79,7 @@ contract for changes.
 
 ```
 node tests/check.js 3000                 # invariants + determinism + wing uniqueness
+npm test                                 # e-ink survival gate (tests/eink.js): per-layer survival at device size 440, needs `npm install`
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
 ```
 
