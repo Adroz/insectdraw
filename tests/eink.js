@@ -2,20 +2,20 @@
 // E-ink survival gate (spec #32, ticket #33). Generates device plates for a fixed set of seeds covering
 // every order and both lepidoptera variants, rasterises each layer through the panel's exact pipeline
 // (resize to the device size on white, flatten, grayscale, threshold 128) and measures survival per
-// layer: black pixels after the threshold divided by the antialiased ink coverage of the same render.
-// Fails when any layer drops under its floor, on the whole layer or on its fine and detail strokes alone. Layers are isolated from meta.layers the way the
-// assembly in generateInsectDetailed builds the plate, so no engine change is needed.
+// layer: black pixels after the threshold divided by the antialiased ink coverage of the same raster.
+// Fails when any layer drops under its floor, on the whole layer or on its fine and detail strokes alone.
+// Layers are isolated from meta.layers the way the assembly in generateInsectDetailed builds the plate, so
+// no engine change is needed. The pipeline is tests/raster.js, the one the daily plate is published with.
 //   npm test                         # or: node tests/eink.js
 //   node tests/eink.js --out DIR     # also writes the 1-bit layer rasters (seed-type-layer.png) to DIR
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
 const E = require('./engine').loadEngine();
+const raster = require('./raster');
 
 // ---- contract (ADR 0001) ----
-const DEVICE_PX = 440;          // TRMNL panel: the plate is shown at 440 device px
-const THRESHOLD = 128;          // fixed; raising it was measured and rejected
+const { DEVICE_PX, THRESHOLD } = raster;   // TRMNL panel: shown at 440 device px, thresholded at 128
 const SEEDS_PER_TYPE = 3;       // per order, and per lepidoptera variant
 // Survival floors per layer, two measures each: 'all' is the whole layer, 'fine' only its fine and detail
 // strokes (SW_F / SW_D: hatching, segment lines, striae, crossveins, antenna rami), which the outline and
@@ -79,18 +79,17 @@ function layerSvg(r, layer, fine) {
     else body += '<g>' + els + '</g><g>' + (L.legPairs || []).map(pr =>
       '<g transform="scale(-1,1) rotate(' + fmt(pr.skew) + ' ' + fmt(pr.pivot[0]) + ' ' + fmt(pr.pivot[1]) + ')">' + pr.els.filter(keep).join('') + '</g>').join('') + '</g>';
   }
-  const W = r.meta.weights || { H: 2.2, O: 1.5, D: 0.8, F: 0.5 };   // the device plate's weights after its stroke floor (meta.weights), else the defaults
-  const sw = v => String(Math.round(v / s * 1000) / 1000);          // the engine's token substitution
+  const W = r.meta.weights;                                   // the plate's weights after its stroke floor
+  const sw = v => String(Math.round(v / s * 1000) / 1000);   // the engine's token substitution
   return (head[0] + body + '</g></svg>').replace(/SW_H/g, sw(W.H)).replace(/SW_O/g, sw(W.O)).replace(/SW_D/g, sw(W.D)).replace(/SW_F/g, sw(W.F));
 }
 
-// ---- the panel pipeline ----
-const pipeline = svg => sharp(Buffer.from(svg)).resize(DEVICE_PX, DEVICE_PX, { fit: 'contain', background: '#ffffff' }).flatten({ background: '#ffffff' }).grayscale();
+// ---- the panel pipeline (tests/raster.js): antialiased coverage before the threshold, black pixels after it ----
 async function survival(svg, pngOut) {
-  const grey = await pipeline(svg).raw().toBuffer({ resolveWithObject: true });
+  const grey = await raster.grey(svg, DEVICE_PX).raw().toBuffer({ resolveWithObject: true });
   let coverage = 0;
   for (let i = 0; i < grey.data.length; i += grey.info.channels) coverage += (255 - grey.data[i]) / 255;
-  const bw = pipeline(svg).threshold(THRESHOLD);
+  const bw = raster.bits(svg, DEVICE_PX);
   const bits = await bw.clone().raw().toBuffer({ resolveWithObject: true });
   let black = 0;
   for (let i = 0; i < bits.data.length; i += bits.info.channels) if (bits.data[i] === 0) black++;

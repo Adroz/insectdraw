@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Daily plate render check (spec #32, ticket #36). Runs scripts/render-daily.js the way the workflow does,
-// for a fixed Brisbane calendar day into a temp dir, and asserts what a consumer of the published files sees:
+// Daily plate check (spec #32, ticket #36). Runs scripts/render-daily.js the way the workflow does, for a
+// fixed Brisbane calendar day into a temp dir, and asserts what a consumer of the published files sees:
 // the three files, the sidecar fields, the device raster (440×440, 1-bit, black and white only) and the seed
 // (the FNV-1a hash of the date, the same seed the web page's Daily button picks on that day).
 //   npm run check:daily              # or: node tests/daily.js
@@ -12,10 +12,10 @@ const path = require('path');
 const { execFileSync } = require('child_process');
 const sharp = require('sharp');
 const E = require('./engine').loadEngine();
+const { DEVICE_PX } = require('./raster');
 
 const SCRIPT = path.join(__dirname, '..', 'scripts', 'render-daily.js');
 const DATE = '2026-01-01';
-const DEVICE_PX = 440;
 
 function render(args) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'insectdraw-daily-'));
@@ -70,8 +70,8 @@ async function main() {
   assert.ok(b.png.equals(a.png), 'png is deterministic');
   assert.deepStrictEqual(b.json, a.json, 'json is deterministic');
 
-  // no date: today's Brisbane calendar day (instant + 10 h, ADR 0002)
-  const today = new Date(Date.now() + 10 * 3600e3).toISOString().slice(0, 10);
+  // no date: today's Brisbane calendar day (ADR 0002; the engine's brisbaneDay is what dailySeed hashes)
+  const today = E.brisbaneDay(new Date());
   const c = render([]);
   assert.strictEqual(c.json.date, today, 'default date is today in Brisbane');
   assert.strictEqual(c.json.seed, E.dailySeed(), 'default seed is dailySeed()');
@@ -81,7 +81,7 @@ async function main() {
   assert.throws(() => render(['2026-13-01']), 'impossible date exits non-zero');
 
   for (const r of [a, b, c]) fs.rmSync(r.dir, { recursive: true, force: true });
-  console.log('daily render OK: ' + DATE + ' seed ' + seed + ' ' + a.json.name.binomial + ', ' + DEVICE_PX + '×' + DEVICE_PX + ' 1-bit, ' +
+  console.log('daily plate OK: ' + DATE + ' seed ' + seed + ' ' + a.json.name.binomial + ', ' + DEVICE_PX + '×' + DEVICE_PX + ' 1-bit, ' +
     (black / (DEVICE_PX * DEVICE_PX) * 100).toFixed(1) + '% ink, ' + (Date.now() - t0) / 1000 + ' s');
 }
 

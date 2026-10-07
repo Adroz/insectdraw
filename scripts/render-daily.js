@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Renders the daily plate (spec #32, ticket #36): the device plate for one Brisbane calendar day, written as
 //   insect.svg   the device plate (generateInsectDetailed(seed, { devicePx: 440 }))
-//   insect.png   the device raster: 440×440, 1-bit palette, through the panel's exact pipeline
-//                (resize to the device size on white, flatten, grayscale, threshold 128; ADR 0001, tests/eink.js)
+//   insect.png   the device raster: 440×440, 1-bit palette, through the panel's exact pipeline (tests/raster.js,
+//                shared with the survival gate: resize to the device size on white, flatten, grayscale, threshold 128)
 //   insect.json  the sidecar: { date, seed, name, devicePx }
 // The seed is hashString(date), the seed the web page's Daily button picks on that day (dailySeed, ADR 0002).
 // This is the only thing .github/workflows/daily.yml runs besides checkout, install and the deploy actions;
@@ -15,41 +15,32 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const sharp = require('sharp');
 const E = require(path.join(__dirname, '..', 'tests', 'engine')).loadEngine();
+const raster = require(path.join(__dirname, '..', 'tests', 'raster'));
 
-const DEVICE_PX = 440;     // TRMNL panel device size
-const THRESHOLD = 128;     // fixed (ADR 0001)
-
-// Brisbane calendar day of an instant: UTC+10, no daylight saving (ADR 0002); same arithmetic as dailySeed.
-const brisbaneDay = date => new Date(date.getTime() + 10 * 3600e3).toISOString().slice(0, 10);
+const DEVICE_PX = raster.DEVICE_PX;
 
 function parseArgs(argv) {
   let date = null, out = 'daily';
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--out') out = argv[++i];
-    else if (a === '--date') date = argv[++i];
     else if (/^\d{4}-\d{2}-\d{2}$/.test(a) && date === null) date = a;
     else throw new Error('usage: render-daily.js [YYYY-MM-DD] [--out DIR] (got ' + JSON.stringify(a) + ')');
   }
   if (!out) throw new Error('--out needs a directory');
-  if (date === null) date = brisbaneDay(new Date());
+  if (date === null) date = E.brisbaneDay(new Date());
   // the day is taken as a Brisbane calendar day: its first instant is YYYY-MM-DDT00:00+10:00, and it must round-trip
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || brisbaneDay(new Date(date + 'T00:00:00+10:00')) !== date) throw new Error('not a calendar day: ' + date);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || E.brisbaneDay(new Date(date + 'T00:00:00+10:00')) !== date) throw new Error('not a calendar day: ' + date);
   return { date, out };
 }
-
-const pipeline = svg => sharp(Buffer.from(svg)).resize(DEVICE_PX, DEVICE_PX, { fit: 'contain', background: '#ffffff' })
-  .flatten({ background: '#ffffff' }).grayscale().threshold(THRESHOLD);
 
 async function main() {
   const { date, out } = parseArgs(process.argv.slice(2));
   const seed = E.hashString(date);
   if (seed !== E.dailySeed(new Date(date + 'T00:00:00+10:00'))) throw new Error('seed disagrees with dailySeed for ' + date);
   const r = E.generateInsectDetailed(seed, { devicePx: DEVICE_PX });
-  // 1-bit palette PNG: two colours after the threshold, so the palette is exactly black and white
-  const png = await pipeline(r.svg).png({ palette: true, colours: 2 }).toBuffer();
+  const png = await raster.devicePng(r.svg, DEVICE_PX);
   const sidecar = { date, seed, name: r.meta.name, devicePx: DEVICE_PX };
   fs.mkdirSync(out, { recursive: true });
   fs.writeFileSync(path.join(out, 'insect.svg'), r.svg);
