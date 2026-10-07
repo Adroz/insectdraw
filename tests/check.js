@@ -4,6 +4,7 @@
 const E = require('./engine').loadEngine();
 
 const N = Number(process.argv[2] || 3000);
+const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
 const failures = [];
 const typeCount = {};
 const wingSigs = {};   // type -> Map(structural wing signature -> count)
@@ -151,27 +152,32 @@ for (let seed = 1; seed <= N; seed++) {
   const sws = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * meta.scale);
   if (sws.some(w => w < 0.49)) fail('stroke width below 0.5 after scale');
   if (/opacity|gradient|filter|url\(/.test(svg)) fail('non-eink construct present');
-  // Device plate (spec #32, ADR 0001): generateInsect(seed, { devicePx }) draws the same insect (same rolled type, wingSig
-  // and bodySig: the option adds no rng draw) with every stroke weight clamped to >= 1.0 device px and every hatch /
-  // mesh pitch to >= 2.5 device px, in plate units floor x 600 / devicePx. The pitch is read from meta.minPitch, which
-  // every pitch site reports after its clamp (plate px, i.e. after the plate scale), so the default plate must report
-  // one too or the number is dead. The caption subtitle (11 px) is dropped when it would fall under 10 device px
-  // (devicePx < 546): absent at 440, present with no option and at 800. The binomial stays.
+  // Device plate (spec #32, ADR 0001): generateInsect(seed, { devicePx }) draws the same insect with every stroke weight
+  // clamped to >= DEVICE.strokePx device px and every hatch / mesh pitch to >= DEVICE.pitchPx device px, in plate units
+  // floor x 600 / devicePx (DEVICE is the engine's exported contract). The option adds no rng draw: pass 2 re-rolls the
+  // type / variant and bodySig from the same stream, so their equality is a real assertion. meta.wingSig / wingStats are
+  // pass 1's by construction (the engine copies them, so their equality only checks the copy); pass 2's own are on
+  // meta.device and are held to the venation rules below. The pitch is read from meta.minPitch, which every pitch site
+  // reports after its clamp (plate px, i.e. after the plate scale), so the default plate must report one too or the
+  // number is dead. The caption subtitle (11 px) is dropped when it would fall under DEVICE.subtitleMinPx device px
+  // (devicePx < 600 x subtitleMinPx / 11, i.e. 546): absent at 440, present with no option and at 800. The binomial stays.
+  const DEV = 440, dev = E.generateInsectDetailed(seed, { devicePx: DEV });
   {
-    const DEV = 440, devK = 600 / DEV, dev = E.generateInsectDetailed(seed, { devicePx: DEV }), dm = dev.meta;
+    const devK = 600 / DEV, D = E.DEVICE, dm = dev.meta;
     if (dm.type !== meta.type || dm.variant !== meta.variant) fail('device plate rolls a different type');
-    if (dm.wingSig !== meta.wingSig) fail('device plate has a different wingSig');
-    if (dm.bodySig !== meta.bodySig) fail('device plate has a different bodySig');
+    if (dm.bodySig !== meta.bodySig) fail('device plate rolls a different bodySig');
+    if (dm.wingSig !== meta.wingSig) fail('device plate does not carry the default wingSig');
+    if (!dm.device || dm.device.px !== DEV || dm.device.strokeFloor !== D.strokePx * devK) fail('device plate reports no meta.device');
     if (dm.scale !== meta.scale) fail('device plate has a different plate scale (a floored site moved the bounding box)');
     if (E.generateInsect(seed, { devicePx: DEV }) !== dev.svg) fail('device plate non-deterministic');
     if (/NaN|Infinity|undefined|null/.test(dev.svg)) fail('bad number in device svg');
     if (/opacity|gradient|filter|url\(/.test(dev.svg)) fail('non-eink construct present on the device plate');
     const dsw = [...dev.svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * dm.scale);
     if (!dsw.length) fail('device plate has no strokes');
-    if (dsw.some(w => w < 1.0 * devK - 0.01)) fail('device stroke width below 1.0 device px: ' + Math.min(...dsw).toFixed(3) + ' plate px');
+    if (dsw.some(w => w < D.strokePx * devK - 0.01)) fail('device stroke width below ' + D.strokePx + ' device px: ' + Math.min(...dsw).toFixed(3) + ' plate px');
     if (!(typeof meta.minPitch === 'number' && isFinite(meta.minPitch) && meta.minPitch > 0)) fail('default plate reports no minPitch');
     if (!(typeof dm.minPitch === 'number' && isFinite(dm.minPitch) && dm.minPitch > 0)) fail('device plate reports no minPitch');
-    else if (dm.minPitch < 2.5 * devK - 0.01) fail('device hatch pitch below 2.5 device px: ' + dm.minPitch.toFixed(3) + ' plate px');
+    else if (dm.minPitch < D.pitchPx * devK - 0.01) fail('device hatch pitch below ' + D.pitchPx + ' device px: ' + dm.minPitch.toFixed(3) + ' plate px');
     const texts = s => (s.match(/<text\b/g) || []).length;
     if (texts(svg) !== 2) fail('default plate caption is not binomial + subtitle');
     if (texts(dev.svg) !== 1) fail('device plate at 440 keeps the subtitle');
@@ -187,22 +193,32 @@ for (let seed = 1; seed <= N; seed++) {
   // odonate triangle side and bridge, the middle piece of the lepidopteran discocellular). A moth plate's only joins
   // are the six discocellular pieces, and a piece the rule cannot place is drawn straight between its nodes so the
   // cell still closes, so the drop-count test does not apply to it.
+  // The same rules run on the device plate's own stats (meta.device.wingStats, pass 2's): the pitch floor may thin a
+  // ladder or a mesh, but never past the research minimums, and never into a bad junction or a dangling piece.
+  const checkWingStats = (s, what) => {
+    if (!s) return fail(what + 'no wingStats on a grown wing');
+    // lacewing: the strip under R1 (R1-Rs) carries only a few rungs in the references (neu-nothochrysa); the costal
+    // ladder is the dense one. The engine reports the R1-Rs rung count as wingStats.r1rs.
+    if (meta.type === 'lacewing' && s.r1rs > 6) fail(what + 'lacewing R1-Rs strip has ' + s.r1rs + ' rungs (max 6)');
+    if (s.joins > 0 && (s.minAngle < 100 || s.maxAngle > 145)) fail(what + 'junction angle outside 100-145: ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
+    if (meta.type !== 'moth' && s.dropped > s.joins) fail(what + 'more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
+    if ((meta.type === 'dragonfly' || meta.type === 'damselfly') && s.rungs < 40) fail(what + 'too few ladder rungs on an odonate: ' + s.rungs);
+    if (meta.type === 'mayfly' && s.rungs < 60) fail(what + 'too few ladder rungs on a mayfly: ' + s.rungs);
+    if (meta.type === 'lacewing' && s.rungs < 40) fail(what + 'too few rungs on a lacewing: ' + s.rungs);
+    if (meta.type === 'cicada' && s.joins < 4) fail(what + 'cicada nodal line incomplete: ' + s.joins + ' joins');
+  };
   if (meta.type !== 'beetle') {
-    const s = meta.wingStats;
-    if (!s) fail('no wingStats on a grown wing');
-    else {
-      // lacewing: the strip under R1 (R1-Rs) carries only a few rungs in the references (neu-nothochrysa); the costal
-      // ladder is the dense one. The engine reports the R1-Rs rung count as wingStats.r1rs.
-      if (meta.type === 'lacewing' && s.r1rs > 6) fail('lacewing R1-Rs strip has ' + s.r1rs + ' rungs (max 6)');
-      if (s.joins > 0 && (s.minAngle < 100 || s.maxAngle > 145)) fail('junction angle outside 100-145: ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
-      if (meta.type !== 'moth' && s.dropped > s.joins) fail('more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
-      if ((meta.type === 'dragonfly' || meta.type === 'damselfly') && s.rungs < 40) fail('too few ladder rungs on an odonate: ' + s.rungs);
-      if (meta.type === 'mayfly' && s.rungs < 60) fail('too few ladder rungs on a mayfly: ' + s.rungs);
-      if (meta.type === 'lacewing' && s.rungs < 40) fail('too few rungs on a lacewing: ' + s.rungs);
-      if (meta.type === 'cicada' && s.joins < 4) fail('cicada nodal line incomplete: ' + s.joins + ' joins');
-    }
+    checkWingStats(meta.wingStats, '');
+    checkWingStats(dev.meta.device.wingStats, 'device plate: ');
+    // pass 2's own signature: a mesh order (odonata, mayfly, the grasshopper archedictyon) counts its cells, which the
+    // pitch floor coarsens; every other order's sig is lanes, joins and forks, and the device drawing must keep them
+    // (measured 2026-10-07: equal on every one of 3000 seeds for those orders)
+    if (!dev.meta.device.wingSig) fail('device plate has no wingSig of its own');
+    else if (!MESH.has(meta.type) && dev.meta.device.wingSig !== meta.wingSig) fail('device plate draws a different vein plan: ' + dev.meta.device.wingSig);
   }
-  for (const w of meta.layers.wings) { const pl = w.match(/<polyline points="([^"]*)"/); if (pl && pl[1].trim().split(/\s+/).length < 2) fail('wing polyline with fewer than 2 points'); }
+  const dangling = (layers, what) => { for (const w of layers.wings) { const pl = w.match(/<polyline points="([^"]*)"/); if (pl && pl[1].trim().split(/\s+/).length < 2) fail(what + 'wing polyline with fewer than 2 points'); } };
+  dangling(meta.layers, '');
+  dangling(dev.meta.layers, 'device plate: ');
 }
 
 // Wing uniqueness: every winged type exposes meta.wingSig, a discrete signature of its outline and
@@ -233,6 +249,8 @@ const sigReport = sigRule(wingSigs, 'wing', 0.5), bodyReport = sigRule(bodySigs,
   const before = E.dailySeed(new Date('2026-10-07T13:59:59Z'));   // 23:59:59 Brisbane, 7 Oct
   const after = E.dailySeed(new Date('2026-10-07T14:00:00Z'));    // 00:00:00 Brisbane, 8 Oct
   if (before === after) dfail('instants either side of 14:00 UTC give the same day');
+  if (E.brisbaneDay(new Date('2026-10-07T13:59:59Z')) !== '2026-10-07') dfail('brisbaneDay of 13:59:59Z is not 2026-10-07');
+  if (E.brisbaneDay(new Date('2026-10-07T14:00:00Z')) !== '2026-10-08') dfail('brisbaneDay of 14:00:00Z is not 2026-10-08');
   if (before !== E.hashString('2026-10-07')) dfail('13:59:59Z is not the Brisbane 2026-10-07 seed');
   if (after !== E.hashString('2026-10-08')) dfail('14:00:00Z is not the Brisbane 2026-10-08 seed');
   if (E.dailySeed(new Date('2026-10-07T02:00:00Z')) !== E.hashString('2026-10-07')) dfail('midday Brisbane instant gives the wrong seed');

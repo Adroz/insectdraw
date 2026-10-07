@@ -58,8 +58,10 @@ function hashString(str) {
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
-// Brisbane calendar day (UTC+10, no daylight saving, so a fixed offset is exact); the day boundary is 14:00 UTC.
-function dailySeed(date) { return hashString(new Date((date || new Date()).getTime() + 10 * 3600e3).toISOString().slice(0, 10)); }
+// Brisbane calendar day (YYYY-MM-DD) of an instant, now when omitted: UTC+10 with no daylight saving, so a fixed offset
+// is exact and the day boundary is 14:00 UTC. The daily plate's seed hashes it (ADR 0002).
+function brisbaneDay(date) { return new Date((date || new Date()).getTime() + 10 * 3600e3).toISOString().slice(0, 10); }
+function dailySeed(date) { return hashString(brisbaneDay(date)); }
 
 // ---------- vector helpers ----------
 const D2R = Math.PI / 180;
@@ -89,11 +91,17 @@ const SW = { H: 'SW_H', O: 'SW_O', D: 'SW_D', F: 'SW_F' };   // heavy 2.2, outli
 const SW_PX = { H: 2.2, O: 1.5, D: 0.8, F: 0.5 };             // the weights in plate px (the token substitution divides by the plate scale)
 
 // ---------- device floors (ADR 0001) ----------
-// A device plate (generateInsectDetailed(seed, { devicePx })) is the default plate's insect with every stroke weight
-// clamped to >= 1.0 device px and every hatch / mesh pitch to >= 2.5 device px, i.e. floor x 600 / devicePx in plate
-// units. Strokes are clamped at the token substitution; pitches at draw time through floorPitch(v) (body units; the
-// floor is pitchFloor, 0 on a default plate), which also records the smallest pitch drawn for meta.minPitch. Every
-// pitch site (hatch bands, lattice, mesh cell, pile, fringe) must go through floorPitch, never a literal step.
+// The device contract, exported so the gates (tests/check.js, tests/eink.js) assert the numbers the engine draws to:
+// a device plate (generateInsectDetailed(seed, { devicePx })) is the default plate's insect with every stroke weight
+// clamped to >= strokePx device px and every hatch / mesh pitch to >= pitchPx device px, i.e. floor x 600 / devicePx
+// in plate units; the caption subtitle (11 px) is dropped where it would fall under subtitleMinPx device px.
+const DEVICE = { strokePx: 1.0, pitchPx: 2.5, subtitleMinPx: 10 };
+// Strokes are clamped at the token substitution; pitches at draw time through floorPitch(v) (body units; the floor is
+// pitchFloor, 0 on a default plate), which also records the smallest pitch drawn for meta.minPitch. Every repeated
+// mark at a spacing (hatch bands, lattice, mesh cell, pile, fringe, limb shading / spines / comb rows, antenna rami
+// and annuli, crossvein ladders, the stigma's lines) must go through floorPitch, never a literal step. A step given
+// as a fraction of a length (a limb mark's step in s, a ladder's step in u) goes through floorFrac, marks at every
+// k-th sample of a polyline through floorSamples; both are bit-identical on a default plate.
 // The plate scale is only known once the insect is drawn, so a device plate is drawn twice: pass 1 is the default
 // drawing and yields the scale, pass 2 redraws with the floors. Genes and rolls are untouched, but a clamped site may
 // consume a different number of rng draws (stipple dots, mesh sites), so rngSync() closes every such site: pass 1
@@ -102,6 +110,17 @@ const SW_PX = { H: 2.2, O: 1.5, D: 0.8, F: 0.5 };             // the weights in 
 // sit at the floor, so it takes k = 2: twice the floor keeps the two families separate.
 let pitchFloor = 0, pitchMin = Infinity, syncRec = null, syncPlay = null, syncI = 0;
 const floorPitch = (v, k) => { const p = Math.max(v, (k || 1) * pitchFloor); if (p < pitchMin) pitchMin = p; return p; };
+// a fraction f of a length L (body units): the floor applies to f x L and the fraction is replaced only when the floor
+// raises it, so a default plate's loop values are untouched
+const floorFrac = (f, L) => { const v = f * L, p = floorPitch(v); return p > v ? p / L : f; };
+// marks at every k-th sample of a polyline: the pitch is k x the closest sample spacing, and the floor raises k
+const floorSamples = (k, pl) => {
+  let d = Infinity;
+  for (let i = 1; i < pl.length; i++) { const v = vlen(sub(pl[i], pl[i - 1])); if (v > 0 && v < d) d = v; }
+  if (d === Infinity) return k;
+  const p = floorPitch(k * d);
+  return p > k * d ? Math.ceil(p / d) : k;
+};
 const rngSync = () => { if (syncRec) syncRec.push(rng.state()); else if (syncPlay) rng.seek(syncPlay[syncI]); syncI++; };
 
 // ---------- curves ----------
@@ -272,6 +291,7 @@ function limbShade(g, side, spacing) {
 }
 // fixed spines in a row along one edge, leaning distad
 function limbSpines(g, side, spacing, len, s0, s1, sw) {
+  spacing = floorPitch(spacing);
   const els = [], edge = side > 0 ? g.e1 : g.e2;
   for (let s = s0; s <= s1; s += spacing / g.L) {
     const b = bez3(edge, s);
@@ -284,7 +304,7 @@ function limbSpines(g, side, spacing, len, s0, s1, sw) {
 }
 // chevron (herringbone) muscle pattern on a saltatorial femur
 function femurHerringbone(g, side) {
-  const els = [], step = Math.max(3.2, g.L / 22);
+  const els = [], step = floorPitch(Math.max(3.2, g.L / 22));
   const mid = s => lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.5 - side * 0.08);
   const sm = 0.1, sM = 0.9;
   els.push(pathEl(cubicBezierPath([mid(sm), mid(0.35), mid(0.65), mid(sM)], false), SW.D));
@@ -306,7 +326,7 @@ function tarsusEls(p, dir0, total, w0, n, curl, opts) {
     const q = add(p, mul(dirv(a), total * 0.42));
     const g = limbGeom(p, q, opts.basitarsus[0], opts.basitarsus[1], 0);
     els.push(pathEl(limbPath(g), SW.O, '#fff'));
-    for (let s = 0.2; s < 0.95; s += 0.17) els.push(lineEl(lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.12), lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.88), SW.F));
+    for (let s = 0.2, csp = floorFrac(0.17, g.L); s < 0.95; s += csp) els.push(lineEl(lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.12), lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.88), SW.F));   // comb rows
     p = q; a += curl; w = opts.basitarsus[1] * 0.6;
     for (let k = 1; k < n; k++) {
       const q2 = add(p, mul(dirv(a), total * fr[k] * 0.9));
@@ -657,7 +677,7 @@ function antennaEls(A, G, hw) {
       Lp.push(add(ax[i], mul(nn, w / 2))); Rp.push(sub(ax[i], mul(nn, w / 2))); ws.push(w);
     }
     els.push(pathEl(smoothPath(Lp.concat(Rp.slice().reverse()), true, 0.8), SW.D, '#fff'));
-    for (let i = 2; i < m - 1; i += 2) { const nn = perp(tdir(ax, i)), w = ws[i] * 0.42; els.push(lineEl(add(ax[i], mul(nn, w)), sub(ax[i], mul(nn, w)), SW.F)); }
+    for (let i = 2, st = floorSamples(2, ax); i < m - 1; i += st) { const nn = perp(tdir(ax, i)), w = ws[i] * 0.42; els.push(lineEl(add(ax[i], mul(nn, w)), sub(ax[i], mul(nn, w)), SW.F)); }   // annuli across the club
   } else if (A.kind === 'pectinate' || A.kind === 'bipectinate') {
     els.push(outline(G.pl, w0, w0 * 0.4));
     for (const r of G.rami) { const end = add(r.at, mul(r.dir, r.bl)), mid = add(r.at, add(mul(r.dir, r.bl * 0.5), mul(r.d, r.bl * 0.08))); els.push(pathEl(cubicBezierPath([r.at, lerpP(r.at, mid, 0.6), lerpP(mid, end, 0.4), end], false), SW.F)); }
@@ -685,7 +705,7 @@ function antennaEls(A, G, hw) {
     els.push(pathEl(ellipsePath(G.pc, G.pL * 0.5, Math.max(1.8, hw * 0.06) * A.wK, Math.atan2(G.pd[1], G.pd[0]) / D2R), SW.O, '#fff'));   // postpedicel
     els.push(pathEl(smoothPath(G.ar, false), SW.D));                             // arista from the dorsal base of the postpedicel
     if (A.arista !== 'bare') {   // plumose: hairs both sides along the whole arista (Muscidae); pubescent: a few short ones
-      const apl = sampleSmooth(G.ar, false, 1, 4), hl = A.arista === 'plumose' ? Math.max(1.6, hw * 0.035) : 0.8, step = A.arista === 'plumose' ? 2 : 4;
+      const apl = sampleSmooth(G.ar, false, 1, 4), hl = A.arista === 'plumose' ? Math.max(1.6, hw * 0.035) : 0.8, step = floorSamples(A.arista === 'plumose' ? 2 : 4, apl);
       for (let i = 2; i < apl.length - 2; i += step) { const n = perp(tdir(apl, i)); els.push(lineEl(apl[i], add(apl[i], mul(n, hl)), SW.F)); els.push(lineEl(apl[i], sub(apl[i], mul(n, hl * 0.85)), SW.F)); }
     }
   } else if (A.kind === 'stylate') {
@@ -752,12 +772,12 @@ function legEls(attach, spec, meta) {
     }
     if (k === 2 && spec.corbicula) {   // bee hind tibia: fringe of long hairs round the pollen basket
       const side = outer;
-      for (let s = 0.25; s <= 0.95; s += 0.07) {
+      for (let s = 0.25, hsp = floorFrac(0.07, g.L); s <= 0.95; s += hsp) {
         const b = bez3(side > 0 ? g.e1 : g.e2, s);
         const dir = norm(add(mul(g.n, side), mul(g.d, 0.5 + (s - 0.6))));
         els.push(pathEl(cubicBezierPath([b, add(b, mul(dir, 2.5)), add(b, mul(dir, 4.5)), add(b, add(mul(dir, 6.5), mul(g.d, 1.2)))], false), SW.F));
       }
-      for (let s = 0.35; s <= 0.9; s += 0.11) { const a = lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.3), b = lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.85); els.push(lineEl(a, b, SW.F)); }
+      for (let s = 0.35, rsp = floorFrac(0.11, g.L); s <= 0.9; s += rsp) { const a = lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.3), b = lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.85); els.push(lineEl(a, b, SW.F)); }   // comb rows across the tibia
     }
     p = q;
     if (k === 2 && spec.spurs) {   // movable apical spurs on the tibia, inner side
@@ -1237,7 +1257,13 @@ function wingGraph(wing, Lw) {
       if (style === 'solid') els.push(polygonEl(closed.map(wing.T), SW.F, '#000'));
       else {
         els.push(polygonEl(closed.map(wing.T), SW.D, '#fff'));
-        if (style === 'cross' || style === 'axis') { const n = style === 'cross' ? 4 : 3; for (let k = 1; k <= n; k++) { const t = k / (n + 1), pl = []; for (let x = xa + 0.3; x <= xb - 0.3; x += 1.2) pl.push([x, lerp(yT(x), yB(x), t)]); if (pl.length > 1) els.push(emitLocalPolyline(wing, pl, style === 'cross' ? SW.D : SW.F)); } }
+        if (style === 'cross' || style === 'axis') {   // n lines along the lens at equal fractions of its height: their pitch is the height / (n + 1), widest at the peak and closing at the ends, so a device plate draws fewer lines and only where the local height keeps them a floor apart
+          let n = style === 'cross' ? 4 : 3, hPk = 0;
+          for (const p of bot) hPk = Math.max(hPk, p[1] - yT(p[0]));
+          while (n > 0 && hPk / (n + 1) < pitchFloor) n--;
+          if (n > 0) floorPitch(hPk / (n + 1));
+          for (let k = 1; k <= n; k++) { const t = k / (n + 1), pl = []; for (let x = xa + 0.3; x <= xb - 0.3; x += 1.2) { if (pitchFloor > 0 && (yB(x) - yT(x)) / (n + 1) < pitchFloor) continue; pl.push([x, lerp(yT(x), yB(x), t)]); } if (pl.length > 1) els.push(emitLocalPolyline(wing, pl, style === 'cross' ? SW.D : SW.F)); }
+        }
         if (style === 'cross') { const sp = floorPitch(1.7); for (let x = xa + 1; x < xb; x += sp) els.push(lineEl(wing.T([x, yT(x)]), wing.T([x, yB(x)]), SW.F)); }
         if (style === 'stipple') { const sp = floorPitch(1.5); for (let x = xa + 1; x < xb; x += sp) for (let y = yT(x) + 1; y < yB(x) - 0.5; y += sp) els.push(circleEl(wing.T([x + randRange(-0.3, 0.3), y]), 0.35, SW.F, '#000')); }
       }
@@ -1452,7 +1478,7 @@ function growVeins(g, G) {
     // mesh orders: the cell size and the site spacing along a ladder are hatch pitches, so both go through the device floor
     const cell = G.cell ? u => floorPitch(Math.max(G.cellMin || 1, G.cell(u, sMidAt(u), a.id, b.id))) : null;
     const kp = k * (pairK[key] || 1);
-    const sp = u => { const t = at2(u); if (!t) return 1e9; if (cell) { const c = cell(u); return floorPitch(Math.max(0.8 * c, Math.min(1.25 * c, t.w * kp))); } const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * kp * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid))); };   // R-H, floored so cells never get tiny
+    const sp = u => { const t = at2(u); if (!t) return 1e9; if (cell) { const c = cell(u); return floorPitch(Math.max(0.8 * c, Math.min(1.25 * c, t.w * kp))); } const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return floorPitch(Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * kp * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid)))); };   // R-H, floored so cells never get tiny; a ladder's rung spacing is a pitch too
     const t0 = at2(r.u0); if (!t0) continue;
     // one row (R-C): between two walls, sites walk from the wall at the local spacing (first site half a cell in) and a
     // crossvein is the bisector of each consecutive pair, so every cell is 0.85-1.8 spacings long and a gap shorter
@@ -2108,8 +2134,13 @@ function generateInsectDetailed(seed, opts) {
   const rec = [];
   const first = drawPlate(seed, opts, { record: rec });            // pass 1: the default plate, for its scale and stream positions
   const K = 600 / devicePx;
-  const r = drawPlate(seed, opts, { px: devicePx, strokeFloor: 1.0 * K, pitchFloor: 2.5 * K, scale: first.meta.scale, bbox: first.meta.bbox, replay: rec });
-  r.meta.wingSig = first.meta.wingSig;                             // the signatures describe the insect's genes; a mesh order's sig counts its cells, which the device pitch coarsens
+  const r = drawPlate(seed, opts, { px: devicePx, strokeFloor: DEVICE.strokePx * K, pitchFloor: DEVICE.pitchPx * K, scale: first.meta.scale, bbox: first.meta.bbox, replay: rec });
+  // meta.wingSig / wingStats describe the insect's genes, so a device plate carries the default drawing's (pass 1) by
+  // construction; pass 2's own (a mesh order's sig counts its cells and a ladder its rungs, which the pitch floor
+  // coarsens) stay on meta.device, where tests/check.js asserts the device venation on its own numbers
+  r.meta.device.wingSig = r.meta.wingSig;
+  r.meta.device.wingStats = r.meta.wingStats;
+  r.meta.wingSig = first.meta.wingSig;
   r.meta.wingStats = first.meta.wingStats;
   return r;
 }
@@ -2117,7 +2148,8 @@ function generateInsectDetailed(seed, opts) {
 function drawPlate(seed, opts, dev) {
   seed = seed >>> 0;
   rng = mulberry32(seed);
-  pitchFloor = dev && dev.replay ? dev.pitchFloor / dev.scale : 0;   // body units: the device floor is set after pass 1's scale
+  const replay = !!(dev && dev.replay);                             // pass 2 of a device plate
+  pitchFloor = replay ? dev.pitchFloor / dev.scale : 0;             // body units: the device floor is set after pass 1's scale
   pitchMin = Infinity; syncRec = dev && dev.record || null; syncPlay = dev && dev.replay || null; syncI = 0;
   const freshBox = () => ({ minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
   bbox = freshBox();
@@ -3322,7 +3354,8 @@ function drawPlate(seed, opts, dev) {
       const named = [];
       for (let i = 0; i < nB; i++) named.push({ early: true, forkOn: 'Rs', u: uf[i], spec: { id: 'B' + i, end: 'bT' + i, s1: sOf(tg[i]), sw: SW.D, ctrl: 1, ease: 'mid', bow: -G.bowB * jitter(0.4), stub: false } });   // pectinate branches: one bowed arc each, leaving Rs at a shallow angle and bending down to the margin
       if (G.mFork) named.push({ early: true, forkOn: 'M', u: G.mX * 0.5, spec: { id: 'Mf', end: g.margin('mfE', G.mX + 0.09, 'bot'), s1: 0.97, sw: SW.D, ctrl: 1, ease: 'mid', bow: -0.05, stub: false } });
-      for (let u = 0.07; u < 0.92; u += G.ladder * jitter(0.12)) named.push({ a: 'C', ua: u, b: 'Sc', ub: u + G.lean * 0.012, reach: 0.012, sw: SW.F, bow: 0 });   // costal ladder: 20-35 rungs leaning toward the apex
+      for (let u = 0.07, lsp = floorFrac(G.ladder, Lw); u < 0.92; u += lsp * jitter(0.12)) named.push({ a: 'C', ua: u, b: 'Sc', ub: u + G.lean * 0.012, reach: 0.012, sw: SW.F, bow: 0 });   // costal ladder: 20-35 rungs leaning toward the apex
+      rngSync();   // the ladder draws one jitter per rung, and a device plate has fewer rungs
       if (G.im) for (const u of [G.rsFork + 0.03, G.rsFork + 0.12]) named.push({ a: 'Rs', ua: u * jitter(0.08), b: 'M', reach: 0.03, sw: SW.D, bow: 0 });   // intramedian cell: a small closed cell at the root of Rs
       // gradate series: each rung leaves branch i at t and lands on branch i+1 nearer Rs (guess t - zig; the slide settles it
       // at the series' own target angle, steeper than the ladders), and the next rung leaves branch i+1 at t again, below
@@ -3750,7 +3783,8 @@ function drawPlate(seed, opts, dev) {
       const g = wingGraph(wing, Lw), named = [], gaps = [];
       // antenodal crossveins: aligned C-Sc-R1 pairs from the base to the nodus, the first two heavier (primary antenodals)
       let kA = 0;
-      for (let u = dam ? G.petiole + 0.03 : 0.09; u < G.nodus - 0.012; u += G.antStep * jitter(0.08), kA++) named.push({ a: 'C', ua: u, b: 'Sc', ub: u - G.lean * 0.012, reach: 0.01, sw: kA < 2 && !dam ? SW.D : SW.F, then: ['R1'] });
+      for (let u = dam ? G.petiole + 0.03 : 0.09, asp = floorFrac(G.antStep, Lw); u < G.nodus - 0.012; u += asp * jitter(0.08), kA++) named.push({ a: 'C', ua: u, b: 'Sc', ub: u - G.lean * 0.012, reach: 0.01, sw: kA < 2 && !dam ? SW.D : SW.F, then: ['R1'] });
+      rngSync();   // one jitter per antenodal, and a device plate has fewer
       if (G.subnodus) named.push({ a: 'C', ua: G.nodus, b: 'R1', ub: G.nodus + 0.012, reach: 0.008, sw: SW.O });   // subnodus: the nodal crossvein C-R1
       // pterostigma between C and R1 with slanted end crossveins (lower end distal); no other crossvein under it
       const r1y = x => { const y = plYAt(veins[1], x); return y === null ? topAt(wing, x, 3) : y; };
@@ -3907,7 +3941,7 @@ function drawPlate(seed, opts, dev) {
 
   // symmetric bbox (right half generated, left mirrored); a device plate keeps pass 1's fit, so its scale is the
   // default plate's (a coarser pile or fringe moves the outermost hair by a fraction of a px, never past the margin)
-  const box = dev && dev.replay ? dev.bbox : bbox;
+  const box = replay ? dev.bbox : bbox;
   const halfW = Math.max(Math.abs(box.minX), Math.abs(box.maxX));
   const bw = halfW * 2, bh = box.maxY - box.minY;
   const margin = 24;
@@ -3922,17 +3956,17 @@ function drawPlate(seed, opts, dev) {
   meta.fitted = { minX: tx - halfW * s, maxX: tx + halfW * s, minY: ty + bbox.minY * s, maxY: ty + bbox.maxY * s };
 
   // device plate: the stroke floor in plate px, and the smallest pitch drawn (plate px) for the invariant check
-  const device = dev && dev.replay ? { px: dev.px, strokeFloor: dev.strokeFloor, pitchFloor: dev.pitchFloor } : null;
+  const device = replay ? { px: dev.px, strokeFloor: dev.strokeFloor, pitchFloor: dev.pitchFloor } : null;
   const strokeFloor = device ? device.strokeFloor : 0;
   meta.device = device;
   meta.minPitch = pitchMin < Infinity ? pitchMin * s : null;
   meta.weights = { H: Math.max(SW_PX.H, strokeFloor), O: Math.max(SW_PX.O, strokeFloor), D: Math.max(SW_PX.D, strokeFloor), F: Math.max(SW_PX.F, strokeFloor) };
 
   // plate caption: italic binomial and a letter-spaced small-caps common name; the common name (11 px) is dropped on a
-  // device plate where it would fall under 10 device px (devicePx < 546), the binomial stays where it is
+  // device plate where it would fall under DEVICE.subtitleMinPx device px (devicePx < 546 at 10), the binomial stays where it is
   const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const nm = meta.name;
-  const subtitle = !device || 11 * device.px / 600 >= 10;
+  const subtitle = !device || 11 * device.px / 600 >= DEVICE.subtitleMinPx;
   const caption =
     '<text x="300" y="571" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="16" fill="#000">' +
     '<tspan font-style="italic">' + esc(nm.binomial) + '</tspan></text>' +
@@ -3978,7 +4012,7 @@ function generatePart(seed, type, part, size) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName, dailySeed, hashString, mulberry32, TYPES, PARTS };
+  module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName, dailySeed, brisbaneDay, hashString, mulberry32, TYPES, PARTS, DEVICE, SW_PX };
 }
 </script>
 
