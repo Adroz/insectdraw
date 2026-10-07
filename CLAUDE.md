@@ -43,7 +43,9 @@ contract for changes.
   share it; wing blocks read it, they do not roll it. Leg poses are validated against the body
   in the legs block (`legsOk`: ordering, mirror line, abdomen outline, pair clearance, fit) and
   re-rolled; `tests/check.js` asserts the result on `meta.legs[i].pts`, so a new pose or family
-  range must keep those invariants rather than relax the test. Antennae follow the same shape:
+  range must keep those invariants rather than relax the test. The left legs are the right legs rotated per pair by `B.legs[i].skew` about the coxa
+  (`L.legPairs` in the assembly); any new check on the right legs should also run on the rotated
+  set, as `tests/check.js` does. Antennae follow the same shape:
   `rollAntGenes` (tables `ANT_FAMS`, `ANT_POSES`) rolls the genes, `antennaGeom` builds the
   geometry without rng, and the antennae block (after the legs) validates the pose: no point of
   the right antenna reaches the mirror line (the left is its mirror image, so that is the

@@ -1,7 +1,6 @@
 # Plan: per-seed variation for legs, body, head, eyes and antennae
 
-Status: steps 1–6 implemented, 2026-10-02 (plumbing, legs, abdomen, thorax, head, antennae); step 7
-(mirror skew) still open. Follows the wing-genes work (see README "Venation" and
+Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07). Follows the wing-genes work (see README "Venation" and
 `meta.wingSig`).
 
 ### Status detail
@@ -253,3 +252,13 @@ separate agents in worktrees if wanted; step 7 waits for all of them.
   conservative on small orders.
 - **Rendering cost.** Lattice eyes and dense pile are the expensive parts; keep the element
   count near today's average (~1800) by trading density for presence.
+
+- **Step 7, done (2026-10-07).** Each leg pair rolls a skew of 2–6° either way (`B.legs[i].skew`, in
+  `bodySig`). After the right-side legs pass `legsOk`, the same set rotated about each pair's coxa by
+  its skew is validated again (midline, abdomen, crossings, fit); the angles are halved up to twice
+  and zeroed if the rotated set still fails (full strength survives on ~85% of seeds, zeroed on ~3%).
+  The legs layer is assembled as the right legs plus, per pair, `scale(-1,1) rotate(skew cx cy)` about
+  the coxa, so the left legs are no longer a stamp of the right. The rotated joints are added to the
+  plate bbox. `meta.legSkew` and `meta.legs[i].skew` / `pivot` expose it; `tests/check.js` re-runs the
+  mirror-line, abdomen and crossing checks on the rotated set. Wings, antennae and body stay exactly
+  mirrored: the plate style depends on that symmetry and the venation mirror is load-bearing.

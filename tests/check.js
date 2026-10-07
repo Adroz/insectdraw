@@ -77,9 +77,12 @@ for (let seed = 1; seed <= N; seed++) {
     const byPair = {}; for (const leg of meta.legs) byPair[leg.pair] = leg;
     const fr = byPair.front, mi = byPair.mid, hi = byPair.hind;
     if (fr && mi && hi && !(fr.femurTip[1] < mi.femurTip[1] && mi.femurTip[1] < hi.femurTip[1])) fail('femur tips not ordered front < mid < hind along the body');
-    // saltatorial hind femur: an acridid femur is a quarter to a third as wide as it is long (ref orth-grasshopper); exposed as
-    // meta.legs[2].femW / femLen by the engine
-    if (meta.type === 'grasshopper' && hi && hi.femW !== undefined) { const r = hi.femW / hi.femLen; if (r < 0.22 || r > 0.36) fail('grasshopper hind femur width/length ' + r.toFixed(2) + ' outside 0.22-0.36'); }
+    // saltatorial hind femur (docs/research-legs-eyes-antennae.md: "hind femur enormous"): it must read as a jumping leg, so
+    // it is at least 1.8x as wide as the mid femur and between 3 and 5 times as long as it is wide
+    if (meta.type === 'grasshopper' && hi && mi && hi.femW !== undefined) {
+      if (hi.femW < 1.8 * mi.femW) fail('grasshopper hind femur only ' + (hi.femW / mi.femW).toFixed(2) + 'x the mid femur width');
+      const r = hi.femLen / hi.femW; if (r < 3 || r > 5) fail('grasshopper hind femur length/width ' + r.toFixed(2) + ' outside 3-5');
+    }
     const prof = meta.abdomen.profile, hwAt = y => {   // abdomen half-width at y, from the sampled profile
       if (y < prof[0][0] || y > prof[prof.length - 1][0]) return 0;
       const k = Math.min(prof.length - 2, Math.floor((y - prof[0][0]) / 2)), a = prof[k], b = prof[k + 1];
@@ -87,20 +90,32 @@ for (let seed = 1; seed <= N; seed++) {
     };
     const segsCross = (a, b, c, d) => { const cr = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
       const d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); };
-    for (const leg of meta.legs) {
-      const pts = leg.pts;
-      if (pts.some(p => p[0] < 0)) fail(leg.pair + ' leg crosses the mirror line');
-      for (let k = 3; k + 1 < pts.length; k++) {   // femur tip onward, sampled every 2 px, never inside the abdomen below the thorax
-        const a = pts[k], b = pts[k + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2));
-        for (let q = 0; q <= n; q++) { const x = a[0] + (b[0] - a[0]) * q / n, y = a[1] + (b[1] - a[1]) * q / n; if (y > meta.thorax.yBot && x < hwAt(y) - 0.5) { fail(leg.pair + ' leg inside the abdomen outline'); break; } }
+    // one leg set (right side as drawn, or the left side = each pair rotated about its coxa by its skew before mirroring):
+    // nothing on the mirror line, nothing inside the abdomen below the thorax, tarsus tips on the plate, no pair crossing
+    const checkLegSet = (sets, label) => {
+      sets.forEach((pts, i) => {
+        const pair = meta.legs[i].pair;
+        if (pts.some(p => p[0] < 0)) fail(pair + label + ' leg crosses the mirror line');
+        for (let k = 3; k + 1 < pts.length; k++) {   // femur tip onward, sampled every 2 px
+          const a = pts[k], b = pts[k + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2));
+          for (let q = 0; q <= n; q++) { const x = a[0] + (b[0] - a[0]) * q / n, y = a[1] + (b[1] - a[1]) * q / n; if (y > meta.thorax.yBot && x < hwAt(y) - 0.5) { fail(pair + label + ' leg inside the abdomen'); break; } }
+        }
+        const tip = pts[pts.length - 1], tx = 300 + tip[0] * meta.scale, ty = meta.fitted.minY + (tip[1] - meta.bbox.minY) * meta.scale;
+        if (tx < 0 || tx > 600 || ty < 0 || ty > 600) fail(pair + label + ' tarsus tip outside the plate');
+      });
+      for (let a = 0; a < sets.length; a++) for (let b = a + 1; b < sets.length; b++) {
+        const A = sets[a], Bp = sets[b]; let hit = false;
+        for (let k = 2; k + 1 < A.length && !hit; k++) for (let m = 2; m + 1 < Bp.length; m++) if (segsCross(A[k], A[k + 1], Bp[m], Bp[m + 1])) { hit = true; break; }
+        if (hit) fail(meta.legs[a].pair + ' and ' + meta.legs[b].pair + label + ' legs cross');
       }
-      const tip = leg.tip, tx = 300 + tip[0] * meta.scale, ty = meta.fitted.minY + (tip[1] - meta.bbox.minY) * meta.scale;
-      if (tx < 0 || tx > 600 || ty < 0 || ty > 600) fail(leg.pair + ' tarsus tip outside the plate');
-    }
-    for (let a = 0; a < meta.legs.length; a++) for (let b = a + 1; b < meta.legs.length; b++) {
-      const A = meta.legs[a].pts, Bp = meta.legs[b].pts; let hit = false;
-      for (let k = 2; k + 1 < A.length && !hit; k++) for (let m = 2; m + 1 < Bp.length; m++) if (segsCross(A[k], A[k + 1], Bp[m], Bp[m + 1])) { hit = true; break; }
-      if (hit) fail(meta.legs[a].pair + ' and ' + meta.legs[b].pair + ' legs cross');
+    };
+    checkLegSet(meta.legs.map(l => l.pts), '');
+    // mirror skew (plan step 7): the left legs are the right legs rotated 0-6 degrees about their own coxa, then mirrored
+    if (!meta.legSkew || meta.legSkew.length !== 3) fail('no legSkew on meta');
+    else {
+      const rotAbout = (p, c, deg) => { const a = deg * Math.PI / 180, dx = p[0] - c[0], dy = p[1] - c[1]; return [c[0] + dx * Math.cos(a) - dy * Math.sin(a), c[1] + dx * Math.sin(a) + dy * Math.cos(a)]; };
+      for (const leg of meta.legs) { const a = Math.abs(leg.skew); if (a !== 0 && (a < 2 || a > 6)) fail(leg.pair + ' leg skew ' + leg.skew.toFixed(1) + ' outside 2-6 degrees (or 0)'); }
+      checkLegSet(meta.legs.map(leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew))), ' skewed');
     }
   }
   // Head (meta.head, docs/research-head-eyes.md): every compound eye stays inside the head's bounding box with at most
@@ -139,6 +154,8 @@ for (let seed = 1; seed <= N; seed++) {
     const tip = meta.lepTail.tip, W = meta.lepTail.W;
     const near = meta.lepHindEnds.map(p => ({ p, d: Math.hypot(p[0] - tip[0], p[1] - tip[1]) })).sort((a, b) => a.d - b.d).slice(0, 2);
     if (near.length === 2) { const sep = Math.hypot(near[0].p[0] - near[1].p[0], near[0].p[1] - near[1].p[1]); if (sep < W * 0.06) fail('swallowtail: two hindwing veins converge at the tail root (' + (sep / W).toFixed(3) + ' of span apart)'); }
+    const atTip = meta.lepHindEnds.filter(p => Math.hypot(p[0] - tip[0], p[1] - tip[1]) < W * 0.02).length;
+    if (atTip !== 1) fail('swallowtail: ' + atTip + ' hindwing veins end at the tail tip (want exactly one, ref lep-papilio)');
   }
   // stroke widths >= 0.5 after scale
   const sws = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * meta.scale);
@@ -156,10 +173,10 @@ for (let seed = 1; seed <= N; seed++) {
   if (meta.type !== 'beetle') {
     const s = meta.wingStats;
     if (!s) fail('no wingStats on a grown wing');
-    // lacewing: the strip under R1 (R1-Rs) carries only a few rungs in the references (neu-nothochrysa); the costal ladder
-    // is the dense one. The engine reports the R1-Rs rung count as wingStats.r1rs.
-    if (meta.type === 'lacewing' && s.r1rs !== undefined && s.r1rs > 6) fail('lacewing R1-Rs strip has ' + s.r1rs + ' rungs (max 6)');
     else {
+      // lacewing: the strip under R1 (R1-Rs) carries only a few rungs in the references (neu-nothochrysa); the costal
+      // ladder is the dense one. The engine reports the R1-Rs rung count as wingStats.r1rs.
+      if (meta.type === 'lacewing' && s.r1rs > 6) fail('lacewing R1-Rs strip has ' + s.r1rs + ' rungs (max 6)');
       if (s.joins > 0 && (s.minAngle < 100 || s.maxAngle > 145)) fail('junction angle outside 100-145: ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
       if (meta.type !== 'moth' && s.dropped > s.joins) fail('more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
       if ((meta.type === 'dragonfly' || meta.type === 'damselfly') && s.rungs < 40) fail('too few ladder rungs on an odonate: ' + s.rungs);

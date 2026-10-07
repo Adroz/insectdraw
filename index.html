@@ -1440,7 +1440,7 @@ function growVeins(g, G) {
         if (!junctionOK(a, hA.p[0], gapA * spx)) continue;
         place(a, hA.p, hA.d, b, hB.p[0], Math.max(spx, (G.reachW || 0) * t.w), { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw });   // reachW: the slide also grows with the strip width, so a rung across a wide strip can still lean into the band
       }
-      pairRungs[key] = (pairRungs[key] || 0) + (stats.joins - before);
+      pairRungs[key] = (pairRungs[key] || 0) + (stats.joins - before); pairRungs[pairKey(b, a)] = pairRungs[key];
       return stats.joins - before;
     };
     if (!G.rows2) {   // walls = the strip's ends and its named crossveins; a ladder between consecutive walls
@@ -2039,7 +2039,7 @@ function rollBodyGenes(type, P) {
       swell: i === 2 ? rr(F.swell) : lerp(1, rr(F.swell), 0.5), flare: rr(F.flare), curl: randRange(4, 20), tarsomeres,
       bowSign: B.pose === 'walking' ? (i % 2 ? -1 : 1) : 1,
       spines: null, spurs: randInt(F.spurs[0], F.spurs[1]), spurLen: randRange(0.8, 1.6), fringe: null, pads: rng() < F.pads, padK: randRange(1, 1.5), clawK: rr(F.clawK),
-      ang: null,
+      ang: null, skew: randRange(2, 6) * (rng() < 0.5 ? -1 : 1),   // mirror skew (plan step 7): the left leg is rotated this much about its coxa
     };
     if (rng() < F.spines) {
       const seg = F.spineSeg === 'both' ? (rng() < 0.6 ? 'both' : 'tibia') : F.spineSeg;
@@ -2049,7 +2049,7 @@ function rollBodyGenes(type, P) {
     if (rng() < F.fringe) g.fringe = { spacing: randRange(2.6, 4.5), len: randRange(3, 7), tibia: true, femur: rng() < 0.5 };
     // order specifics
     if (saltatorial && i === 2) {   // saltatorial: huge femur with chevron muscles, serrated tibia, two pairs of apical spurs
-      g.herringbone = true; g.bowSign = -1; g.femFrac = randRange(0.24, 0.33); g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);   // acridid femur a quarter to a third as wide as long (ref orth-grasshopper)
+      g.herringbone = true; g.bowSign = -1; g.femFrac = randRange(0.24, 0.33);   // acridid hind femur: working estimate of 3-4x as long as deep (no leg reference in docs/ref yet; measure when one is added) g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);   // acridid femur a quarter to a third as wide as long (ref orth-grasshopper)
       g.spines = { tibia: true, femur: false, side: 'outer', double: true, spacing: randRange(4, 6.5), len: randRange(0.6, 0.9) };
       g.ang = B.pose === 'tucked' ? { F: [40, 62], fold: [24, 40], T: [5, 18] } : { F: [40, 65], fold: [30, 52], T: [5, 20] };
     }
@@ -2062,7 +2062,7 @@ function rollBodyGenes(type, P) {
     B.legs[i] = g;
   }
   B.sig.push(B.pose, fam || type, tarsomeres, Math.round(lenK * 5), B.thorax.subSeg, B.abd.seg, B.abd.ovipositor ? 1 : 0,
-    ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4)].join('')));
+    ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4), Math.round(g.skew)].join('')));
   return B;
 }
 
@@ -2564,7 +2564,10 @@ function generateInsectDetailed(seed, opts) {
         fringe: g.fringe, pulvilli: g.pulvilli, padK: g.padK, clawK: g.clawK, herringbone: g.herringbone, femurTeeth: g.femurTeeth, shade: g.shade, corbicula: g.corbicula,
       };
       if (g.femW) spec.widths[1] = [g.femW * wk, 6 * wk];
-      if (g.femFrac) spec.widths[1] = [spec.lens[1] * g.femFrac, 6 * wk];   // saltatorial femur: width as a fraction of its own final length
+      if (g.femFrac) {   // saltatorial femur: width as a fraction of its own final length, and never under 1.9x the mid femur's width (the jumping leg must read as the big one)
+        const midW = 7 * B.legs[1].swell * wk0 * B.legs[1].wk;
+        spec.widths[1] = [Math.min(spec.lens[1] / 3, Math.max(spec.lens[1] * g.femFrac, 1.9 * midW)), 6 * wk];
+      }
       if (g.herringbone) spec.widths[2] = [5.5 * wk, 3.2 * g.flare * wk];
       if (g.corbicula) { spec.widths[2] = [4.5 * wk, 9.5 * wk]; spec.basitarsus = [7 * wk, 6 * wk]; }
       return spec;
@@ -2612,14 +2615,31 @@ function generateInsectDetailed(seed, opts) {
       reasons.push(why);
       if (why === 'fit') lenK *= 0.92;   // long-legged family on a long body: clamp the splay rather than the plate scale
     }
-    meta.legRoll = { attempts: attempt + 1, pose, why, lenK, reasons };
+    // mirror skew: the left legs are the right legs rotated about their coxae (each pair its own angle) and then mirrored.
+    // The rotated set must pass every rule the right side passed (midline, abdomen, crossings, fit): as rolled, else with
+    // every angle reversed, else no skew.
+    const pivots = B.legs.map(g => attachOf(g).p);
+    const rotAbout = (p, c, deg) => add(c, rot(sub(p, c), deg * D2R));
+    let skewK = 1;   // 1 as rolled, -1 the other way round, 0 none: the realised skew stays in 2-6 degrees or is dropped
+    for (const kTry of [1, -1, 0]) {
+      skewK = kTry;
+      const rj = joints.map((j, i) => j.map(p => rotAbout(p, pivots[i], B.legs[i].skew * skewK)));
+      if (!legsOk(rj, specs)) break;
+    }
+    const skews = B.legs.map(g => g.skew * skewK);
+    for (let i = 0; i < 3; i++) for (const p of joints[i]) { const q = rotAbout(p, pivots[i], skews[i]); bb(q); bb([q[0] + 5, q[1] + 5]); bb([q[0] - 5, q[1] - 5]); }   // the rotated copy may reach further than the right side
+    meta.legSkew = skews;
+    meta.legRoll = { attempts: attempt + 1, pose, why, lenK, reasons, skewK };
     B.sig.push(pose, ...specs.map(sp => Math.round(sp.dirs[1] / 12) + ':' + Math.round((sp.dirs[2] - sp.dirs[1]) / 12)));
     const legMeta = [];
+    L.legPairs = [];
     for (let i = 2; i >= 0; i--) {     // hind first so front overlaps
       const at = attachOf(B.legs[i]);
-      L.legs.push(...legEls(at.p, specs[i], legMeta));
+      const els = legEls(at.p, specs[i], legMeta);
+      L.legs.push(...els);
+      L.legPairs.push({ els, pivot: at.p, skew: skews[i] });
       const lm = legMeta[legMeta.length - 1];
-      lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3];
+      lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3]; lm.skew = skews[i]; lm.pivot = at.p;
       lm.femW = specs[i].widths[1][0]; lm.femLen = specs[i].lens[1];
     }
     legMeta.reverse();   // front, mid, hind
@@ -2864,7 +2884,7 @@ function generateInsectDetailed(seed, opts) {
     const SF = lepSpace(fore, [W * 0.1, 0], ends(fVeins), nR + 3);       // cells posterior to M3 start at nR+3
     const SH = lepSpace(hind, hO, ends(hVeins), G.nRh + 3);
     meta.lepHindEnds = ends(hVeins);
-    if (G.tail) meta.lepTail = { tip: hwPts[5], W };
+    if (G.tail) meta.lepTail = { tip: tailTip, W };
 
     // ---- pattern: a compositional ground plan (docs/research-lepidoptera-wings.md). Every element
     // (basal field, bands, cross-lines, discal element, ocelli, spot rows, submarginal, margin, apical
@@ -3185,7 +3205,7 @@ function generateInsectDetailed(seed, opts) {
       nB: randInt(8, 14), rsEnd: randRange(0.78, 0.88), ladder: randRange(0.022, 0.038), twig: randRange(1.5, 3.5), bowB: randRange(0.03, 0.09),
       grad: [], im: rng() < 0.85, mFork: rng() < 0.5, mX: randRange(0.28, 0.4), cuX: randRange(0.16, 0.26), nmc: randInt(1, 4), zig: randRange(0.07, 0.12), drift: randRange(0, 0.01), gradAng: randRange(108, 116),   // gradate rung lean (fraction of a branch), per-branch drift of the series, the rungs' target angle
       costal: randRange(0.07, 0.11), sub: randRange(0.04, 0.06), rsGap: randRange(1.1, 1.5),                        // costal field depth at its widest and the Sc-R1 gap (chord fractions); R1-Rs gap in Sc-R1 gaps
-      k: randRange(1.4, 2.2), angle: randRange(110, 126), lean: rng() < 0.8 ? -1 : 1, rsFork: randRange(0.07, 0.12),   // site spacing / strip width; junction genes; where Rs leaves R1
+      k: randRange(1.4, 2.2), kR1Rs: randRange(3.2, 4.5), angle: randRange(110, 126), lean: rng() < 0.8 ? -1 : 1, rsFork: randRange(0.07, 0.12),   // kR1Rs: the R1-Rs strip's spacing multiplier (ref neu-nothochrysa: 2-5 rungs there)   // site spacing / strip width; junction genes; where Rs leaves R1
     };
     { const ng = randInt(1, 3); for (let g = 0; g < ng; g++) G.grad.push(lerp(0.42, 0.78, (g + 0.5) / ng) * jitter(0.08)); }
     const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: 0.65, hind: true }, { L: Lw, k: 1, th: theta, t: 0.35, hind: false }];
@@ -3253,7 +3273,7 @@ function generateInsectDetailed(seed, opts) {
       for (const g0 of G.grad) { let t = g0; for (let i = 0; i < nB; i++) { named.push({ a: 'B' + i, ua: lerp(uf[i], ut[i], t), b: i + 1 < nB ? 'B' + (i + 1) : 'Rs', ub: lerp(uf[i + 1], ut[i + 1], Math.max(0.08, t - G.zig)), reach: 0.03, sw: SW.D, bow: 0, angT: G.gradAng }); t = Math.min(0.9, t + G.drift); } }
       for (let q = 0; q < G.nmc; q++) named.push({ a: 'M', ua: lerp(0.25, 0.85, (q + 0.5) / G.nmc) * G.cuX, b: 'Cu', reach: 0.03, sw: SW.F });   // m-cu rungs
       const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.05, angle: G.angle, lean: G.lean, bowAmt: 0.02, grad: 0.15, stubProb: 0, stubLen: 0.08,
-        noPair: [['C', 'Sc'], ['Sc', 'R1'], ['M', 'Cu']], pairK: [['R1', 'Rs', randRange(3.2, 4.5)]] });   // the costal ladder and the m-cu rungs are named; the subcostal field is empty; the R1-Rs strip is sparse (ref neu-nothochrysa: 2-5 rungs)
+        noPair: [['C', 'Sc'], ['Sc', 'R1'], ['M', 'Cu']], pairK: [['R1', 'Rs', G.kR1Rs]] });   // the costal ladder and the m-cu rungs are named; the subcostal field is empty; the R1-Rs strip is sparse
       L.wings.push(...g.emit());
       L.wings.push(...costaEls(wing, X(0), X(0.96)));
       for (const l of grown.lanes) if (l.id[0] === 'B' || l.id === 'Rs' || l.id === 'M' || l.id === 'Mf' || l.id === 'Cu') L.wings.push(...twigEnd(wing, l.pl, l.id === 'Cu' || l.id === 'M' ? 2 : G.twig));   // end-twigging on the outline
@@ -3263,7 +3283,7 @@ function generateInsectDetailed(seed, opts) {
     }
     meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, r1rs: foreGrown.stats.pairRungs['R1|Rs'] || 0 };
     meta.wingSig = ['neu', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), G.nB, G.grad.length, G.im ? 1 : 0, G.mFork ? 1 : 0, G.nmc, foreGrown.joins.length, Math.round(G.hw * 50), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.bowB * 50),
-      Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100), Math.round(G.costal * 50), Math.round(G.k * 4)].join(',');
+      Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100), Math.round(G.costal * 50), Math.round(G.k * 4), Math.round(G.kR1Rs * 2)].join(',');
   }
 
   if (type === 'cicada') {
@@ -3820,11 +3840,13 @@ function generateInsectDetailed(seed, opts) {
   partEnd('wings');
   // ---------- assemble ----------
   meta.layers = L;
-  const mirrored = k => '<g>' + L[k].join('') + '</g><g transform="scale(-1,1)">' + L[k].join('') + '</g>';
+  const mirrored = (k, pairs) => '<g>' + L[k].join('') + '</g><g>' + (pairs   // pairs: optional per-pair rotation about a pivot applied before the mirror
+    ? pairs.map(pr => '<g transform="scale(-1,1) rotate(' + fmt(pr.skew) + ' ' + fmt(pr.pivot[0]) + ' ' + fmt(pr.pivot[1]) + ')">' + pr.els.join('') + '</g>').join('')
+    : '<g transform="scale(-1,1)">' + L[k].join('') + '</g>') + '</g>';
   const single = k => '<g>' + L[k].join('') + '</g>';
   // legs sprout from under the body; wings are dorsal, so they lie over the body with
   // their roots on the thorax, and the tegulae cover the roots
-  const order = [mirrored('legs'), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('wings'), mirrored('tegulae'), mirrored('antennae')];
+  const order = [mirrored('legs', L.legPairs), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('wings'), mirrored('tegulae'), mirrored('antennae')];
 
   // symmetric bbox (right half generated, left mirrored)
   const halfW = Math.max(Math.abs(bbox.minX), Math.abs(bbox.maxX));

@@ -547,12 +547,19 @@ A step is done when a 4× zoom of a generated wing placed beside the reference s
 straight full-span vein, no 90° junction, closed cells where the reference has them, open
 membrane where it does not, the stigma as a lens, and the weight hierarchy of R7.
 
-## Follow-ups noted at the 2026-10-02 merge
+## Follow-ups noted at the 2026-10-02 merge (all closed 2026-10-07)
 
-- Lacewing: the costal ladder continues under Sc into the Sc–R1 strip on some seeds; the
-  references (neu-nothochrysa) carry the ladder only between C and Sc. Restrict site rungs in the
-  Sc–R1 strip to a few, or none.
-- Butterfly with a swallowtail (e.g. seed 236): the hindwing veins converge into the tail root and
-  read as a tangle; aim 2A and Cu2 at nodes either side of the tail root, not into it.
-- Grasshopper: hind femur still reads slender for a saltatorial leg (body track).
-- Bee/wasp: geniculate antennae occasionally cross above the head (antenna step of the body plan).
+- Lacewing: the note said the ladder spilled into the Sc–R1 strip; that strip was already in
+  `noPair`. The dense rungs were in the R1–Rs strip (the only site strip under the costa). Closed
+  by `pairK` on `growVeins`: that pair now takes sites at 3.2–4.5× the costal spacing (`kR1Rs`
+  gene, in the signature), leaving 2–5 rungs as on neu-nothochrysa; `check.js` asserts ≤ 6.
+- Swallowtail: the note said to aim 2A and Cu2 either side of the tail root. The real cause was
+  `marginTargets` sampling the outline by index, so the tail lobe's dense samples pulled three to
+  five veins into it. Closed the other way round, following lep-papilio: targets are sampled from
+  the outline with the tail lobe removed and exactly one vein (the one whose target angle is
+  nearest the tail) runs to the tail tip. `check.js` asserts exactly one endpoint at the tip and
+  the next two at least 6% of the span apart.
+- Grasshopper hind femur: width now a fraction (0.24–0.33) of the femur's final length instead of
+  an absolute the thickness factor could thin. Working estimate; no leg reference in `ref/` yet.
+  `check.js` asserts hind femur ≥ 1.8× the mid femur width and 3–5× as long as wide.
+- Bee/wasp antenna crossing: closed by the antenna step (body plan step 6).

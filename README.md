@@ -206,7 +206,9 @@ aristate with a plumose or bare arista or stylate; bristle antennae on
 dragonflies, cicadas and mayflies), with length, segment count, club, rami,
 lamellae, arista, socket and a pose (angle, outward curvature, droop) that is
 checked against the mirror line, the plate and raised forelegs and re-rolled
-(`docs/research-antennae.md`). The discrete part is exposed as `meta.bodySig`,
+(`docs/research-antennae.md`). Each leg pair is also
+rotated 2–6° about its coxa on the left side only (re-validated against the body and
+the other legs), so the two sides are not a mirror stamp. The discrete part is exposed as `meta.bodySig`,
 held to the same 10% / 50% rule as `wingSig` by `tests/check.js`, which also
 asserts the leg invariants above on `meta.legs[i].pts` and the antenna
 invariants on `meta.antennae.pts`.
