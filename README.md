@@ -25,8 +25,9 @@ but for insects.
 ## Use
 
 Open `index.html` in a browser. Enter a seed and **Generate**, hit **Random**,
-or **Daily** (seed = FNV-1a hash of today's `YYYY-MM-DD`, so the plate is
-the same all day and changes tomorrow). **Back** steps through the seeds you
+or **Daily** (seed = FNV-1a hash of today's `YYYY-MM-DD` in Brisbane, so the
+plate is the same all day and changes at the day boundary; the same plate is
+published for e-ink panels, see "Daily plate" below). **Back** steps through the seeds you
 have viewed in this session (up to 100), so a plate that flashed past on
 Random can be recovered. **Compare** opens a second, independent pane with
 its own seed, controls and Back history, for cycling one side against the
@@ -69,6 +70,29 @@ cropped to its own bounding box; `generateInsectDetailed(seed, { type })`
 forces the body plan without disturbing the rest of the seed's randomness,
 so a forced wasp is the same drawing the seed would produce if it had rolled
 a wasp anyway.
+
+## Daily plate
+
+The daily plate is published on GitHub Pages by a scheduled workflow
+(`.github/workflows/daily.yml`, ADR 0002): at the day boundary (00:00
+Brisbane, 14:00 UTC), on every push to `main` and on manual dispatch, the
+workflow renders the device plate for the Brisbane calendar day and deploys it
+with the site. Nothing is committed; a failed render leaves the previous deploy
+live. The consumer contract:
+
+| URL | What |
+| --- | --- |
+| `https://adroz.github.io/insectdraw/daily/insect.png` | the device raster: 440×440, 1-bit palette PNG (black and white only), the device plate rasterised through the fixed pipeline (resize to 440 on white, grayscale, threshold 128); the panel shows it as is |
+| `https://adroz.github.io/insectdraw/daily/insect.svg` | the device plate itself (`devicePx: 440`, 600×600 viewBox), for a device that rasterises its own size |
+| `https://adroz.github.io/insectdraw/daily/insect.json` | the sidecar: `date` (the Brisbane calendar day, `YYYY-MM-DD`), `seed` (the integer, `#<seed>` on the web page opens the same plate), `name` (`{ genus, species, common, binomial }`), `devicePx` (440) |
+
+The seed is `hashString(date)`, the seed the web page's **Daily** button
+picks on that day, so the two never disagree. Any day's files are reproduced
+locally with `node scripts/render-daily.js 2026-01-01` (writes `daily/`;
+`--out DIR` elsewhere), and `npm run check:daily` tests that script. The SVG
+and JSON match the published ones byte for byte; the PNG's caption glyphs
+can differ where the local machine has Georgia and the runner (DejaVu Serif)
+does not.
 
 ## Venation
 
@@ -255,6 +279,8 @@ antennal socket at the order's position on the head.
 ```
 node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks, plus the device plate floors at 440 (about 15 min)
 npm install && npm test                      # e-ink survival gate: every layer rasterised at the device size through the panel pipeline (sharp), all strokes and fine strokes alone
+node scripts/render-daily.js 2026-01-01      # the daily plate for a Brisbane calendar day into daily/ (insect.svg, insect.png, insect.json); no date = today
+npm run check:daily                          # runs that script for a fixed day and checks the three files, the sidecar fields and the 1-bit 440×440 raster
 node tests/sheet.js out.png 3 wasp:6         # contact sheet PNG via headless Chromium (first 6 wasp seeds, 3 columns)
 node tests/sheet.js out.png 3 1,2,3,4,5,6    # ... or explicit seeds; set CHROMIUM=/path/to/chrome if it is not found
 node tests/sheet.js out.png 4 random:12 --part wings --type wasp   # one part only, 12 random seeds all forced to wasps

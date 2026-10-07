@@ -5,7 +5,8 @@
   "description": "Procedural Victorian-style insect plates. The engine (index.html) has no dependencies; sharp is only for the e-ink raster gate.",
   "scripts": {
     "test": "node tests/eink.js",
-    "check": "node tests/check.js 3000"
+    "check": "node tests/check.js 3000",
+    "check:daily": "node tests/daily.js"
   },
   "devDependencies": {
     "sharp": "^0.35.5"

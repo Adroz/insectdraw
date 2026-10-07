@@ -1,0 +1,85 @@
+# Daily plate on GitHub Pages (spec #32, ticket #36, ADR 0002).
+#
+# Renders the daily plate (the device plate for the Brisbane calendar day, as a 440×440 1-bit PNG, the
+# SVG and a JSON sidecar) into daily/ next to the site and deploys the lot through GitHub Pages from a
+# build artifact. Nothing is committed; a failed render fails the deploy and the previous deploy stays live.
+#
+# Triggers:
+#   schedule          00:00 Brisbane = 14:00 UTC (UTC+10, no daylight saving; ADR 0002 for why the day
+#                     boundary is Brisbane midnight, docs/adr/0002-*.md). The seed is the FNV-1a hash of
+#                     the Brisbane calendar date, so the web page's Daily button and this plate agree.
+#   push to main      the site and the plate pick up engine changes at once.
+#   workflow_dispatch a manual run, to re-render after a failed cron or to inspect the PNG.
+#
+# One-time switch of the Pages source from the branch deploy (build_type "legacy", branch main, path /)
+# to this workflow (build_type "workflow"), run once from a checkout of main after review:
+#   gh api -X PUT repos/Adroz/insectdraw/pages -F build_type=workflow
+# (REST: PUT /repos/{owner}/{repo}/pages, body field build_type: "legacy" | "workflow".) To revert:
+#   gh api -X PUT repos/Adroz/insectdraw/pages -F build_type=legacy -F source[branch]=main -F source[path]=/
+#
+# Consumer contract (README, "Daily plate"): https://adroz.github.io/insectdraw/daily/insect.png,
+# insect.svg and insect.json beside it with date, seed, name, devicePx.
+#
+# Fonts: the caption asks for Georgia, which GitHub's ubuntu runners lack; librsvg falls back through
+# fontconfig, so fonts-dejavu-core is installed and the binomial renders in DejaVu Serif. The local
+# reproduce command (node scripts/render-daily.js YYYY-MM-DD) matches byte for byte in the SVG and JSON;
+# the PNG caption glyphs differ only where the local machine has Georgia.
+name: Daily plate
+
+on:
+  schedule:
+    - cron: '0 14 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time; a cron and a push landing together queue rather than overlap.
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install a serif fallback for the caption (Georgia is not on the runner)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+
+      - run: npm ci
+
+      # The branch deploy served the repo root; mirror it minus the dev-only files.
+      - name: Stage the site
+        run: |
+          rsync -a --delete \
+            --exclude '.git' --exclude '.github' --exclude 'node_modules' \
+            --exclude 'tests' --exclude 'scripts' \
+            --exclude 'package.json' --exclude 'package-lock.json' \
+            --exclude '_site' --exclude 'daily' \
+            ./ _site/
+
+      - name: Render the daily plate
+        run: node scripts/render-daily.js --out _site/daily
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
