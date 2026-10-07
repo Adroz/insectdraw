@@ -8,6 +8,21 @@ contract for changes.
 - The engine lives in `index.html` inside `<script id="engine">` (pure generation, no DOM), with that
   page's CSS and its short UI script at the end; `compare.html` and `parts.html` are small pages that
   fetch the engine from it. No build step, no dependencies.
+- A plate is drawn by `drawPlate`, a ~30-line orchestrator that calls one module-scope function per
+  section in a fixed order: `rollProportions` (the size table and family pick), `layoutBody` (body
+  genes, thorax and abdomen profiles, wing roots), `drawAbdomen`, `drawThorax`, `drawHead`,
+  `drawTegulae`, `drawLegs`, `drawAntennae`, then the order's wing block from `WING_BLOCKS`
+  (`wingsLepidoptera`, `wingsDiptera`, `wingsNeuroptera`, `wingsCicada`, `wingsEphemeroptera`,
+  `wingsHymenoptera`, `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`) and `assemblePlate`.
+  `rollProportions` takes the type and returns `P`; every other section takes one context object `C`
+  (`seed`, `type`, `dev`, `replay`, `L`, `meta`, `outerBox` from the orchestrator; `P`, `B`, `thorax`,
+  `abdomen`, `abdHW`, `headTop`, `headCy`, `WING_ROOTS` added by `layoutBody`), destructures only the
+  fields it reads, and draws into `C.L` / `C.meta`. The call order is the rng order: never reorder the
+  calls, and a new section that draws goes in as another function on `C`, not inline in `drawPlate`.
+  A refactor that must not change any drawing proves it with `tests/snapshot.js`: `git show
+  main:index.html > /tmp/old.html`, `node tests/snapshot.js write before.json 3000 --engine /tmp/old.html`,
+  then `node tests/snapshot.js check before.json 3000` on the new engine (every plate, every tenth
+  device plate, every fiftieth part crop, byte for byte; a fixture of a different size fails the check).
 - `tests/check.js` and `tests/sheet.js` extract the engine script with a regex on
   `<script id="engine">` and run it under `node vm`, so keep that tag and the
   `module.exports` block at the bottom of the engine intact.
@@ -79,7 +94,7 @@ contract for changes.
 - Legs and wings attach through `thorax.yAt(t)` / `thorax.hwAt(y)`, so the thorax profile
   (`B.thorax.anchors` → `P.thoraxAnchors`) must keep `bodyPart`'s interface and stay wide where
   they land. The wing blocks' root positions are mirrored in the `WING_ROOTS` table in
-  `generateInsectDetailed` (the tegula sits on the first entry; `tests/check.js` asserts width
+  `layoutBody` (the tegula sits on the first entry; `tests/check.js` asserts width
   there): change a wing block's root `t` and update the table in the same commit.
 - The head is drawn from `B.head` (order table `HD` in `rollBodyGenes`, rules in
   `docs/research-head-eyes.md`). `P.headW` / `P.headH` / `headTop` / `headCy` stay the bounding box
@@ -106,14 +121,15 @@ node tests/check.js 3000                 # invariants + determinism + wing uniqu
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster
 node tests/pages.js                      # the three pages in headless Chromium: chrome, panes, hash, redirect
+node tests/snapshot.js write|check f.json 3000 [--engine old.html]   # byte-identity fixture for engine refactors (write on the old engine, check on the new)
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
 ```
 
 For a part in isolation use `node tests/sheet.js out.png 4 random:12 --part wings --type wasp`
-or open `parts.html` over HTTP and Reroll. `generatePart` relies on `partStart()`/`partEnd()`
-bracketing each drawing section in `generateInsectDetailed`; keep those brackets if you move
-sections, and force a type with `generateInsectDetailed(seed, { type })` (the type pick is
-still drawn from the stream, so forcing never shifts the other rolls).
+or open `parts.html` over HTTP and Reroll. `generatePart` relies on the `partStart()`/`partEnd()`
+brackets around each section call in `drawPlate` (`meta.partBox` by section name); keep those
+brackets if you move or add a section, and force a type with `generateInsectDetailed(seed, { type })`
+(the type pick is still drawn from the stream, so forcing never shifts the other rolls).
 
 Always render a sheet for every body plan you touched and compare against the previous
 render. Numbers passing is not the same as the plates looking varied and anatomically sane.
