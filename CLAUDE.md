@@ -26,7 +26,8 @@ contract for changes.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px
   (`floor × 600 / devicePx` plate px; the numbers are the engine's exported `DEVICE`), the
-  subtitle dropped under 10 device px. Strokes are floored at the token substitution; pitches at
+  subtitle dropped under 10 device px and the binomial floored at 24 device px (the gate measures
+  that its thresholded letters do not fragment). Strokes are floored at the token substitution; pitches at
   draw time through `floorPitch(v)` (body units), which also records `meta.minPitch`. Every
   repeated mark at a spacing goes through `floorPitch`, never a literal step: hatch bands,
   lattice, mesh cells, pile, fringe, and the limb and antenna marks too (shading, spines, comb

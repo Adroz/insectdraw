@@ -183,6 +183,13 @@ for (let seed = 1; seed <= N; seed++) {
     if (texts(dev.svg) !== 1) fail('device plate at 440 keeps the subtitle');
     if (!dev.svg.includes(meta.name.binomial.replace(/&/g, '&amp;'))) fail('device plate lost the binomial');
     if (seed % 50 === 0 && texts(E.generateInsect(seed, { devicePx: 800 })) !== 2) fail('device plate at 800 drops the subtitle');
+    // the binomial is floored at 24 device px on a device plate (ticket #38, ADR 0001): 32.7 plate px at 440, 18 at 800,
+    // 16 (unchanged) with no option. Worked examples, not the engine's formula, so a wrong constant cannot agree with
+    // itself. The caption is the first <text> of the plate. The gate (tests/eink.js) measures that it reads after the threshold.
+    const capSize = svg => +(svg.match(/<text[^>]*font-size="([\d.]+)"/) || [])[1];
+    if (capSize(svg) !== 16) fail('default plate binomial is not 16 px');
+    if (capSize(dev.svg) !== 32.7) fail('device plate binomial at 440 is ' + capSize(dev.svg) + ' px, not 32.7');
+    if (seed % 50 === 0 && capSize(E.generateInsect(seed, { devicePx: 800 })) !== 18) fail('device plate binomial at 800 is not 18 px');
   }
   // grown venation (every winged type: bee / wasp / fly / cranefly / dragonfly / damselfly / lacewing / mayfly /
   // grasshopper / cicada / moth): every crossvein junction is obtuse within R-D's band, no crossvein is dropped more

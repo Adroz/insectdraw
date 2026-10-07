@@ -60,7 +60,8 @@ and every hatch or mesh pitch at least 2.5 device px (in plate units,
 `1.0 × 600 / devicePx` and `2.5 × 600 / devicePx`), applied at draw time after
 the plate scale, so a device plate draws fewer hatch lines and fewer mesh cells,
 never a different insect; the caption's common name (11 px) is dropped when it
-would fall under 10 device px (`devicePx < 546`), the binomial stays. The
+would fall under 10 device px (`devicePx < 546`) and the binomial is floored
+at 24 device px (32.7 plate px at 440) so it reads on the panel. The
 `<svg>` keeps its `600×600` viewBox. Without the option the output is the web
 plate, byte for byte. Two gates hold the contract: `node tests/check.js`
 asserts the floors, the subtitle rule and the unchanged signatures on every seed
@@ -105,7 +106,11 @@ stays live. The consumer contract:
 The seed is `hashString(date)`, the seed the web page's **Daily** button
 picks on that day, so the two never disagree. Any day's files are reproduced
 locally with `node scripts/render-daily.js 2026-01-01` (writes `daily/`;
-`--out DIR` elsewhere), and `npm run check:daily` tests that script. The SVG
+`--out DIR` elsewhere), and `npm run check:daily` tests that script. On a
+device plate the binomial is floored at 24 device px (32.7 plate px at 440, so
+it reads at arm's length) and the common name is dropped under 10 device px;
+the survival gate checks the thresholded caption does not fragment its
+letters. The SVG
 and JSON match the published ones byte for byte; the device raster's caption
 glyphs can differ where the local machine has Georgia and the runner (DejaVu
 Serif) does not.
