@@ -238,7 +238,7 @@ antennal socket at the order's position on the head.
 
 ```
 node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks
-npm install && npm test                      # e-ink survival gate: rasterises every layer at the device size through the panel pipeline (sharp)
+npm install && npm test                      # e-ink survival gate: every layer rasterised at the device size through the panel pipeline (sharp), all strokes and fine strokes alone
 node tests/sheet.js out.png 3 wasp:6         # contact sheet PNG via headless Chromium (first 6 wasp seeds, 3 columns)
 node tests/sheet.js out.png 3 1,2,3,4,5,6    # ... or explicit seeds; set CHROMIUM=/path/to/chrome if it is not found
 node tests/sheet.js out.png 4 random:12 --part wings --type wasp   # one part only, 12 random seeds all forced to wasps

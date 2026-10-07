@@ -3,7 +3,7 @@
 // every order and both lepidoptera variants, rasterises each layer through the panel's exact pipeline
 // (resize to the device size on white, flatten, grayscale, threshold 128) and measures survival per
 // layer: black pixels after the threshold divided by the antialiased ink coverage of the same render.
-// Fails when any layer drops under its floor. Layers are isolated from meta.layers the way the
+// Fails when any layer drops under its floor, on the whole layer or on its fine and detail strokes alone. Layers are isolated from meta.layers the way the
 // assembly in generateInsectDetailed builds the plate, so no engine change is needed.
 //   npm test                         # or: node tests/eink.js
 //   node tests/eink.js --out DIR     # also writes the 1-bit layer rasters (seed-type-layer.png) to DIR
@@ -17,12 +17,19 @@ const E = require('./engine').loadEngine();
 const DEVICE_PX = 440;          // TRMNL panel: the plate is shown at 440 device px
 const THRESHOLD = 128;          // fixed; raising it was measured and rejected
 const SEEDS_PER_TYPE = 3;       // per order, and per lepidoptera variant
-// Survival floors per layer. Measured 2026-10-07 on 39 seeds: today's engine bottoms out at abdomen 0.45,
-// head 0.62, legs 0.86, antennae 0.51, wings 0.54 (hatching, segment lines, striae, crossveins and antenna
-// rami are fine strokes that never cover half a device pixel). The same plates with every stroke floored
-// to 1.0 device px post hoc score at least abdomen 0.99, head 0.97, legs 1.01, antennae 0.92, wings 1.00,
-// so the floors sit under those with margin; the engine ticket confirms them green with the real floors.
+// Survival floors per layer, two measures each: 'all' is the whole layer, 'fine' only its fine and detail
+// strokes (SW_F / SW_D: hatching, segment lines, striae, crossveins, antenna rami), which the outline and
+// heavy ink would otherwise hide (a wasp wing scores 0.93 overall with every crossvein gone). Measured
+// 2026-10-07 on these 39 seeds: today's engine bottoms out at
+//   all   abdomen 0.45  head 0.62  legs 0.86  antennae 0.51  wings 0.54
+//   fine  abdomen 0.00  head 0.25  legs 0.08  antennae 0.24  wings 0.00
+// and the same plates with every stroke floored post hoc to 1.0 device px score at least
+//   all   abdomen 0.99  head 0.97  legs 1.01  antennae 0.92  wings 1.00
+//   fine  abdomen 0.95  head 0.91  legs 0.84  antennae 0.79  wings 0.95
+// so each floor sits about 0.07 under that expectation; the engine ticket confirms them green with the
+// real floors.
 const FLOORS = { abdomen: 0.9, head: 0.9, legs: 0.9, antennae: 0.85, wings: 0.85 };
+const FINE_FLOORS = { abdomen: 0.88, head: 0.84, legs: 0.77, antennae: 0.72, wings: 0.88 };
 
 // Gate layer -> engine layer keys and how the assembly places each one: 'single' (drawn once, it is
 // symmetric), 'mirror' (right half plus a scale(-1,1) copy) or 'pairs' (legs: the copy of each pair is
@@ -56,17 +63,21 @@ function pickSeeds() {
 
 // ---- one layer as its own plate: same transform and plate scale as the full plate ----
 const fmt = n => Math.round(n * 10) / 10;
-function layerSvg(r, layer) {
-  const L = r.meta.layers, s = r.meta.scale;
+// `fine` keeps only the fragments drawn in the fine or detail weight (SW_F / SW_D; a fragment carrying
+// mixed tokens stays, as does one with no stroke token, i.e. a white mask), so the fine-stroke survival
+// is not hidden under the outline and heavy ink that dominate a layer's coverage.
+const FINE = f => /SW_[FD]/.test(f) || !/SW_[HO]/.test(f);
+function layerSvg(r, layer, fine) {
+  const L = r.meta.layers, s = r.meta.scale, keep = fine ? FINE : () => true;
   const head = r.svg.match(/^[\s\S]*?<g transform="translate\([^"]*\) scale\([^"]*\)"[^>]*>/);
   if (!head) throw new Error('drawing group not found in the plate svg');
   let body = '';
   for (const [key, how] of LAYERS[layer]) {
-    const els = (L[key] || []).join('');
+    const els = (L[key] || []).filter(keep).join('');
     if (how === 'single') body += '<g>' + els + '</g>';
     else if (how === 'mirror') body += '<g>' + els + '</g><g><g transform="scale(-1,1)">' + els + '</g></g>';
     else body += '<g>' + els + '</g><g>' + (L.legPairs || []).map(pr =>
-      '<g transform="scale(-1,1) rotate(' + fmt(pr.skew) + ' ' + fmt(pr.pivot[0]) + ' ' + fmt(pr.pivot[1]) + ')">' + pr.els.join('') + '</g>').join('') + '</g>';
+      '<g transform="scale(-1,1) rotate(' + fmt(pr.skew) + ' ' + fmt(pr.pivot[0]) + ' ' + fmt(pr.pivot[1]) + ')">' + pr.els.filter(keep).join('') + '</g>').join('') + '</g>';
   }
   const sw = v => String(Math.round(v / s * 1000) / 1000);   // the engine's token substitution
   return (head[0] + body + '</g></svg>').replace(/SW_H/g, sw(2.2)).replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
@@ -98,36 +109,40 @@ async function main() {
 
   const rows = [];
   for (const p of plates) {
-    const cells = await Promise.all(LAYER_NAMES.map(layer => survival(layerSvg(p.r, layer), outDir && path.join(outDir, p.seed + '-' + p.label + '-' + layer + '.png'))));
+    const png = (layer, fine) => outDir && path.join(outDir, p.seed + '-' + p.label + '-' + layer + (fine ? '-fine' : '') + '.png');
+    const cells = await Promise.all(LAYER_NAMES.flatMap(layer => [survival(layerSvg(p.r, layer, false), png(layer, false)), survival(layerSvg(p.r, layer, true), png(layer, true))]));
     const row = { seed: p.seed, label: p.label };
-    LAYER_NAMES.forEach((layer, i) => { row[layer] = cells[i]; });
+    LAYER_NAMES.forEach((layer, i) => { row[layer] = { all: cells[2 * i], fine: cells[2 * i + 1] }; });
     rows.push(row);
   }
 
-  // table
-  const failures = [], min = {};
-  const cell = (row, layer) => {
-    const v = row[layer].ratio;
-    if (v === null) return '       - ';
-    if (!(layer in min) || v < min[layer]) min[layer] = v;
-    const bad = v < FLOORS[layer];
-    if (bad) failures.push({ seed: row.seed, label: row.label, layer, ratio: v });
-    return v.toFixed(2).padStart(8) + (bad ? '!' : ' ');
+  // table: one cell per layer, 'all/fine', '!' marking a value under its floor
+  const failures = [], min = { all: {}, fine: {} }, floors = { all: FLOORS, fine: FINE_FLOORS };
+  const one = (row, layer, kind) => {
+    const v = row[layer][kind].ratio;
+    if (v === null) return '   -';
+    if (!(layer in min[kind]) || v < min[kind][layer]) min[kind][layer] = v;
+    const bad = v < floors[kind][layer];
+    if (bad) failures.push({ seed: row.seed, label: row.label, layer, kind, ratio: v, floor: floors[kind][layer] });
+    return v.toFixed(2) + (bad ? '!' : '');
   };
-  const pad = (s, n) => String(s).padEnd(n);
-  console.log('e-ink survival gate: ' + plates.length + ' seeds, device ' + DEVICE_PX + ' px, threshold ' + THRESHOLD + ' (black px / antialiased ink per layer)');
-  console.log(pad('seed', 6) + pad('type', 12) + LAYER_NAMES.map(l => l.padStart(9)).join(''));
+  const pad = (s, n) => String(s).padEnd(n), W = 13;
+  const cell = (row, layer) => (one(row, layer, 'all') + '/' + one(row, layer, 'fine')).padStart(W);
+  console.log('e-ink survival gate: ' + plates.length + ' seeds, device ' + DEVICE_PX + ' px, threshold ' + THRESHOLD +
+    ' (black px / antialiased ink per layer: all strokes / fine+detail strokes only)');
+  console.log(pad('seed', 6) + pad('type', 12) + LAYER_NAMES.map(l => l.padStart(W)).join(''));
   for (const row of rows) console.log(pad(row.seed, 6) + pad(row.label, 12) + LAYER_NAMES.map(l => cell(row, l)).join(''));
-  console.log(pad('', 6) + pad('min', 12) + LAYER_NAMES.map(l => (l in min ? min[l].toFixed(2) : '-').padStart(8) + ' ').join(''));
-  console.log(pad('', 6) + pad('floor', 12) + LAYER_NAMES.map(l => FLOORS[l].toFixed(2).padStart(8) + ' ').join(''));
+  const f2 = v => v === undefined ? '-' : v.toFixed(2);
+  console.log(pad('', 6) + pad('min', 12) + LAYER_NAMES.map(l => (f2(min.all[l]) + '/' + f2(min.fine[l])).padStart(W)).join(''));
+  console.log(pad('', 6) + pad('floor', 12) + LAYER_NAMES.map(l => (FLOORS[l].toFixed(2) + '/' + FINE_FLOORS[l].toFixed(2)).padStart(W)).join(''));
   console.log((Date.now() - t0) / 1000 + ' s');
 
   if (failures.length) {
     failures.sort((a, b) => a.ratio - b.ratio);
     const worst = failures[0];
-    console.error('\nFAIL: ' + failures.length + ' layer(s) under their survival floor; lowest is seed ' + worst.seed + ' ' + worst.label + ' ' + worst.layer +
-      ' at ' + worst.ratio.toFixed(3) + ' (floor ' + FLOORS[worst.layer] + ')');
-    for (const f of failures) console.error('  seed ' + f.seed + ' ' + f.label + ' ' + f.layer + ' ' + f.ratio.toFixed(3) + ' < ' + FLOORS[f.layer]);
+    console.error('\nFAIL: ' + failures.length + ' layer measure(s) under their survival floor; lowest is seed ' + worst.seed + ' ' + worst.label + ' ' +
+      worst.layer + ' (' + worst.kind + ') at ' + worst.ratio.toFixed(3) + ' (floor ' + worst.floor + ')');
+    for (const f of failures) console.error('  seed ' + f.seed + ' ' + f.label + ' ' + f.layer + ' ' + f.kind + ' ' + f.ratio.toFixed(3) + ' < ' + f.floor);
     process.exit(1);
   }
   console.log('OK');
