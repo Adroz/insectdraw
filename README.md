@@ -6,7 +6,16 @@ but for insects.
 
 **Live:** https://adroz.github.io/insectdraw/ — `#<seed>` in the URL picks a plate; no hash shows today's.
 
-- Single self-contained `index.html` — no dependencies, no build step.
+Three pages, one engine:
+
+| page | what |
+| --- | --- |
+| [`index.html`](https://adroz.github.io/insectdraw/) | the plate: today's by default, seed controls, `#<seed>` links |
+| [`compare.html`](https://adroz.github.io/insectdraw/compare.html) | two plates side by side, each with its own seed, controls and Back history; `#a\|b` links (an old `index.html#a\|b` link redirects here) |
+| [`parts.html`](https://adroz.github.io/insectdraw/parts.html) | a grid of one body part across many seeds, optionally all forced to one body plan |
+
+- Single self-contained `index.html` — no dependencies, no build step. The engine lives in
+  its `<script id="engine">` block; `compare.html` and `parts.html` fetch it from there.
 - Seeded PRNG (mulberry32): the same seed always draws the same insect.
 - Dorsal view, bilaterally symmetric: the right half is generated and mirrored.
 - Line art only: black strokes on white, no fills (other than white masking),
@@ -24,16 +33,23 @@ but for insects.
 
 ## Use
 
-Open `index.html` in a browser. Enter a seed and **Generate**, hit **Random**,
-or **Daily** (seed = FNV-1a hash of today's `YYYY-MM-DD` in Brisbane, so the
-plate is the same all day and changes at the day boundary; the same plate is
-published for e-ink panels, see "Daily plate" below). **Back** steps through the seeds you
-have viewed in this session (up to 100), so a plate that flashed past on
-Random can be recovered. **Compare** opens a second, independent pane with
-its own seed, controls and Back history, for cycling one side against the
-other. The seeds are mirrored into the URL hash, so `index.html#1234` is a
-shareable link and `index.html#1234|5678` opens both panes; editing the hash
-by hand renders those seeds too.
+Open `index.html` in a browser (it works from `file://` too). Enter a seed
+and **Generate**, hit **Random**, or **Daily** (seed = FNV-1a hash of today's
+`YYYY-MM-DD` in Brisbane, so the plate is the same all day and changes at the
+day boundary; the same plate is published for e-ink panels, see "Daily plate"
+below). **Back** steps through the seeds you have viewed in this session (up
+to 100), so a plate that flashed past on Random can be recovered. The seed is
+mirrored into the URL hash, so `index.html#1234` is a shareable link; editing
+the hash by hand renders that seed too.
+
+### Comparing two plates
+
+`compare.html` shows two panes, each with its own seed, controls and Back
+history, for cycling one side against the other. Both seeds sit in the hash,
+so `compare.html#1234|5678` is a shareable link, and `compare.html#1234`
+fills the left pane and rolls the right. Links in the old main-page format
+(`index.html#1234|5678`) redirect here. Serve the directory over HTTP
+(`python3 -m http.server`); the page loads the engine from `index.html`.
 
 For a daily e-ink display, `generateInsect(dailySeed(), { devicePx: 440 })`
 returns the SVG string of a **device plate**: the same insect as the web plate
@@ -93,6 +109,17 @@ locally with `node scripts/render-daily.js 2026-01-01` (writes `daily/`;
 and JSON match the published ones byte for byte; the device raster's caption
 glyphs can differ where the local machine has Georgia and the runner (DejaVu
 Serif) does not.
+
+## Roadmap
+
+Work is tracked as [GitHub issues](https://github.com/Adroz/insectdraw/issues), in three themes:
+
+- **E-ink daily plate** ([`eink`](https://github.com/Adroz/insectdraw/issues?q=label%3Aeink), umbrella #32): device plates, the survival gate, the Pages-published daily raster.
+- **Drawing quality** ([`wings`](https://github.com/Adroz/insectdraw/issues?q=label%3Awings), [`body`](https://github.com/Adroz/insectdraw/issues?q=label%3Abody), [`names`](https://github.com/Adroz/insectdraw/issues?q=label%3Anames)): per-order audits against the references in `docs/ref/`, each ticket with seeds as evidence.
+- **Architecture** ([`architecture`](https://github.com/Adroz/insectdraw/issues?q=label%3Aarchitecture)): the single-file engine's seams; #3 is the open decision on whether `engine.js` becomes the source and `index.html` the built artifact.
+
+For agents: `CLAUDE.md` is the working contract, `GLOSSARY.md` the vocabulary,
+`docs/adr/` the decisions, `docs/agents/` the tracker and label conventions.
 
 ## Venation
 
@@ -281,6 +308,7 @@ node tests/check.js 3000                     # runs the engine over N seeds: NaN
 npm install && npm test                      # e-ink survival gate: every layer rasterised at the device size through the panel pipeline (sharp), all strokes and fine strokes alone
 node scripts/render-daily.js 2026-01-01      # the daily plate for a Brisbane calendar day into daily/ (insect.svg, insect.png, insect.json); no date = today
 npm run check:daily                          # runs that script for a fixed day and checks the three files, the sidecar fields and the 1-bit 440×440 raster
+node tests/pages.js                          # the three pages in headless Chromium over a local server: chrome, panes, hash and redirect, file:// still renders
 node tests/sheet.js out.png 3 wasp:6         # contact sheet PNG via headless Chromium (first 6 wasp seeds, 3 columns)
 node tests/sheet.js out.png 3 1,2,3,4,5,6    # ... or explicit seeds; set CHROMIUM=/path/to/chrome if it is not found
 node tests/sheet.js out.png 4 random:12 --part wings --type wasp   # one part only, 12 random seeds all forced to wasps

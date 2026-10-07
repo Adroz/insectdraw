@@ -52,3 +52,6 @@ jobs:
 
       - name: E-ink survival gate
         run: npm test
+
+      - name: Page test (headless Chrome, preinstalled on ubuntu-latest)
+        run: node tests/pages.js

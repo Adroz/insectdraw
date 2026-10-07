@@ -5,8 +5,9 @@ contract for changes.
 
 ## Shape of the project
 
-- Everything lives in `index.html`: CSS, a small UI block, the engine inside `<script id="engine">`
-  (pure generation, no DOM) and a short UI script at the end. No build step, no dependencies.
+- The engine lives in `index.html` inside `<script id="engine">` (pure generation, no DOM), with that
+  page's CSS and its short UI script at the end; `compare.html` and `parts.html` are small pages that
+  fetch the engine from it. No build step, no dependencies.
 - `tests/check.js` and `tests/sheet.js` extract the engine script with a regex on
   `<script id="engine">` and run it under `node vm`, so keep that tag and the
   `module.exports` block at the bottom of the engine intact.
@@ -103,6 +104,7 @@ contract for changes.
 node tests/check.js 3000                 # invariants + determinism + wing uniqueness
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster
+node tests/pages.js                      # the three pages in headless Chromium: chrome, panes, hash, redirect
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
 ```
 
@@ -119,10 +121,15 @@ N seeds of a type (variants `butterfly`/`moth` work too).
 
 ## Conventions
 
-- Keep the engine free of DOM access; the UI script at the bottom is the only place that
-  touches `document`, `location` or `history`. It builds the panes with a `makePane` factory
-  (pane A always shown, pane B behind Compare); add controls there, not as static HTML, so
-  both panes get them. The hash format is `#a` or `#a|b`.
+- Keep the engine free of DOM access. Three pages: `index.html` (one pane, hash `#seed`; a
+  two-seed hash `#a|b` redirects to the compare page), `compare.html` (two panes built by a
+  `makePane` factory, hash `#a|b`) and `parts.html` (a grid of one part). Each page's UI script
+  is the only DOM code on that page; the main page's and the compare page's pane code are two
+  copies on purpose, so `index.html` stays one self-contained file and the compare page can
+  diverge as an experimenting tool. Add pane controls inside the pane markup, not as static
+  HTML. The engine stays inline in `index.html`; `compare.html` and `parts.html` fetch it from
+  there (so they need HTTP), as do the tests through `tests/engine.js`. `node tests/pages.js`
+  asserts the pages' DOM in headless Chromium.
 - Local wing coordinates: x along the span, y across it (negative toward the costa), transformed
   by `wing.T`. Build outlines as point lists through `makeWing`.
 - Comment venation by its anatomical name (Sc, R1, Rs, M, Cu, A, discal cell, nodus ...) so the
