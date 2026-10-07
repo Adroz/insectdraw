@@ -151,6 +151,33 @@ for (let seed = 1; seed <= N; seed++) {
   const sws = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * meta.scale);
   if (sws.some(w => w < 0.49)) fail('stroke width below 0.5 after scale');
   if (/opacity|gradient|filter|url\(/.test(svg)) fail('non-eink construct present');
+  // Device plate (spec #32, ADR 0001): generateInsect(seed, { devicePx }) draws the same insect (same rolled type, wingSig
+  // and bodySig: the option adds no rng draw) with every stroke weight clamped to >= 1.0 device px and every hatch /
+  // mesh pitch to >= 2.5 device px, in plate units floor x 600 / devicePx. The pitch is read from meta.minPitch, which
+  // every pitch site reports after its clamp (plate px, i.e. after the plate scale), so the default plate must report
+  // one too or the number is dead. The caption subtitle (11 px) is dropped when it would fall under 10 device px
+  // (devicePx < 546): absent at 440, present with no option and at 800. The binomial stays.
+  {
+    const DEV = 440, devK = 600 / DEV, dev = E.generateInsectDetailed(seed, { devicePx: DEV }), dm = dev.meta;
+    if (dm.type !== meta.type || dm.variant !== meta.variant) fail('device plate rolls a different type');
+    if (dm.wingSig !== meta.wingSig) fail('device plate has a different wingSig');
+    if (dm.bodySig !== meta.bodySig) fail('device plate has a different bodySig');
+    if (dm.scale !== meta.scale) fail('device plate has a different plate scale (a floored site moved the bounding box)');
+    if (E.generateInsect(seed, { devicePx: DEV }) !== dev.svg) fail('device plate non-deterministic');
+    if (/NaN|Infinity|undefined|null/.test(dev.svg)) fail('bad number in device svg');
+    if (/opacity|gradient|filter|url\(/.test(dev.svg)) fail('non-eink construct present on the device plate');
+    const dsw = [...dev.svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * dm.scale);
+    if (!dsw.length) fail('device plate has no strokes');
+    if (dsw.some(w => w < 1.0 * devK - 0.01)) fail('device stroke width below 1.0 device px: ' + Math.min(...dsw).toFixed(3) + ' plate px');
+    if (!(typeof meta.minPitch === 'number' && isFinite(meta.minPitch) && meta.minPitch > 0)) fail('default plate reports no minPitch');
+    if (!(typeof dm.minPitch === 'number' && isFinite(dm.minPitch) && dm.minPitch > 0)) fail('device plate reports no minPitch');
+    else if (dm.minPitch < 2.5 * devK - 0.01) fail('device hatch pitch below 2.5 device px: ' + dm.minPitch.toFixed(3) + ' plate px');
+    const texts = s => (s.match(/<text\b/g) || []).length;
+    if (texts(svg) !== 2) fail('default plate caption is not binomial + subtitle');
+    if (texts(dev.svg) !== 1) fail('device plate at 440 keeps the subtitle');
+    if (!dev.svg.includes(meta.name.binomial.replace(/&/g, '&amp;'))) fail('device plate lost the binomial');
+    if (seed % 50 === 0 && texts(E.generateInsect(seed, { devicePx: 800 })) !== 2) fail('device plate at 800 drops the subtitle');
+  }
   // grown venation (every winged type: bee / wasp / fly / cranefly / dragonfly / damselfly / lacewing / mayfly /
   // grasshopper / cicada / moth): every crossvein junction is obtuse within R-D's band, no crossvein is dropped more
   // often than one is placed, and nothing in the wings layer degenerates to a single-point polyline. The angle band is

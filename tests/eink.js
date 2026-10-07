@@ -79,8 +79,9 @@ function layerSvg(r, layer, fine) {
     else body += '<g>' + els + '</g><g>' + (L.legPairs || []).map(pr =>
       '<g transform="scale(-1,1) rotate(' + fmt(pr.skew) + ' ' + fmt(pr.pivot[0]) + ' ' + fmt(pr.pivot[1]) + ')">' + pr.els.filter(keep).join('') + '</g>').join('') + '</g>';
   }
-  const sw = v => String(Math.round(v / s * 1000) / 1000);   // the engine's token substitution
-  return (head[0] + body + '</g></svg>').replace(/SW_H/g, sw(2.2)).replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
+  const W = r.meta.weights || { H: 2.2, O: 1.5, D: 0.8, F: 0.5 };   // the device plate's weights after its stroke floor (meta.weights), else the defaults
+  const sw = v => String(Math.round(v / s * 1000) / 1000);          // the engine's token substitution
+  return (head[0] + body + '</g></svg>').replace(/SW_H/g, sw(W.H)).replace(/SW_O/g, sw(W.O)).replace(/SW_D/g, sw(W.D)).replace(/SW_F/g, sw(W.F));
 }
 
 // ---- the panel pipeline ----

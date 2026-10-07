@@ -22,6 +22,18 @@ contract for changes.
 - Minimum stroke 0.5 px after the plate scale; use the `SW.H/O/D/F` tokens, never literal widths.
 - Hatching spacing never below ~1.8 px or e-ink fills in.
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
+- Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
+  stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px
+  (`floor × 600 / devicePx` plate px), the subtitle dropped under 10 device px. Strokes are floored
+  at the token substitution; pitches at draw time through `floorPitch(v)` (body units), which also
+  records `meta.minPitch`. Every pitch site (hatch band, lattice, mesh cell, pile, fringe, any
+  repeated stroke at a spacing) must go through `floorPitch`, never a literal step, or the device
+  assertion in `tests/check.js` is blind to it. A fan's pitch is held at its nearest outline
+  point; a second hatch family over a first takes `floorPitch(v, 2)`. The device plate is drawn
+  twice (pass 1 for the scale) and a clamped site that draws rng jitter per element (stipple
+  dots, mesh sites) must end with `rngSync()` so pass 2 re-synchronises on pass 1's stream.
+  Without `devicePx` the output is byte-for-byte unchanged; `npm test` and the device block of
+  `tests/check.js` are the two gates.
 
 ## Randomness rules
 

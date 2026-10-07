@@ -10,7 +10,9 @@ but for insects.
 - Seeded PRNG (mulberry32): the same seed always draws the same insect.
 - Dorsal view, bilaterally symmetric: the right half is generated and mirrored.
 - Line art only: black strokes on white, no fills (other than white masking),
-  no gradients/opacity/filters, minimum stroke 0.5px — suitable for e-ink.
+  no gradients/opacity/filters, minimum stroke 0.5px on the web plate. For a 1-bit
+  display ask for a device plate (`devicePx`, below): same insect, strokes and
+  hatch pitch floored so they survive the threshold.
 - Twelve body plans: beetle, moth (with a butterfly variant), fly, crane fly,
   bee, wasp, dragonfly, damselfly, grasshopper, lacewing, cicada, mayfly.
 - Deterministic names: each seed also gets a Latin-style binomial (genus and
@@ -32,12 +34,26 @@ other. The seeds are mirrored into the URL hash, so `index.html#1234` is a
 shareable link and `index.html#1234|5678` opens both panes; editing the hash
 by hand renders those seeds too.
 
-For a daily e-ink display, `generateInsect(dailySeed())` returns the SVG
-string; the `<svg>` has a `600×600` viewBox and scales cleanly. The daily
-plate changes at the day boundary, midnight in Brisbane (UTC+10, no daylight
-saving, so 14:00 UTC), everywhere: `dailySeed()` hashes the Brisbane calendar
-date of the current instant, and `dailySeed(date)` that of a given `Date`, so
-the web page's **Daily** button and any other consumer agree by construction.
+For a daily e-ink display, `generateInsect(dailySeed(), { devicePx: 440 })`
+returns the SVG string of a **device plate**: the same insect as the web plate
+for that seed (same genes, `wingSig` and `bodySig`, no rng shift), redrawn so
+it survives 1-bit rasterisation at a device size of 440 px. The measured
+contract (ADR 0001, `docs/adr/`): every stroke weight is at least 1.0 device px
+and every hatch or mesh pitch at least 2.5 device px (in plate units,
+`1.0 × 600 / devicePx` and `2.5 × 600 / devicePx`), applied at draw time after
+the plate scale, so a device plate draws fewer hatch lines and fewer mesh cells,
+never a different insect; the caption's common name (11 px) is dropped when it
+would fall under 10 device px (`devicePx < 546`), the binomial stays. The
+`<svg>` keeps its `600×600` viewBox. Without the option the output is the web
+plate, byte for byte. Two gates hold the contract: `node tests/check.js`
+asserts the floors, the subtitle rule and the unchanged signatures on every seed
+at 440, and `npm test` rasterises device plates through the panel's exact
+pipeline (sharp: resize to 440 on white, grayscale, threshold 128) and fails
+when any layer's ink survival drops under its floor. The daily plate changes at
+the day boundary, midnight in Brisbane (UTC+10, no daylight saving, so 14:00
+UTC), everywhere: `dailySeed()` hashes the Brisbane calendar date of the
+current instant, and `dailySeed(date)` that of a given `Date`, so the web
+page's **Daily** button and any other consumer agree by construction.
 
 ### Comparing one part across many seeds
 
@@ -237,7 +253,7 @@ antennal socket at the order's position on the head.
 ## Dev
 
 ```
-node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks
+node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks, plus the device plate floors at 440 (about 15 min)
 npm install && npm test                      # e-ink survival gate: every layer rasterised at the device size through the panel pipeline (sharp), all strokes and fine strokes alone
 node tests/sheet.js out.png 3 wasp:6         # contact sheet PNG via headless Chromium (first 6 wasp seeds, 3 columns)
 node tests/sheet.js out.png 3 1,2,3,4,5,6    # ... or explicit seeds; set CHROMIUM=/path/to/chrome if it is not found

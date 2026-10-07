@@ -39,12 +39,15 @@
 let rng = null;
 function mulberry32(seed) {
   let a = seed | 0;
-  return function () {
+  const f = function () {
     a = (a + 0x6D2B79F5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+  f.state = () => a;            // the stream position, for rngSync (a device plate's second pass re-synchronises on it)
+  f.seek = v => { a = v | 0; };
+  return f;
 }
 function randRange(min, max) { return min + (max - min) * rng(); }
 function randInt(min, max) { return Math.floor(randRange(min, max + 1)); }
@@ -83,6 +86,23 @@ function bb(p) {
 
 // ---------- stroke classes (tokens replaced once final scale is known) ----------
 const SW = { H: 'SW_H', O: 'SW_O', D: 'SW_D', F: 'SW_F' };   // heavy 2.2, outline 1.5, detail 0.8, fine 0.5
+const SW_PX = { H: 2.2, O: 1.5, D: 0.8, F: 0.5 };             // the weights in plate px (the token substitution divides by the plate scale)
+
+// ---------- device floors (ADR 0001) ----------
+// A device plate (generateInsectDetailed(seed, { devicePx })) is the default plate's insect with every stroke weight
+// clamped to >= 1.0 device px and every hatch / mesh pitch to >= 2.5 device px, i.e. floor x 600 / devicePx in plate
+// units. Strokes are clamped at the token substitution; pitches at draw time through floorPitch(v) (body units; the
+// floor is pitchFloor, 0 on a default plate), which also records the smallest pitch drawn for meta.minPitch. Every
+// pitch site (hatch bands, lattice, mesh cell, pile, fringe) must go through floorPitch, never a literal step.
+// The plate scale is only known once the insect is drawn, so a device plate is drawn twice: pass 1 is the default
+// drawing and yields the scale, pass 2 redraws with the floors. Genes and rolls are untouched, but a clamped site may
+// consume a different number of rng draws (stipple dots, mesh sites), so rngSync() closes every such site: pass 1
+// records the stream position there and pass 2 restores it, keeping every roll outside the site identical.
+// A second hatch family laid across a first (the lepidopteran cross-hatch in the darks) fills solid at 1 bit when both
+// sit at the floor, so it takes k = 2: twice the floor keeps the two families separate.
+let pitchFloor = 0, pitchMin = Infinity, syncRec = null, syncPlay = null, syncI = 0;
+const floorPitch = (v, k) => { const p = Math.max(v, (k || 1) * pitchFloor); if (p < pitchMin) pitchMin = p; return p; };
+const rngSync = () => { if (syncRec) syncRec.push(rng.state()); else if (syncPlay) rng.seek(syncPlay[syncI]); syncI++; };
 
 // ---------- curves ----------
 // pts = [p0, c1, c2, p1, c3, c4, p2, ...]
@@ -235,6 +255,7 @@ function limbSegment(A, B, w1, w2, bow) { return pathEl(limbPath(limbGeom(A, B, 
 // engraver's shading: short fine lines across the segment from the shaded edge
 // inward, so the cylinder reads as round. side = +1 (e1) or -1 (e2).
 function limbShade(g, side, spacing) {
+  spacing = floorPitch(spacing);
   const els = [], edge = side > 0 ? g.e1 : g.e2;
   if (g.L < spacing * 3) return els;
   const s0 = Math.min(0.14, 3 / g.L), s1 = 1 - Math.min(0.14, 3 / g.L);
@@ -349,7 +370,7 @@ function eyeEls(c, rx, ry, opts) {
     }
     return els;
   }
-  const pitch = opts.pitch || Math.max(1.9, Math.min(3.2, (rx + ry) / 7.5));
+  const pitch = floorPitch(opts.pitch || Math.max(1.9, Math.min(3.2, (rx + ry) / 7.5)));
   const R = pitch / Math.sqrt(3) * 0.82;   // hex circumradius, shrunk so the cells separate
   const inset = Math.min(0.88, 1 - pitch * 0.55 / Math.min(rx, ry));
   const hex = [];
@@ -723,7 +744,7 @@ function legEls(attach, spec, meta) {
     }
     if (spec.fringe && ((k === 1 && spec.fringe.femur) || (k === 2 && spec.fringe.tibia))) {   // hair fringe along the outer edge (bee, moth, fly)
       const fr = spec.fringe, side = outer;
-      for (let s = 0.15; s <= 0.95; s += fr.spacing / g.L) {
+      for (let s = 0.15, fsp = floorPitch(fr.spacing); s <= 0.95; s += fsp / g.L) {
         const b = bez3(side > 0 ? g.e1 : g.e2, s);
         const dir = norm(add(mul(g.n, side), mul(g.d, 0.45)));
         els.push(pathEl(cubicBezierPath([b, add(b, mul(dir, fr.len * 0.4)), add(b, mul(dir, fr.len * 0.7)), add(b, add(mul(dir, fr.len), mul(g.d, fr.len * 0.2)))], false), SW.F));
@@ -916,13 +937,18 @@ function lepCurve(wing, S, uFn, c0, c1, gap) {
 }
 // hatch line families (local coords): a fan from a focus behind the base (the wing's "flow"), or parallels
 function lepFan(wing, F, spacing) {
-  const poly = wing.localPoly; let a0 = Infinity, a1 = -Infinity, ds = 0;
-  for (const p of poly) { const a = Math.atan2(p[1] - F[1], p[0] - F[0]); if (a < a0) a0 = a; if (a > a1) a1 = a; ds += vlen(sub(p, F)); }
-  const dA = spacing / (ds / poly.length), lines = [];
+  const poly = wing.localPoly; let a0 = Infinity, a1 = -Infinity, ds = 0, dMin = Infinity;
+  for (const p of poly) { const a = Math.atan2(p[1] - F[1], p[0] - F[0]); if (a < a0) a0 = a; if (a > a1) a1 = a; const d = vlen(sub(p, F)); ds += d; if (d < dMin) dMin = d; }
+  // `spacing` is the mean pitch over the outline; the fan converges on the focus, so the pitch at a point is the angular
+  // step x its distance from the focus, smallest at the nearest outline point (the base). The device floor holds there.
+  let dA = spacing / (ds / poly.length);
+  dA = Math.min(dA, floorPitch(dA * dMin) / dMin);
+  const lines = [];
   for (let a = a0 + dA / 2, i = 0; a < a1; a += dA, i++) lines.push({ p: F, d: [Math.cos(a), Math.sin(a)], odd: i % 2 === 1 });
   return lines;
 }
 function lepParallel(wing, deg, spacing) {
+  spacing = floorPitch(spacing, 2);   // the cross set lies over the fan hatch: twice the device floor or the darks fill solid
   const d = dirv(deg), nrm = perp(d); let lo = Infinity, hi = -Infinity;
   for (const p of wing.localPoly) { const s = dot(p, nrm); if (s < lo) lo = s; if (s > hi) hi = s; }
   const lines = [];
@@ -935,8 +961,9 @@ function lepParallel(wing, deg, spacing) {
 function lepHatch(wing, lines, tone, cls, step, mask) {
   const poly = wing.localPoly, D = ['', '', '', ''];
   const seg = (p, d, t0, t1, c, odd) => {
-    if (c === 3) {   // stipple
-      for (let t = t0 + (odd ? 1.5 : 0); t <= t1; t += 3) { const tj = t + randRange(-0.9, 0.9), a = wing.T([p[0] + d[0] * tj, p[1] + d[1] * tj]); bb(a); D[3] += 'M' + fmt(a[0]) + ',' + fmt(a[1]) + 'l.3,0'; }
+    if (c === 3) {   // stipple (its dots draw rng jitter, so the caller closes the hatch with rngSync)
+      const step = floorPitch(3);
+      for (let t = t0 + (odd ? step / 2 : 0); t <= t1; t += step) { const tj = t + randRange(-0.9, 0.9), a = wing.T([p[0] + d[0] * tj, p[1] + d[1] * tj]); bb(a); D[3] += 'M' + fmt(a[0]) + ',' + fmt(a[1]) + 'l.3,0'; }
       return;
     }
     const a = wing.T([p[0] + d[0] * t0, p[1] + d[1] * t0]), b = wing.T([p[0] + d[0] * t1, p[1] + d[1] * t1]); bb(a); bb(b);
@@ -975,7 +1002,7 @@ function lepHatch(wing, lines, tone, cls, step, mask) {
 }
 // scale fringe: short dense ticks round the margin, leaning toward the apex; chequered = alternate cells doubled
 function lepFringe(wing, S, filter, chequered) {
-  const poly = wing.localPoly, els = [];
+  const poly = wing.localPoly, els = [], step = floorPitch(1.5);
   let cx = 0, cy = 0; for (const p of poly) { cx += p[0]; cy += p[1]; } cx /= poly.length; cy /= poly.length;
   let acc = 0;
   for (let i = 0; i + 1 < poly.length; i++) {
@@ -989,9 +1016,9 @@ function lepFringe(wing, S, filter, chequered) {
         const dir = norm(add(out, mul(tn, 0.3)));
         const dark = chequered && S.cellAt(Math.atan2(p[1] - S.O[1], p[0] - S.O[0])) % 2 === 1;
         els.push(lineEl(wing.T(p), wing.T(add(p, mul(dir, dark ? 3.2 : 2.5))), SW.F));
-        if (dark) { const q = add(p, mul(tn, 0.75)); els.push(lineEl(wing.T(q), wing.T(add(q, mul(dir, 3.2))), SW.F)); }
+        if (dark && step / 2 >= pitchFloor) { const q = add(p, mul(tn, step / 2)); els.push(lineEl(wing.T(q), wing.T(add(q, mul(dir, 3.2))), SW.F)); }   // the doubled hair only where its half step clears the device floor
       }
-      acc += 1.5;
+      acc += step;
     }
     acc -= seg;
   }
@@ -1095,6 +1122,7 @@ function leadingEdge(wing, x0, x1) {
 function costaEls(wing, x0, x1) { const pl = leadingEdge(wing, x0, x1); return pl.length > 1 ? [emitLocalPolyline(wing, pl, SW.H)] : []; }
 // short setae along the costa, leaning toward the tip
 function costalSpines(wing, x0, x1, spacing, len) {
+  spacing = floorPitch(spacing);
   const pl = leadingEdge(wing, x0, x1), els = [];
   let acc = 0;
   for (let i = 0; i + 1 < pl.length; i++) {
@@ -1111,6 +1139,7 @@ function costalSpines(wing, x0, x1, spacing, len) {
 }
 // marginal fringe of fine hairs / scales all round the outline
 function fringe(wing, spacing, len, sw, filter) {
+  spacing = floorPitch(spacing);
   const poly = wing.localPoly, els = [];
   let cx = 0, cy = 0;
   for (const p of poly) { cx += p[0]; cy += p[1]; }
@@ -1209,9 +1238,10 @@ function wingGraph(wing, Lw) {
       else {
         els.push(polygonEl(closed.map(wing.T), SW.D, '#fff'));
         if (style === 'cross' || style === 'axis') { const n = style === 'cross' ? 4 : 3; for (let k = 1; k <= n; k++) { const t = k / (n + 1), pl = []; for (let x = xa + 0.3; x <= xb - 0.3; x += 1.2) pl.push([x, lerp(yT(x), yB(x), t)]); if (pl.length > 1) els.push(emitLocalPolyline(wing, pl, style === 'cross' ? SW.D : SW.F)); } }
-        if (style === 'cross') for (let x = xa + 1; x < xb; x += 1.7) els.push(lineEl(wing.T([x, yT(x)]), wing.T([x, yB(x)]), SW.F));
-        if (style === 'stipple') for (let x = xa + 1; x < xb; x += 1.5) for (let y = yT(x) + 1; y < yB(x) - 0.5; y += 1.5) els.push(circleEl(wing.T([x + randRange(-0.3, 0.3), y]), 0.35, SW.F, '#000'));
+        if (style === 'cross') { const sp = floorPitch(1.7); for (let x = xa + 1; x < xb; x += sp) els.push(lineEl(wing.T([x, yT(x)]), wing.T([x, yB(x)]), SW.F)); }
+        if (style === 'stipple') { const sp = floorPitch(1.5); for (let x = xa + 1; x < xb; x += sp) for (let y = yT(x) + 1; y < yB(x) - 0.5; y += sp) els.push(circleEl(wing.T([x + randRange(-0.3, 0.3), y]), 0.35, SW.F, '#000')); }
       }
+      rngSync();   // the stipple draws one jitter per dot, so a device plate's dot count differs from the default's
       extra.unshift(...els);
       return bot;
     },
@@ -1419,9 +1449,10 @@ function growVeins(g, G) {
     const sMidAt = u => { const t = at2(u); return t ? sAt(lerpP(t.ha.p, t.hb.p, 0.5)) : 0.5; };
     // mesh orders give an absolute cell size G.cell(u, s, laneA, laneB); ladder spacing is then the strip width x k held
     // within 0.8-1.8 cells, and width / cell decides the regime (one row of rungs, or rows of Voronoi cells)
-    const cell = G.cell ? u => Math.max(G.cellMin || 1, G.cell(u, sMidAt(u), a.id, b.id)) : null;
+    // mesh orders: the cell size and the site spacing along a ladder are hatch pitches, so both go through the device floor
+    const cell = G.cell ? u => floorPitch(Math.max(G.cellMin || 1, G.cell(u, sMidAt(u), a.id, b.id))) : null;
     const kp = k * (pairK[key] || 1);
-    const sp = u => { const t = at2(u); if (!t) return 1e9; if (cell) { const c = cell(u); return Math.max(0.8 * c, Math.min(1.25 * c, t.w * kp)); } const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * kp * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid))); };   // R-H, floored so cells never get tiny
+    const sp = u => { const t = at2(u); if (!t) return 1e9; if (cell) { const c = cell(u); return floorPitch(Math.max(0.8 * c, Math.min(1.25 * c, t.w * kp))); } const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * kp * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid))); };   // R-H, floored so cells never get tiny
     const t0 = at2(r.u0); if (!t0) continue;
     // one row (R-C): between two walls, sites walk from the wall at the local spacing (first site half a cell in) and a
     // crossvein is the bisector of each consecutive pair, so every cell is 0.85-1.8 spacings long and a gap shorter
@@ -1579,6 +1610,7 @@ function growVeins(g, G) {
     }
   }
   stats.pairRungs = pairRungs;
+  rngSync();   // a mesh order's site count follows the cell size, so a device plate's draws inside the growth differ from the default's
   return { lanes, joins, forks, stats };
 }
 
@@ -2067,9 +2099,26 @@ function rollBodyGenes(type, P) {
   return B;
 }
 
+// opts: { type } forces the body plan (the pick is still drawn, so the stream is unchanged); { devicePx } asks for a
+// device plate (see the device floors above): the same insect, drawn twice, strokes >= 1.0 and pitches >= 2.5 device px,
+// the caption subtitle dropped under 10 device px. Without devicePx the output is the default plate, byte for byte.
 function generateInsectDetailed(seed, opts) {
+  const devicePx = opts && opts.devicePx > 0 ? Number(opts.devicePx) : 0;
+  if (!devicePx) return drawPlate(seed, opts, null);
+  const rec = [];
+  const first = drawPlate(seed, opts, { record: rec });            // pass 1: the default plate, for its scale and stream positions
+  const K = 600 / devicePx;
+  const r = drawPlate(seed, opts, { px: devicePx, strokeFloor: 1.0 * K, pitchFloor: 2.5 * K, scale: first.meta.scale, bbox: first.meta.bbox, replay: rec });
+  r.meta.wingSig = first.meta.wingSig;                             // the signatures describe the insect's genes; a mesh order's sig counts its cells, which the device pitch coarsens
+  r.meta.wingStats = first.meta.wingStats;
+  return r;
+}
+
+function drawPlate(seed, opts, dev) {
   seed = seed >>> 0;
   rng = mulberry32(seed);
+  pitchFloor = dev && dev.replay ? dev.pitchFloor / dev.scale : 0;   // body units: the device floor is set after pass 1's scale
+  pitchMin = Infinity; syncRec = dev && dev.record || null; syncPlay = dev && dev.replay || null; syncI = 0;
   const freshBox = () => ({ minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
   bbox = freshBox();
   const picked = pick(TYPES);                                  // always drawn, so forcing a type never shifts the stream
@@ -2221,7 +2270,7 @@ function generateInsectDetailed(seed, opts) {
       L.abdomen.push(bowLine(y, hw - 0.5, hw * bow, A.sw));
       if (A.double && hw > 5) L.abdomen.push(bowLine(y + 1.6, hw - 1.5, hw * bow, SW.F));
     }
-    const hatchSeg = (y0, y1, spacing, inset) => { for (let y = y0 + 3; y < y1 - 2; y += spacing) { const hw = abdomen.hwAt(y) - inset; if (hw > 2) L.abdomen.push(bowLine(y, hw, hw * bow, SW.F)); } };
+    const hatchSeg = (y0, y1, spacing, inset) => { spacing = floorPitch(spacing); for (let y = y0 + 3; y < y1 - 2; y += spacing) { const hw = abdomen.hwAt(y) - inset; if (hw > 2) L.abdomen.push(bowLine(y, hw, hw * bow, SW.F)); } };
     // markings family
     for (let i = 0; i < n; i++) {
       const y0 = ys[i], y1 = ys[i + 1], segH = y1 - y0;
@@ -2229,20 +2278,20 @@ function generateInsectDetailed(seed, opts) {
       const dark = A.mark === 'tipdark' && i >= n - A.tipDark;
       if (banded || dark) hatchSeg(y0, y1, banded ? A.band.spacing : 2.6, 2);
       else if (A.mark !== 'hairy' || segH > 10) {   // plain: fine curves parallel to the boundary (one only under stripes, or they read as a grid)
-        const k = Math.min(A.mark === 'striped' ? 1 : 3, Math.floor(segH / 4));
-        for (let j = 1; j <= k; j++) { const y = y1 - j * 3, hw = abdomen.hwAt(y) - 3; if (hw > 3) L.abdomen.push(bowLine(y, hw, hw * bow, SW.F)); }
+        const k = Math.min(A.mark === 'striped' ? 1 : 3, Math.floor(segH / 4)), sp = floorPitch(3);
+        for (let j = 1; j <= k; j++) { const y = y1 - j * sp, hw = abdomen.hwAt(y) - 3; if (hw > 3 && y > y0 + 1) L.abdomen.push(bowLine(y, hw, hw * bow, SW.F)); }
       }
       if (A.mark === 'spotted' && i % A.spot.every === 0 && i > 0 && segH > 7) {   // one hatched spot per side per segment
         const yc = (y0 + y1) / 2, hw = abdomen.hwAt(yc), rx = Math.max(2, hw * A.spot.rx), ry = Math.min(rx, segH * 0.28);
         if (hw * A.spot.pos + rx < hw - 1.5) for (const sgn of [-1, 1]) {
           const c = [sgn * hw * A.spot.pos, yc];
           L.abdomen.push(pathEl(ellipsePath(c, rx, ry, 0), SW.D, '#fff'));
-          for (let dy = -ry + 2; dy < ry - 1; dy += 2.2) { const w = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) * (dy / ry))) - 0.8; if (w > 0.8) L.abdomen.push(lineEl([c[0] - w, c[1] + dy], [c[0] + w, c[1] + dy], SW.F)); }
+          for (let dy = -ry + 2, sp = floorPitch(2.2); dy < ry - 1; dy += sp) { const w = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) * (dy / ry))) - 0.8; if (w > 0.8) L.abdomen.push(lineEl([c[0] - w, c[1] + dy], [c[0] + w, c[1] + dy], SW.F)); }
         }
       }
       if (A.mark === 'hairy' || A.ticks) {   // side ticks (pilosity)
         const tk = A.mark === 'hairy' ? A.hair : A.ticks;
-        for (let y = y0 + 4; y < y1 - 3; y += tk.spacing) {
+        for (let y = y0 + 4, sp = floorPitch(tk.spacing); y < y1 - 3; y += sp) {
           const hw = abdomen.hwAt(y);
           if (hw > 6) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * (hw - 1), y], [sgn * (hw - tk.len), y + 0.6], SW.F));
         }
@@ -2289,9 +2338,10 @@ function generateInsectDetailed(seed, opts) {
     const scutY = T.scut && T.scut.shape !== 'triangle' ? yAt(T.scut.t0) : yBot;   // nothing on the scutum runs past the scutellum
     // ---- surface ----
     if (T.hatch) {   // contour hatching: nested fine lines parallel to each side, shortening inward, the dorsal highlight left white
+      const hsp = floorPitch(T.hatch.spacing);
       for (let k = 1; k <= T.hatch.n; k++) both(s => {
         const a = 0.1 + 0.12 * k, b = Math.min(0.92 - 0.1 * k, (scutY - t0) / len - 0.03), pts = [];
-        for (let t = a; t <= b; t += 0.05) { const y = yAt(t), hw = hwAt(y) - k * T.hatch.spacing - 0.8; if (hw > 3) pts.push([s * hw, y]); }
+        for (let t = a; t <= b; t += 0.05) { const y = yAt(t), hw = hwAt(y) - k * hsp - 0.8; if (hw > 3) pts.push([s * hw, y]); }
         if (pts.length > 2) TH.push(pathEl(smoothPath(pts, false), SW.F));
       });
     }
@@ -2300,7 +2350,7 @@ function generateInsectDetailed(seed, opts) {
       TH.push(pathEl(smoothPath(pts, false), SW.F));
     });
     if (T.punct) {   // punctation: dots on a staggered grid over the disc, the median line kept clear; coarse = sides only, denser
-      const sp = T.punct.coarse ? T.punct.spacing * 0.75 : T.punct.spacing;
+      const sp = floorPitch(T.punct.coarse ? T.punct.spacing * 0.75 : T.punct.spacing);
       let row = 0;
       for (let y = t0 + len * 0.12; y < Math.min(yBot, scutY) - 3; y += sp, row++) {
         const hw = hwAt(y) - Math.max(2.5, hwAt(y) * 0.12);
@@ -2317,19 +2367,20 @@ function generateInsectDetailed(seed, opts) {
       for (const k of (T.bands.n === 2 ? [T.bands.x1] : [T.bands.x1, T.bands.x2])) both(s => {
         const edge = d => { const pts = []; for (let y = yA; y <= yB; y += 4) pts.push([s * (k + d) * hwAt(y), y]); pts.push([s * (k + d) * hwAt(yB), yB]); return pts; };
         TH.push(pathEl(smoothPath(edge(-T.bands.w / 2), false), SW.F), pathEl(smoothPath(edge(T.bands.w / 2), false), SW.F));
-        for (let y = yA + 1.5; y < yB; y += T.bands.spacing) {
+        for (let y = yA + 1.5, bsp = floorPitch(T.bands.spacing); y < yB; y += bsp) {
           if (T.bands.interrupted && Math.abs(y - ts) < 3) continue;
           const hw = hwAt(y); TH.push(lineEl([s * ((k - T.bands.w / 2) * hw + 0.4), y], [s * ((k + T.bands.w / 2) * hw - 0.4), y], SW.F));
         }
       });
     }
     if (T.pile) {   // hair-like scales: ticks inward along the edge, optionally scattered over the disc too
-      for (let y = t0 + 5; y < yBot - 4; y += T.pile.spacing) { const hw = hwAt(y); if (hw > 5) both(s => TH.push(lineEl([s * (hw - 0.5), y], [s * (hw - T.pile.len), y + 1.2], SW.F))); }
+      const psp = floorPitch(T.pile.spacing);
+      for (let y = t0 + 5; y < yBot - 4; y += psp) { const hw = hwAt(y); if (hw > 5) both(s => TH.push(lineEl([s * (hw - 0.5), y], [s * (hw - T.pile.len), y + 1.2], SW.F))); }
       if (T.pile.interior) {
         let row = 0;
-        for (let y = t0 + len * 0.2; y < yBot - 6; y += T.pile.spacing * 2.2, row++) {
+        for (let y = t0 + len * 0.2; y < yBot - 6; y += psp * 2.2, row++) {
           const hw = hwAt(y) - T.pile.len - 3, off = (row * 0.37) % 1;
-          for (let x = -hw + off * T.pile.spacing * 3; x < hw; x += T.pile.spacing * 3) TH.push(lineEl([x, y], [x + (x < 0 ? -1 : 1) * T.pile.len * 0.5, y + T.pile.len * 0.45], SW.F));
+          for (let x = -hw + off * psp * 3; x < hw; x += psp * 3) TH.push(lineEl([x, y], [x + (x < 0 ? -1 : 1) * T.pile.len * 0.5, y + T.pile.len * 0.45], SW.F));
         }
       }
     }
@@ -2366,7 +2417,7 @@ function generateInsectDetailed(seed, opts) {
         if (H.double) { const yA2 = yA - len * 0.06, yB2 = yB - len * 0.04; TH.push(lineEl([s * Math.min(H.x0 + 0.12, 0.6) * hwAt(yA2), yA2], [s * Math.min(0.97, H.x1 + 0.08) * hwAt(yB2), yB2], SW.F)); }
         if (H.stripe) {   // ticks across the strip inside the suture
           const d = norm(sub(b, a)), n = perp(d), L0 = vlen(sub(b, a));
-          for (let q = 6; q < L0 - 4; q += 3.4) { const p = add(a, mul(d, q)), inward = -s * Math.sign(n[0]) || 1; TH.push(lineEl(add(p, mul(n, inward * 1.2)), add(p, mul(n, inward * 4.2)), SW.F)); }
+          for (let q = 6, qsp = floorPitch(3.4); q < L0 - 4; q += qsp) { const p = add(a, mul(d, q)), inward = -s * Math.sign(n[0]) || 1; TH.push(lineEl(add(p, mul(n, inward * 1.2)), add(p, mul(n, inward * 4.2)), SW.F)); }
         }
       });
     }
@@ -2397,7 +2448,7 @@ function generateInsectDetailed(seed, opts) {
         TH.push(pathEl(smoothPath(body, false), SW.D));
         TH.push(bowLine(yS, hwS - 0.5, bowB, SW.D));   // scutoscutellar suture, across to the axillae
         if (S.axillae) both(s => TH.push(lineEl([s * w, yL + 0.5], [s * Math.min(hwS - 1.5, w + hwS * 0.15), yS + Lsc * 0.45], SW.F)));
-        if (S.hatched) for (let y = yS + Lsc * 0.55; y < yTip - 1.5; y += 2.6) {   // shadow under the convex rear edge
+        if (S.hatched) for (let y = yS + Lsc * 0.55, ssp = floorPitch(2.6); y < yTip - 1.5; y += ssp) {   // shadow under the convex rear edge
           const f = (y - yS) / Lsc, half = w * (f < 0.78 ? 0.9 : 0.9 * Math.sqrt(Math.max(0, 1 - ((f - 0.78) / 0.22) ** 2))) - 1.2;
           if (half > 1) TH.push(lineEl([-half, y], [half, y], SW.F));
         }
@@ -2471,8 +2522,10 @@ function generateInsectDetailed(seed, opts) {
     // --- capsule ---
     HE.push(pathEl(smoothPath(outline, true, 1), SW.O, '#fff'));
     if (G.bump && G.bump.striae) {   // cicada postclypeus: transverse muscle ridges
-      const yTip = yFrontAt(0);
-      for (let k = 1; k <= G.bump.striae; k++) { const y = yTip + (headTop + H * 0.08 - yTip) * k / (G.bump.striae + 1); HE.push(bowLine(y, Math.max(2, hwAt(y) * 0.8), -(headTop - y) * 0.25, SW.F)); }
+      const yTip = yFrontAt(0), span = headTop + H * 0.08 - yTip;
+      let n = G.bump.striae; while (n > 0 && span / (n + 1) < pitchFloor) n--;   // a device plate draws fewer ridges rather than closer ones
+      if (n > 0) floorPitch(span / (n + 1));
+      for (let k = 1; k <= n; k++) { const y = yTip + span * k / (n + 1); HE.push(bowLine(y, Math.max(2, hwAt(y) * 0.8), -(headTop - y) * 0.25, SW.F)); }
     }
     if (G.labrum && !G.mand) {   // odonate frons / clypeus / labrum bands under the frons bump
       const bw = G.bump ? G.bump.w * W * 0.6 : W * 0.15;
@@ -2508,11 +2561,13 @@ function generateInsectDetailed(seed, opts) {
     }
     // --- face markings ---
     if (G.hatch) {   // hatched vertex: fine bows between the ocelli and the rear margin
-      const y0 = headTop + H * 0.62, y1 = headTop + H * 0.8, n = Math.max(2, Math.min(4, Math.round((y1 - y0) / 3)));
-      for (let k = 0; k <= n; k++) { const y = y0 + (y1 - y0) * k / n; HE.push(bowLine(y, Math.max(2, Math.min(hwAt(y) * 0.9, W * G.eye.cx - W * G.eye.rx - 1.5)), H * 0.03, SW.F)); }
+      const y0 = headTop + H * 0.62, y1 = headTop + H * 0.8;
+      let n = Math.max(2, Math.min(4, Math.round((y1 - y0) / 3))); while (n > 0 && (y1 - y0) / n < pitchFloor) n--;   // fewer bows on a device plate, never closer
+      if (n > 0) floorPitch((y1 - y0) / n);
+      for (let k = 0; k <= n; k++) { const y = n ? y0 + (y1 - y0) * k / n : y0; HE.push(bowLine(y, Math.max(2, Math.min(hwAt(y) * 0.9, W * G.eye.cx - W * G.eye.rx - 1.5)), H * 0.03, SW.F)); }
     }
     if (G.hair) {   // pile: short ticks outward around the capsule rim, leaving the eyes alone
-      for (let k = 0; k < outlinePl.length; k += Math.max(1, Math.round(G.hair.spacing / (Math.PI * (W + H) / 2 / outlinePl.length)))) {
+      for (let k = 0; k < outlinePl.length; k += Math.max(1, Math.round(floorPitch(G.hair.spacing) / (Math.PI * (W + H) / 2 / outlinePl.length)))) {
         const p = outlinePl[k], d = sub(p, [0, headCy]), L0 = vlen(d) || 1;
         if (eyes.some(e => Math.hypot((p[0] - e.cx) / (e.rx + 1.5), (p[1] - e.cy) / (e.ry + 1.5)) < 1)) continue;
         if (p[1] > headTop + H * 0.85) continue;   // nothing where the head meets the thorax
@@ -3063,6 +3118,7 @@ function generateInsectDetailed(seed, opts) {
       const clsX = lv => lv < 3 ? 0 : lv === 3 ? 1 : 2;                                        // cross-hatch only in the darks
       L.wings.push(...lepHatch(wing, lepFan(wing, [hindW ? Q.hatch.focusH : Q.hatch.focusF, H * 0.05], Q.hatch.spacing), tone, clsFan, 1.2, mask));
       L.wings.push(...lepHatch(wing, lepParallel(wing, hindW ? Q.hatch.crossH : Q.hatch.crossF, Q.hatch.xSpacing), tone, clsX, 1.2, mask));
+      rngSync();   // the stipple hatch draws one jitter per dot and a device plate has fewer rows
       for (const pl of o.fine) L.wings.push(pathEl(smoothPath(pl.map(wing.T), false, 1), SW.F));
       if (!hindW) L.wings.push(...costaEls(wing, 0, W * 0.9));
       for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, v.sw || SW.D));
@@ -3849,39 +3905,50 @@ function generateInsectDetailed(seed, opts) {
   // their roots on the thorax, and the tegulae cover the roots
   const order = [mirrored('legs', L.legPairs), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('wings'), mirrored('tegulae'), mirrored('antennae')];
 
-  // symmetric bbox (right half generated, left mirrored)
-  const halfW = Math.max(Math.abs(bbox.minX), Math.abs(bbox.maxX));
-  const bw = halfW * 2, bh = bbox.maxY - bbox.minY;
+  // symmetric bbox (right half generated, left mirrored); a device plate keeps pass 1's fit, so its scale is the
+  // default plate's (a coarser pile or fringe moves the outermost hair by a fraction of a px, never past the margin)
+  const box = dev && dev.replay ? dev.bbox : bbox;
+  const halfW = Math.max(Math.abs(box.minX), Math.abs(box.maxX));
+  const bw = halfW * 2, bh = box.maxY - box.minY;
   const margin = 24;
   const CAPTION_H = 45;                       // band reserved at the foot of the plate for the caption
   const plateH = 600 - CAPTION_H;             // drawing is centred within the top 555px
   const s = Math.min((600 - 2 * margin) / bw, (plateH - 2 * margin) / bh, 1.3);
-  const tx = 300, ty = plateH / 2 - (bbox.minY + bbox.maxY) / 2 * s;
+  const tx = 300, ty = plateH / 2 - (box.minY + box.maxY) / 2 * s;
   meta.name = insectName(seed, type, P.variant);
   meta.bodySig = B.sig.join(',');
   meta.scale = s;
-  meta.bbox = { minX: -halfW, maxX: halfW, minY: bbox.minY, maxY: bbox.maxY };
+  meta.bbox = { minX: -halfW, maxX: halfW, minY: box.minY, maxY: box.maxY };
   meta.fitted = { minX: tx - halfW * s, maxX: tx + halfW * s, minY: ty + bbox.minY * s, maxY: ty + bbox.maxY * s };
 
-  // plate caption: italic binomial and a letter-spaced small-caps common name
+  // device plate: the stroke floor in plate px, and the smallest pitch drawn (plate px) for the invariant check
+  const device = dev && dev.replay ? { px: dev.px, strokeFloor: dev.strokeFloor, pitchFloor: dev.pitchFloor } : null;
+  const strokeFloor = device ? device.strokeFloor : 0;
+  meta.device = device;
+  meta.minPitch = pitchMin < Infinity ? pitchMin * s : null;
+  meta.weights = { H: Math.max(SW_PX.H, strokeFloor), O: Math.max(SW_PX.O, strokeFloor), D: Math.max(SW_PX.D, strokeFloor), F: Math.max(SW_PX.F, strokeFloor) };
+
+  // plate caption: italic binomial and a letter-spaced small-caps common name; the common name (11 px) is dropped on a
+  // device plate where it would fall under 10 device px (devicePx < 546), the binomial stays where it is
   const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   const nm = meta.name;
+  const subtitle = !device || 11 * device.px / 600 >= 10;
   const caption =
     '<text x="300" y="571" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="16" fill="#000">' +
     '<tspan font-style="italic">' + esc(nm.binomial) + '</tspan></text>' +
-    '<text x="300" y="587" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="11" font-variant="small-caps" letter-spacing="1.5" fill="#000">' +
-    esc(nm.common) + '</text>';
+    (subtitle ? '<text x="300" y="587" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="11" font-variant="small-caps" letter-spacing="1.5" fill="#000">' +
+    esc(nm.common) + '</text>' : '');
 
   let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">' +
     '<rect width="600" height="600" fill="#fff"/>' +
     '<g transform="translate(' + fmt(tx) + ' ' + fmt(ty) + ') scale(' + (Math.round(s * 1000) / 1000) + ')" stroke="#000" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
     order.join('') + '</g>' + caption + '</svg>';
   const sw = v => String(Math.round(v / s * 1000) / 1000);
-  svg = svg.replace(/SW_H/g, sw(2.2)).replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
+  svg = svg.replace(/SW_H/g, sw(meta.weights.H)).replace(/SW_O/g, sw(meta.weights.O)).replace(/SW_D/g, sw(meta.weights.D)).replace(/SW_F/g, sw(meta.weights.F));
   return { svg, meta };
 }
 
-function generateInsect(seed) { return generateInsectDetailed(seed).svg; }
+function generateInsect(seed, opts) { return generateInsectDetailed(seed, opts).svg; }
 
 // ---------- single-part generator ----------
 // Draws one body part of the insect that `seed` (forced to `type` when given) would have, cropped to that
@@ -3906,7 +3973,7 @@ function generatePart(seed, type, part, size) {
     '<g transform="translate(' + fmt(tx) + ' ' + fmt(ty) + ') scale(' + (Math.round(s * 1000) / 1000) + ')" stroke="#000" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
     PART_LAYERS[part].map(k => '<g>' + L[k].join('') + '</g>').join('') + '</g></svg>';
   const sw = v => String(Math.round(v / s * 1000) / 1000);
-  svg = svg.replace(/SW_H/g, sw(2.2)).replace(/SW_O/g, sw(1.5)).replace(/SW_D/g, sw(0.8)).replace(/SW_F/g, sw(0.5));
+  svg = svg.replace(/SW_H/g, sw(SW_PX.H)).replace(/SW_O/g, sw(SW_PX.O)).replace(/SW_D/g, sw(SW_PX.D)).replace(/SW_F/g, sw(SW_PX.F));
   return { svg, meta: Object.assign({}, r.meta, { part, partScale: s }) };
 }
 
