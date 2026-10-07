@@ -1,0 +1,52 @@
+# CI for the e-ink contract (spec #32, ticket #37).
+#
+# On every push to main and every pull request this runs the two gates from the "Verify before claiming
+# done" block in CLAUDE.md:
+#   node tests/check.js 500   the structural invariant check: determinism, fit, legs / antennae / head
+#                             assertions, wing and body signature uniqueness, the 0.5 px stroke floor and,
+#                             for every seed, the device plate at 440 px (1.0 device px stroke floor,
+#                             2.5 device px pitch floor, subtitle rule, no rng shift).
+#   npm test                  the raster survival gate (tests/eink.js): 39 device plates rasterised with
+#                             sharp through the panel's exact pipeline, per-layer survival against the floors.
+#
+# 500 seeds, not the 3000 of `npm run check`: each seed now also draws the device plate twice (pass 1 for
+# the scale, pass 2 with the floors, then once more for the determinism assertion), so 3000 seeds take
+# ~15 min locally and the ticket wants the whole job under 5 min. 500 seeds still cover every order and
+# both lepidoptera variants many times over; run the full 3000 locally before calling an engine change done.
+#
+# fonts-dejavu-core: the gate rasterises the caption through sharp's librsvg, which needs a system font to
+# lay out <text>; without one the caption contributes no ink. Installed before npm ci so the sharp binary
+# never sees a fontless fontconfig cache.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: invariants (500 seeds) + survival gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install a font for the caption
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-dejavu-core
+
+      - run: npm ci
+
+      - name: Invariant check (500 seeds)
+        run: node tests/check.js 500
+
+      - name: E-ink survival gate
+        run: npm test
