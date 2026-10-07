@@ -11,8 +11,9 @@
 #
 # 300 seeds, not the 3000 of `npm run check`: each seed now also draws the device plate twice (pass 1 for
 # the scale, pass 2 with the floors, then once more for the determinism assertion), so 3000 seeds take
-# ~15 min locally and 500 took 195 s on a fast Mac, over budget on a 2-vCPU runner; the ticket wants the whole job under 5 min. 300 seeds (~2 min locally) still cover every order and
-# both lepidoptera variants many times over; run the full 3000 locally before calling an engine change done.
+# ~15 min locally and 500 took 195 s on a fast Mac, over budget on a 2-vCPU runner; the ticket wants the
+# whole job under 5 min. 300 seeds (~2 min locally) still cover every order and both lepidoptera variants
+# many times over; run the full 3000 locally before calling an engine change done.
 #
 # fonts-dejavu-core: the gate rasterises the caption through sharp's librsvg, which needs a system font to
 # lay out <text>; without one the caption contributes no ink. Installed before npm ci so the sharp binary
@@ -33,6 +34,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
+      # The prologue (checkout, node, font, npm ci) is step for step daily.yml's; change both together.
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -40,7 +42,7 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install a font for the caption
+      - name: Install a font for the caption (Georgia is not on the runner)
         run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-dejavu-core
 
       - run: npm ci

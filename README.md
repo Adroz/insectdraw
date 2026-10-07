@@ -77,8 +77,8 @@ The daily plate is published on GitHub Pages by a scheduled workflow
 (`.github/workflows/daily.yml`, ADR 0002): at the day boundary (00:00
 Brisbane, 14:00 UTC), on every push to `main` and on manual dispatch, the
 workflow renders the device plate for the Brisbane calendar day and deploys it
-with the site. Nothing is committed; a failed render leaves the previous deploy
-live. The consumer contract:
+with the site. Nothing is committed; if rendering fails the previous deploy
+stays live. The consumer contract:
 
 | URL | What |
 | --- | --- |
@@ -90,9 +90,9 @@ The seed is `hashString(date)`, the seed the web page's **Daily** button
 picks on that day, so the two never disagree. Any day's files are reproduced
 locally with `node scripts/render-daily.js 2026-01-01` (writes `daily/`;
 `--out DIR` elsewhere), and `npm run check:daily` tests that script. The SVG
-and JSON match the published ones byte for byte; the PNG's caption glyphs
-can differ where the local machine has Georgia and the runner (DejaVu Serif)
-does not.
+and JSON match the published ones byte for byte; the device raster's caption
+glyphs can differ where the local machine has Georgia and the runner (DejaVu
+Serif) does not.
 
 ## Venation
 

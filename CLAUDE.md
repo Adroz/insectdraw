@@ -24,18 +24,28 @@ contract for changes.
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px
-  (`floor × 600 / devicePx` plate px), the subtitle dropped under 10 device px. Strokes are floored
-  at the token substitution; pitches at draw time through `floorPitch(v)` (body units), which also
-  records `meta.minPitch`. Every pitch site (hatch band, lattice, mesh cell, pile, fringe, any
-  repeated stroke at a spacing) must go through `floorPitch`, never a literal step, or the device
-  assertion in `tests/check.js` is blind to it. A fan's pitch is held at its nearest outline
-  point; a second hatch family over a first takes `floorPitch(v, 2)`. The device plate is drawn
-  twice (pass 1 for the scale) and a clamped site that draws rng jitter per element (stipple
-  dots, mesh sites) must end with `rngSync()` so pass 2 re-synchronises on pass 1's stream.
-  Without `devicePx` the output is byte-for-byte unchanged; `npm test` and the device block of
-  `tests/check.js` are the two gates.
+  (`floor × 600 / devicePx` plate px; the numbers are the engine's exported `DEVICE`), the
+  subtitle dropped under 10 device px. Strokes are floored at the token substitution; pitches at
+  draw time through `floorPitch(v)` (body units), which also records `meta.minPitch`. Every
+  repeated mark at a spacing goes through `floorPitch`, never a literal step: hatch bands,
+  lattice, mesh cells, pile, fringe, and the limb and antenna marks too (shading, spines, comb
+  rows, herringbone, arista rami, club annuli), crossvein ladders and the stigma's lines
+  (`floorFrac` for a step given as a fraction of a length, `floorSamples` for marks at every
+  k-th sample). A site the floor misses leaves the device assertion in `tests/check.js` blind to
+  it. A fan's pitch is held at its nearest outline point; a second hatch family over a first
+  takes `floorPitch(v, 2)`. Without `devicePx` the output is byte-for-byte unchanged; `npm test`
+  and the device block of `tests/check.js` are the two gates.
 
 ## Randomness rules
+
+- A device plate is drawn twice from the same stream: pass 1 is the default plate and gives the
+  scale, pass 2 redraws with the floors, so the type, genes and `bodySig` are re-rolled
+  identically. A clamped site that draws rng jitter per element (stipple dots, mesh sites,
+  ladder rungs) consumes a different number of draws on pass 2, so it must end with
+  `rngSync()`: pass 1 records its stream position there and pass 2 restores it, keeping every
+  roll outside the site identical. `meta.wingSig` / `wingStats` on a device plate are pass 1's
+  by construction; pass 2's own sit on `meta.device`, where `tests/check.js` asserts the
+  venation rules on them.
 
 - `rng` is a single mulberry32 stream seeded from the plate seed. The first draw picks the body
   plan, then proportions, legs, head, then wings. Adding or removing `rng()` calls inside a block
@@ -91,8 +101,8 @@ contract for changes.
 
 ```
 node tests/check.js 3000                 # invariants + determinism + wing uniqueness
-npm test                                 # e-ink survival gate (tests/eink.js): per-layer survival (all / fine strokes) at device size 440, needs `npm install`
-npm run check:daily                      # the daily plate render (scripts/render-daily.js, run by .github/workflows/daily.yml to publish daily/ on Pages): files, sidecar, 1-bit 440 raster
+npm test                                 # e-ink survival gate: per-layer survival at device size 440
+npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
 ```
 

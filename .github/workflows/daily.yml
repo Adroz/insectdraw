@@ -2,14 +2,15 @@
 #
 # Renders the daily plate (the device plate for the Brisbane calendar day, as a 440×440 1-bit PNG, the
 # SVG and a JSON sidecar) into daily/ next to the site and deploys the lot through GitHub Pages from a
-# build artifact. Nothing is committed; a failed render fails the deploy and the previous deploy stays live.
+# build artifact. Nothing is committed; if rendering fails the deploy fails and the previous deploy
+# stays live.
 #
 # Triggers:
 #   schedule          00:00 Brisbane = 14:00 UTC (UTC+10, no daylight saving; ADR 0002 for why the day
 #                     boundary is Brisbane midnight, docs/adr/0002-*.md). The seed is the FNV-1a hash of
 #                     the Brisbane calendar date, so the web page's Daily button and this plate agree.
 #   push to main      the site and the plate pick up engine changes at once.
-#   workflow_dispatch a manual run, to re-render after a failed cron or to inspect the PNG.
+#   workflow_dispatch a manual run, to re-render after a failed cron or to inspect the device raster.
 #
 # One-time switch of the Pages source from the branch deploy (build_type "legacy", branch main, path /)
 # to this workflow (build_type "workflow"), run once from a checkout of main after review:
@@ -23,7 +24,7 @@
 # Fonts: the caption asks for Georgia, which GitHub's ubuntu runners lack; librsvg falls back through
 # fontconfig, so fonts-dejavu-core is installed and the binomial renders in DejaVu Serif. The local
 # reproduce command (node scripts/render-daily.js YYYY-MM-DD) matches byte for byte in the SVG and JSON;
-# the PNG caption glyphs differ only where the local machine has Georgia.
+# the device raster's caption glyphs differ only where the local machine has Georgia.
 name: Daily plate
 
 on:
@@ -50,6 +51,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      # The prologue (checkout, node, font, npm ci) is step for step ci.yml's; change both together.
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -57,8 +59,8 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Install a serif fallback for the caption (Georgia is not on the runner)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+      - name: Install a font for the caption (Georgia is not on the runner)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-dejavu-core
 
       - run: npm ci
 
