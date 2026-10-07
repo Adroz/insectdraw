@@ -92,6 +92,7 @@ contract for changes.
 ```
 node tests/check.js 3000                 # invariants + determinism + wing uniqueness
 npm test                                 # e-ink survival gate (tests/eink.js): per-layer survival (all / fine strokes) at device size 440, needs `npm install`
+npm run check:daily                      # the daily plate render (scripts/render-daily.js, run by .github/workflows/daily.yml to publish daily/ on Pages): files, sidecar, 1-bit 440 raster
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
 ```
 
