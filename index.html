@@ -1399,6 +1399,8 @@ function growVeins(g, G) {
   // R-C: for every strip between adjacent lanes, the u-interval where both are alive and separated by minSep
   const live = u => { const x = u * Lw, out = []; for (const l of lanes) { if (l.noJoin || x < l.x0 + 0.3 || x > l.x1 - 0.3) continue; const h = atX(l.pl, x); if (h) out.push({ l, y: h.p[1] }); } return out.sort((p, q) => p.y - q.y); };
   const noPair = new Set((G.noPair || []).flatMap(p => [p[0] + '|' + p[1], p[1] + '|' + p[0]]));
+  const pairK = {}; for (const [x, y, kk] of G.pairK || []) { pairK[x + '|' + y] = kk; pairK[y + '|' + x] = kk; }   // per-pair spacing multiplier (sparse strips)
+  const pairRungs = {};
   const runs = {};
   if (!G.noSites) for (let u = 0.04; u < uOpen; u += 0.01) {
     const lv = live(u);
@@ -1417,7 +1419,8 @@ function growVeins(g, G) {
     // mesh orders give an absolute cell size G.cell(u, s, laneA, laneB); ladder spacing is then the strip width x k held
     // within 0.8-1.8 cells, and width / cell decides the regime (one row of rungs, or rows of Voronoi cells)
     const cell = G.cell ? u => Math.max(G.cellMin || 1, G.cell(u, sMidAt(u), a.id, b.id)) : null;
-    const sp = u => { const t = at2(u); if (!t) return 1e9; if (cell) { const c = cell(u); return Math.max(0.8 * c, Math.min(1.25 * c, t.w * k)); } const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * k * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid))); };   // R-H, floored so cells never get tiny
+    const kp = k * (pairK[key] || 1);
+    const sp = u => { const t = at2(u); if (!t) return 1e9; if (cell) { const c = cell(u); return Math.max(0.8 * c, Math.min(1.25 * c, t.w * kp)); } const sMid = sAt(lerpP(t.ha.p, t.hb.p, 0.5)); return Math.max((G.spMin === undefined ? 0.045 : G.spMin) * Lw, t.w * kp * (1 - (G.grad || 0) * (0.5 * u + 0.5 * sMid))); };   // R-H, floored so cells never get tiny
     const t0 = at2(r.u0); if (!t0) continue;
     // one row (R-C): between two walls, sites walk from the wall at the local spacing (first site half a cell in) and a
     // crossvein is the bisector of each consecutive pair, so every cell is 0.85-1.8 spacings long and a gap shorter
@@ -1437,6 +1440,7 @@ function growVeins(g, G) {
         if (!junctionOK(a, hA.p[0], gapA * spx)) continue;
         place(a, hA.p, hA.d, b, hB.p[0], Math.max(spx, (G.reachW || 0) * t.w), { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw });   // reachW: the slide also grows with the strip width, so a rung across a wide strip can still lean into the band
       }
+      pairRungs[key] = (pairRungs[key] || 0) + (stats.joins - before);
       return stats.joins - before;
     };
     if (!G.rows2) {   // walls = the strip's ends and its named crossveins; a ladder between consecutive walls
@@ -1573,6 +1577,7 @@ function growVeins(g, G) {
       g.poly(cutX(l.pl, cuts[i], cuts[i + 1]), sw);
     }
   }
+  stats.pairRungs = pairRungs;
   return { lanes, joins, forks, stats };
 }
 
@@ -2044,7 +2049,7 @@ function rollBodyGenes(type, P) {
     if (rng() < F.fringe) g.fringe = { spacing: randRange(2.6, 4.5), len: randRange(3, 7), tibia: true, femur: rng() < 0.5 };
     // order specifics
     if (saltatorial && i === 2) {   // saltatorial: huge femur with chevron muscles, serrated tibia, two pairs of apical spurs
-      g.herringbone = true; g.bowSign = -1; g.femW = randRange(13, 17); g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);
+      g.herringbone = true; g.bowSign = -1; g.femFrac = randRange(0.24, 0.33); g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);   // acridid femur a quarter to a third as wide as long (ref orth-grasshopper)
       g.spines = { tibia: true, femur: false, side: 'outer', double: true, spacing: randRange(4, 6.5), len: randRange(0.6, 0.9) };
       g.ang = B.pose === 'tucked' ? { F: [40, 62], fold: [24, 40], T: [5, 18] } : { F: [40, 65], fold: [30, 52], T: [5, 20] };
     }
@@ -2559,6 +2564,7 @@ function generateInsectDetailed(seed, opts) {
         fringe: g.fringe, pulvilli: g.pulvilli, padK: g.padK, clawK: g.clawK, herringbone: g.herringbone, femurTeeth: g.femurTeeth, shade: g.shade, corbicula: g.corbicula,
       };
       if (g.femW) spec.widths[1] = [g.femW * wk, 6 * wk];
+      if (g.femFrac) spec.widths[1] = [spec.lens[1] * g.femFrac, 6 * wk];   // saltatorial femur: width as a fraction of its own final length
       if (g.herringbone) spec.widths[2] = [5.5 * wk, 3.2 * g.flare * wk];
       if (g.corbicula) { spec.widths[2] = [4.5 * wk, 9.5 * wk]; spec.basitarsus = [7 * wk, 6 * wk]; }
       return spec;
@@ -2614,6 +2620,7 @@ function generateInsectDetailed(seed, opts) {
       L.legs.push(...legEls(at.p, specs[i], legMeta));
       const lm = legMeta[legMeta.length - 1];
       lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3];
+      lm.femW = specs[i].widths[1][0]; lm.femLen = specs[i].lens[1];
     }
     legMeta.reverse();   // front, mid, hind
     meta.legs = legMeta;
@@ -2736,9 +2743,11 @@ function generateInsectDetailed(seed, opts) {
       ? [[W * 0.4 * j(), H * 0.02], [W * 0.68 * j(), H * 0.15 * j()], [W * 0.7 * j(), H * 0.45 * j()], [W * 0.5 * j(), H * (G.hindLobe - 0.06) * j()], [W * 0.28 * j(), H * G.hindLobe], [W * 0.06, H * 0.5]]
       : [[W * 0.4 * j(), -H * 0.02], [W * 0.68 * j(), H * 0.12 * j()], [W * 0.66 * j(), H * 0.42 * j()], [W * 0.45 * j(), H * (G.hindLobe - 0.09) * j()], [W * 0.22 * j(), H * (G.hindLobe - 0.04)], [W * 0.05, H * 0.5]];
     let hwPts = [[0, 8]].concat(hRaw.map(p => mul(p, hk)));
+    let tailRoot = null, tailDir = null, tailTip = null;
     if (G.tail) {
       const root = hwPts[3], dir = norm(sub(root, hO)), tip = add(root, mul(dir, W * G.tail));
       const side = perp(dir);
+      tailRoot = root; tailDir = dir; tailTip = tip;
       hwPts.splice(3, 1, add(root, mul(side, -W * 0.025)), add(lerpP(root, tip, 0.9), mul(side, -W * 0.012)), tip, add(lerpP(root, tip, 0.9), mul(side, W * 0.012)), add(root, mul(side, W * 0.025)));
     }
     const base = [bx, by];
@@ -2750,7 +2759,7 @@ function generateInsectDetailed(seed, opts) {
     // Returns the vein polylines with `vs.pre` = how many lead the list before the marginal veins (whose last
     // points are the cell boundaries for the pattern space). Each polyline carries its weight in `.sw`:
     // stems and cell edges SW.O, branches SW.D, the anal/humeral veins SW.F (spec R7); `heavy` promotes the branches.
-    function lepVeins(wing, b, U, D, nR, scX, aX, xMin, nStalk, stemL, hindW) {
+    function lepVeins(wing, b, U, D, nR, scX, aX, xMin, nStalk, stemL, hindW, tail) {
       // Grown by growVeins v2 (docs/wing-venation-spec.md, Lepidoptera; refs lep-agrotis, lep-papilio). Every vein is a
       // lane: the discal cell's top and bottom edges, Sc, the R stalk, every branch and the anals, each one pre-built
       // bowed arc (a lepidopteran chord widens to the tornus, so chord-fraction control points would dip; the arcs are
@@ -2764,7 +2773,12 @@ function generateInsectDetailed(seed, opts) {
       const wStem = SW.O, wBr = G.heavy ? SW.O : SW.D;
       const g = wingGraph(wing, W), poly = wing.localPoly;
       const bowed = (p, q, k, sw) => { const n = perp(norm(sub(q, p))), pl = vein([p, add(lerpP(p, q, 0.5), mul(n, k)), q]); pl.sw = sw; return pl; };
-      const nT = nR + 3 + 2, tg = marginTargets(poly, U, nT, xMin);
+      const nT = nR + 3 + 2, tg = marginTargets(tail ? tail.poly : poly, U, nT, xMin);
+      if (tail) {   // one vein to the tail tip: the target whose angle from the cell corner is nearest the tip's angle
+        const ang = p => Math.atan2(p[1] - U[1], p[0] - U[0]), at = ang(tail.tip); let bi = 0, bd = Infinity;
+        for (let i = 0; i < tg.length; i++) { const d = Math.abs(ang(tg[i]) - at); if (d < bd) { bd = d; bi = i; } }
+        tg[bi] = tail.tip;
+      }
       const vs = [];
       if (tg.length < nT) {   // a degenerate outline (no room for the targets): the cell alone
         vs.push(bowed(b, U, -W * 0.015, wStem), bowed(b, D, W * 0.012, wStem), bowed(U, D, 0, wBr));
@@ -2839,13 +2853,18 @@ function generateInsectDetailed(seed, opts) {
     // ---- venation ----
     const hB = mul([W * 0.01, H * 0.1], hk), hU = [W * G.hU[0] * hk, H * G.hU[1] * hk], hD = [W * G.hD[0] * hk, H * G.hD[1] * hk];
     const fB = [W * 0.01, H * 0.02], fU = [W * G.fU[0], -H * G.fU[1]], fD = [W * G.fD[0], H * G.fD[1]];
-    const hVeins = lepVeins(hind, hB, hU, hD, G.nRh, W * 0.42 * hk, W * 0.28 * hk, W * 0.45 * hk, 1, 0.05, true);
+    // with a tail, the margin targets are sampled from the outline without the tail lobe (its dense samples would otherwise
+    // pull several veins into it) and exactly one vein runs to the tail tip, as on lep-papilio
+    const hTail = G.tail ? { poly: hind.localPoly.filter(p => { const d = sub(p, tailRoot); const along = dot(d, tailDir), across = Math.abs(dot(d, perp(tailDir))); return !(along > W * 0.02 && across < W * 0.05); }), tip: nearestOutlinePoint(hind.localPoly, tailTip) } : null;
+    const hVeins = lepVeins(hind, hB, hU, hD, G.nRh, W * 0.42 * hk, W * 0.28 * hk, W * 0.45 * hk, 1, 0.05, true, hTail);
     const nR = G.nR;
     const fVeins = lepVeins(fore, fB, fU, fD, nR, W * G.scX, W * G.aX, W * Math.min(0.62, G.tornusX - 0.06), G.stalk, G.stemL, false);
     { const fs = fVeins.stats, hs = hVeins.stats; meta.wingStats = { joins: fs.joins + hs.joins, dropped: fs.dropped + hs.dropped, minAngle: Math.min(fs.minAngle, hs.minAngle), maxAngle: Math.max(fs.maxAngle, hs.maxAngle), rungs: fs.joins + hs.joins }; }   // the discocellular pieces of both wings
     const ends = vs => vs.slice(vs.pre).map(v => v[v.length - 1]);   // marginal vein tips, apex -> inner margin
     const SF = lepSpace(fore, [W * 0.1, 0], ends(fVeins), nR + 3);       // cells posterior to M3 start at nR+3
     const SH = lepSpace(hind, hO, ends(hVeins), G.nRh + 3);
+    meta.lepHindEnds = ends(hVeins);
+    if (G.tail) meta.lepTail = { tip: hwPts[5], W };
 
     // ---- pattern: a compositional ground plan (docs/research-lepidoptera-wings.md). Every element
     // (basal field, bands, cross-lines, discal element, ocelli, spot rows, submarginal, margin, apical
@@ -3234,7 +3253,7 @@ function generateInsectDetailed(seed, opts) {
       for (const g0 of G.grad) { let t = g0; for (let i = 0; i < nB; i++) { named.push({ a: 'B' + i, ua: lerp(uf[i], ut[i], t), b: i + 1 < nB ? 'B' + (i + 1) : 'Rs', ub: lerp(uf[i + 1], ut[i + 1], Math.max(0.08, t - G.zig)), reach: 0.03, sw: SW.D, bow: 0, angT: G.gradAng }); t = Math.min(0.9, t + G.drift); } }
       for (let q = 0; q < G.nmc; q++) named.push({ a: 'M', ua: lerp(0.25, 0.85, (q + 0.5) / G.nmc) * G.cuX, b: 'Cu', reach: 0.03, sw: SW.F });   // m-cu rungs
       const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.05, angle: G.angle, lean: G.lean, bowAmt: 0.02, grad: 0.15, stubProb: 0, stubLen: 0.08,
-        noPair: [['C', 'Sc'], ['Sc', 'R1'], ['M', 'Cu']] });   // the costal ladder and the m-cu rungs are named; the subcostal field is empty
+        noPair: [['C', 'Sc'], ['Sc', 'R1'], ['M', 'Cu']], pairK: [['R1', 'Rs', randRange(3.2, 4.5)]] });   // the costal ladder and the m-cu rungs are named; the subcostal field is empty; the R1-Rs strip is sparse (ref neu-nothochrysa: 2-5 rungs)
       L.wings.push(...g.emit());
       L.wings.push(...costaEls(wing, X(0), X(0.96)));
       for (const l of grown.lanes) if (l.id[0] === 'B' || l.id === 'Rs' || l.id === 'M' || l.id === 'Mf' || l.id === 'Cu') L.wings.push(...twigEnd(wing, l.pl, l.id === 'Cu' || l.id === 'M' ? 2 : G.twig));   // end-twigging on the outline
@@ -3242,7 +3261,7 @@ function generateInsectDetailed(seed, opts) {
       S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum;
       if (!d.hind) foreGrown = grown;
     }
-    meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0 };
+    meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, r1rs: foreGrown.stats.pairRungs['R1|Rs'] || 0 };
     meta.wingSig = ['neu', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), G.nB, G.grad.length, G.im ? 1 : 0, G.mFork ? 1 : 0, G.nmc, foreGrown.joins.length, Math.round(G.hw * 50), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.bowB * 50),
       Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100), Math.round(G.costal * 50), Math.round(G.k * 4)].join(',');
   }

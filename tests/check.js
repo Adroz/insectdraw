@@ -77,6 +77,9 @@ for (let seed = 1; seed <= N; seed++) {
     const byPair = {}; for (const leg of meta.legs) byPair[leg.pair] = leg;
     const fr = byPair.front, mi = byPair.mid, hi = byPair.hind;
     if (fr && mi && hi && !(fr.femurTip[1] < mi.femurTip[1] && mi.femurTip[1] < hi.femurTip[1])) fail('femur tips not ordered front < mid < hind along the body');
+    // saltatorial hind femur: an acridid femur is a quarter to a third as wide as it is long (ref orth-grasshopper); exposed as
+    // meta.legs[2].femW / femLen by the engine
+    if (meta.type === 'grasshopper' && hi && hi.femW !== undefined) { const r = hi.femW / hi.femLen; if (r < 0.22 || r > 0.36) fail('grasshopper hind femur width/length ' + r.toFixed(2) + ' outside 0.22-0.36'); }
     const prof = meta.abdomen.profile, hwAt = y => {   // abdomen half-width at y, from the sampled profile
       if (y < prof[0][0] || y > prof[prof.length - 1][0]) return 0;
       const k = Math.min(prof.length - 2, Math.floor((y - prof[0][0]) / 2)), a = prof[k], b = prof[k + 1];
@@ -130,6 +133,13 @@ for (let seed = 1; seed <= N; seed++) {
       if (!meta.bodySig.includes(an.kind)) fail('antenna kind missing from bodySig');
     }
   }
+  // swallowtail: the hindwing veins must not converge into the tail root; the two vein endpoints nearest the tail tip must be
+  // at least 6% of the span apart from each other (the engine exposes meta.lepHindEnds and meta.lepTail when a tail is rolled)
+  if (meta.type === 'moth' && meta.lepTail && meta.lepHindEnds) {
+    const tip = meta.lepTail.tip, W = meta.lepTail.W;
+    const near = meta.lepHindEnds.map(p => ({ p, d: Math.hypot(p[0] - tip[0], p[1] - tip[1]) })).sort((a, b) => a.d - b.d).slice(0, 2);
+    if (near.length === 2) { const sep = Math.hypot(near[0].p[0] - near[1].p[0], near[0].p[1] - near[1].p[1]); if (sep < W * 0.06) fail('swallowtail: two hindwing veins converge at the tail root (' + (sep / W).toFixed(3) + ' of span apart)'); }
+  }
   // stroke widths >= 0.5 after scale
   const sws = [...svg.matchAll(/stroke-width="([\d.]+)"/g)].map(x => Number(x[1]) * meta.scale);
   if (sws.some(w => w < 0.49)) fail('stroke width below 0.5 after scale');
@@ -146,6 +156,9 @@ for (let seed = 1; seed <= N; seed++) {
   if (meta.type !== 'beetle') {
     const s = meta.wingStats;
     if (!s) fail('no wingStats on a grown wing');
+    // lacewing: the strip under R1 (R1-Rs) carries only a few rungs in the references (neu-nothochrysa); the costal ladder
+    // is the dense one. The engine reports the R1-Rs rung count as wingStats.r1rs.
+    if (meta.type === 'lacewing' && s.r1rs !== undefined && s.r1rs > 6) fail('lacewing R1-Rs strip has ' + s.r1rs + ' rungs (max 6)');
     else {
       if (s.joins > 0 && (s.minAngle < 100 || s.maxAngle > 145)) fail('junction angle outside 100-145: ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
       if (meta.type !== 'moth' && s.dropped > s.joins) fail('more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
