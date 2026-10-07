@@ -2,16 +2,16 @@
 #
 # On every push to main and every pull request this runs the two gates from the "Verify before claiming
 # done" block in CLAUDE.md:
-#   node tests/check.js 500   the structural invariant check: determinism, fit, legs / antennae / head
+#   node tests/check.js 300   the structural invariant check: determinism, fit, legs / antennae / head
 #                             assertions, wing and body signature uniqueness, the 0.5 px stroke floor and,
 #                             for every seed, the device plate at 440 px (1.0 device px stroke floor,
 #                             2.5 device px pitch floor, subtitle rule, no rng shift).
 #   npm test                  the raster survival gate (tests/eink.js): 39 device plates rasterised with
 #                             sharp through the panel's exact pipeline, per-layer survival against the floors.
 #
-# 500 seeds, not the 3000 of `npm run check`: each seed now also draws the device plate twice (pass 1 for
+# 300 seeds, not the 3000 of `npm run check`: each seed now also draws the device plate twice (pass 1 for
 # the scale, pass 2 with the floors, then once more for the determinism assertion), so 3000 seeds take
-# ~15 min locally and the ticket wants the whole job under 5 min. 500 seeds still cover every order and
+# ~15 min locally and 500 took 195 s on a fast Mac, over budget on a 2-vCPU runner; the ticket wants the whole job under 5 min. 300 seeds (~2 min locally) still cover every order and
 # both lepidoptera variants many times over; run the full 3000 locally before calling an engine change done.
 #
 # fonts-dejavu-core: the gate rasterises the caption through sharp's librsvg, which needs a system font to
@@ -29,7 +29,7 @@ permissions:
 
 jobs:
   gates:
-    name: invariants (500 seeds) + survival gate
+    name: invariants (300 seeds) + survival gate
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -45,8 +45,8 @@ jobs:
 
       - run: npm ci
 
-      - name: Invariant check (500 seeds)
-        run: node tests/check.js 500
+      - name: Invariant check (300 seeds)
+        run: node tests/check.js 300
 
       - name: E-ink survival gate
         run: npm test
