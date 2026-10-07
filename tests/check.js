@@ -1,17 +1,7 @@
 #!/usr/bin/env node
 // Runs the engine from index.html over many seeds and checks structural invariants.
 'use strict';
-const fs = require('fs');
-const path = require('path');
-const vm = require('vm');
-
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-const m = html.match(/<script id="engine">([\s\S]*?)<\/script>/);
-if (!m) throw new Error('engine script not found');
-const ctx = { module: { exports: {} }, console };
-vm.createContext(ctx);
-vm.runInContext(m[1], ctx);
-const E = ctx.module.exports;
+const E = require('./engine').loadEngine();
 
 const N = Number(process.argv[2] || 3000);
 const failures = [];

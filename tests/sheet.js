@@ -9,7 +9,6 @@
 'use strict';
 const fs = require('fs');
 const path = require('path');
-const vm = require('vm');
 const { execFileSync } = require('child_process');
 
 const argv = process.argv.slice(2), flag = n => { const i = argv.indexOf('--' + n); return i >= 0 ? argv.splice(i, 2)[1] : null; };
@@ -18,12 +17,7 @@ const [outPng, colsArg, seedsArg] = argv;
 if (!outPng || !seedsArg) { console.error('usage: node tests/sheet.js out.png <cols> <seeds,comma | type[:count]>'); process.exit(2); }
 const cols = Number(colsArg || 3);
 
-const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-const m = html.match(/<script id="engine">([\s\S]*?)<\/script>/);
-const ctx = { module: { exports: {} }, console };
-vm.createContext(ctx);
-vm.runInContext(m[1], ctx);
-const E = ctx.module.exports;
+const E = require('./engine').loadEngine();
 
 let seeds;
 if (/^\d+(,\d+)*$/.test(seedsArg)) {
