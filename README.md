@@ -33,7 +33,11 @@ shareable link and `index.html#1234|5678` opens both panes; editing the hash
 by hand renders those seeds too.
 
 For a daily e-ink display, `generateInsect(dailySeed())` returns the SVG
-string; the `<svg>` has a `600×600` viewBox and scales cleanly.
+string; the `<svg>` has a `600×600` viewBox and scales cleanly. The daily
+plate changes at the day boundary, midnight in Brisbane (UTC+10, no daylight
+saving, so 14:00 UTC), everywhere: `dailySeed()` hashes the Brisbane calendar
+date of the current instant, and `dailySeed(date)` that of a given `Date`, so
+the web page's **Daily** button and any other consumer agree by construction.
 
 ### Comparing one part across many seeds
 

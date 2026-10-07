@@ -55,7 +55,8 @@ function hashString(str) {
   for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
   return h >>> 0;
 }
-function dailySeed(date) { return hashString((date || new Date()).toISOString().slice(0, 10)); }
+// Brisbane calendar day (UTC+10, no daylight saving, so a fixed offset is exact); the day boundary is 14:00 UTC.
+function dailySeed(date) { return hashString(new Date((date || new Date()).getTime() + 10 * 3600e3).toISOString().slice(0, 10)); }
 
 // ---------- vector helpers ----------
 const D2R = Math.PI / 180;

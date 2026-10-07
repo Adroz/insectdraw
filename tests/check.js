@@ -210,6 +210,19 @@ const sigRule = (sigs, what, distinctFloor) => {
 };
 const sigReport = sigRule(wingSigs, 'wing', 0.5), bodyReport = sigRule(bodySigs, 'body', 0.98);
 
+// Daily seed: the day boundary is Brisbane midnight (UTC+10, no DST), i.e. 14:00 UTC.
+{
+  const dfail = msg => failures.push({ seed: 0, type: 'daily', msg: 'daily seed: ' + msg });
+  const before = E.dailySeed(new Date('2026-10-07T13:59:59Z'));   // 23:59:59 Brisbane, 7 Oct
+  const after = E.dailySeed(new Date('2026-10-07T14:00:00Z'));    // 00:00:00 Brisbane, 8 Oct
+  if (before === after) dfail('instants either side of 14:00 UTC give the same day');
+  if (before !== E.hashString('2026-10-07')) dfail('13:59:59Z is not the Brisbane 2026-10-07 seed');
+  if (after !== E.hashString('2026-10-08')) dfail('14:00:00Z is not the Brisbane 2026-10-08 seed');
+  if (E.dailySeed(new Date('2026-10-07T02:00:00Z')) !== E.hashString('2026-10-07')) dfail('midday Brisbane instant gives the wrong seed');
+  if (E.dailySeed(new Date('2026-10-07T20:00:00Z')) !== E.hashString('2026-10-08')) dfail('evening UTC instant is not the next Brisbane day');
+  if (E.dailySeed() !== E.dailySeed(new Date())) dfail('no-argument call disagrees with the Date form for now');
+}
+
 console.log('seeds checked:', N);
 console.log('type distribution:', typeCount);
 console.log('wing signatures:', sigReport);
