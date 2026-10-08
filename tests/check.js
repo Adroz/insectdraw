@@ -41,6 +41,8 @@ const drawn = svg => (svg.match(/<(path|line|polyline|circle)\b/g) || []).length
 const segsCross = (a, b, c, d) => { const cr = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
   const d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); };
 const rotAbout = (p, c, deg) => { const a = deg * Math.PI / 180, dx = p[0] - c[0], dy = p[1] - c[1]; return [c[0] + dx * Math.cos(a) - dy * Math.sin(a), c[1] + dx * Math.sin(a) + dy * Math.cos(a)]; };
+const skewedPts = leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew));   // the left leg before mirroring: the right leg rotated about its coxa by its skew (plan step 7)
+const ANT_LEG_CLEAR = 2.5;   // antLegs: asserted clearance beyond the leg's half width (engine: 3 + the antenna's half width, at least 3.65)
 const ptSegDist = (p, u, v) => { const wx = v[0] - u[0], wy = v[1] - u[1], l2 = wx * wx + wy * wy, t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * wx + (p[1] - u[1]) * wy) / l2)) : 0; return Math.hypot(p[0] - u[0] - wx * t, p[1] - u[1] - wy * t); };
 const segDist = (a, b, c, d) => segsCross(a, b, c, d) ? 0 : Math.min(ptSegDist(a, c, d), ptSegDist(b, c, d), ptSegDist(c, a, b), ptSegDist(d, a, b));   // shortest distance between segments ab and cd
 // a point in body coordinates to plate coordinates, after the plate scale and fit
@@ -203,7 +205,7 @@ const CHECKS = {
   legSkew(meta, svg, fail) {
     if (!meta.legSkew || meta.legSkew.length !== 3) return fail('no legSkew on meta');
     for (const leg of meta.legs) { const a = Math.abs(leg.skew); if (a !== 0 && (a < 2 || a > 6)) fail(leg.pair + ' leg skew ' + leg.skew.toFixed(1) + ' outside 2-6 degrees (or 0)'); }
-    checkLegSet(meta, meta.legs.map(leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew))), ' skewed', fail);
+    checkLegSet(meta, meta.legs.map(skewedPts), ' skewed', fail);
   },
   // Head (meta.head, docs/research-head-eyes.md): every compound eye stays inside the head's bounding box with at most
   // 10% of its extent overhanging on any side (cicada and odonate eyes bulge past the capsule, never past headW), and
@@ -237,15 +239,16 @@ const CHECKS = {
   },
   // antennae vs legs (#7, research-antennae R-D): in every leg pose, no segment of the right antenna's centre-lines
   // (meta.antennae.lines: shaft, scape, club axis, arista, style, every ramus and lamella) comes within the leg's half
-  // width + 1 of a leg segment (femur onward) that reaches ahead of the thorax, on the right legs and on the skewed
-  // left set. Beside the body (both ends of the antenna segment below the thorax top) the antenna lies over the legs,
-  // as on a plate. The engine holds 3 px + both half widths and re-rolls the pose; here we assert the result.
+  // width + ANT_LEG_CLEAR of a leg segment (femur onward) that reaches ahead of the thorax, on the right legs and on
+  // the skewed left set. Beside the body (both ends of the antenna segment below the thorax top) the antenna lies over
+  // the legs, as on a plate. The engine holds 3 px + both half widths (the antenna's at least 0.65) and re-rolls the
+  // pose; here we assert the result with a margin for float rounding, so a regression toward 2 px is caught.
   antLegs(meta, svg, fail) {
     const an = meta.antennae, yTop = meta.thorax.yTop;
     if (!an || !an.lines || !an.lines.length) return fail('no antenna centre-lines on meta');
-    const sets = [['', leg => leg.pts], [' skewed', leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew))]];
-    for (const [label, get] of sets) for (const leg of meta.legs) {
-      if (!leg.segHw || leg.segHw.length !== leg.pts.length - 1) return fail('no per-segment half widths on meta.legs');
+    for (const ln of an.lines) if (!(ln.w > 0) || !ln.pl || ln.pl.length < 2) return fail('antenna centre-line without a width or two points (' + an.kind + ')');
+    for (const [label, get] of [['', leg => leg.pts], [' skewed', skewedPts]]) for (const leg of meta.legs) {
+      if (!leg.segHw || leg.segHw.length !== leg.pts.length - 1 || leg.segHw.some(h => !(h >= 0))) return fail('no per-segment half widths on meta.legs');
       const pts = get(leg);
       for (let k = 2; k + 1 < pts.length; k++) {
         if (Math.min(pts[k][1], pts[k + 1][1]) >= yTop + 4) continue;
@@ -253,7 +256,7 @@ const CHECKS = {
           const a = ln.pl[i], b = ln.pl[i + 1];
           if (a[1] > yTop && b[1] > yTop) continue;
           const d = segDist(a, b, pts[k], pts[k + 1]);
-          if (d < leg.segHw[k] + 1) return fail('antenna within ' + d.toFixed(1) + ' of the' + label + ' ' + leg.pair + ' leg ahead of the thorax (' + an.kind + ' ' + an.pose + ', legs ' + meta.legRoll.pose + ')');
+          if (d < leg.segHw[k] + ANT_LEG_CLEAR) return fail('antenna within ' + d.toFixed(1) + ' of the' + label + ' ' + leg.pair + ' leg ahead of the thorax (' + an.kind + ' ' + an.pose + ', legs ' + meta.legRoll.pose + ')');
         }
       }
     }
