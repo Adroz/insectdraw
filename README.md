@@ -306,6 +306,41 @@ pectinate / bipectinate, plumose, clubbed, lamellate, geniculate (scape,
 pedicel, flagellum), aristate, stylate and setaceous, each rising from a drawn
 antennal socket at the order's position on the head.
 
+## Engine contract
+
+Everything that draws lives in one script block in `index.html`:
+
+```html
+<script id="engine"> … </script>
+```
+
+Consumers rely on exactly this, and `node tests/check.js` fails if any of it stops being true:
+
+- **One tagged block.** It is the only `<script id="engine">` in the file and the only script block that
+  assigns `module.exports`, so selecting it by tag (the pages, the tests) and selecting "the block that
+  contains `module.exports`" (the crowpanel-ha render service's Dockerfile) give the same code.
+- **DOM-free.** The block never touches `document`, `window`, `location`, `history`, `navigator`, `fetch`
+  or storage. It runs unchanged in a page, under node's `vm` and inside a container.
+- **Deterministic per seed.** `generateInsect(seed)` returns the same SVG string for the same seed, on
+  every platform; the only inputs are the seed and the options (`{ type, devicePx }`). `dailySeed()` is
+  the one function that reads the clock.
+- **The exports.** `module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName,
+  dailySeed, brisbaneDay, hashString, mulberry32, TYPES, PARTS, DEVICE, SW_PX, CAPTION_H }`. Adding an
+  export means updating `EXPORTS` in `tests/engine.js` in the same commit; removing or renaming one is a
+  breaking change for every consumer below.
+
+How each consumer loads it:
+
+| consumer | how |
+| --- | --- |
+| `index.html` | the block runs inline; the page's own UI script is a second `<script>` after it |
+| `compare.html`, `parts.html`, `tests/sheet.html` | `fetch` `index.html` (`../index.html` from `tests/`), match the tag, inject the text as a script (so they need HTTP) |
+| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm`, returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
+| crowpanel-ha `services/insectdraw-render` | the Dockerfile curls `index.html` from `main` at build time and writes the script block containing `module.exports` to `insectdraw-engine.js`, which `server.js` requires |
+
+`tests/engine.js` also exports `engineContract(path)`, the list of violations (empty on a good file), and
+`EXPORTS`, the agreed export list.
+
 ## Dev
 
 ```
