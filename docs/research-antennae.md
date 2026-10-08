@@ -271,7 +271,9 @@ degrees further toward straight ahead; from the fifth attempt overall (every rea
 only the straightened ones), once straightened, a leg hit (or a midline cross of a plume, which is
 held off the midline on one side and the leg on the other) also shortens the antenna by 6%, not
 under half; the fallback is straight ahead at curve 6°, shortened by 10% a step until it clears,
-at most 12 steps (`ANT_CLEAR`, `ANT_HIT`, `ANT_SHRINK` beside `ANT_POSES`). Antennae run beside the body and over the legs, as they do on a real plate, so the
+at most 12 steps (`ANT_CLEAR`, `ANT_HIT`, `ANT_SHRINK` beside `ANT_POSES`). A shortened plume
+keeps its ramus spacing, not its count (`antennaGeom` scales the rami by the length factor, at
+least 4): the full comb packed into half the length goes solid black on the 1-bit panel. Antennae run beside the body and over the legs, as they do on a real plate, so the
 clearance test applies only to the part of the antenna ahead of the thorax. The legs block keeps
 its side of the bargain: a leg joint ahead of the head (and the point where a segment crosses the
 head top) stays off the antenna socket by the same clearance plus 2 px for the lean of a straight

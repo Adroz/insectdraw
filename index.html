@@ -589,11 +589,14 @@ function antennaGeom(A, base, hw, pose) {
       for (let i = 0; i < G.club.length; i++) { const n = perp(tdir(G.club, i)); G.pts.push(add(G.club[i], mul(n, G.cw / 2)), sub(G.club[i], mul(n, G.cw / 2))); }
       G.tip = G.club[G.club.length - 1];
     } else if (A.kind === 'pectinate' || A.kind === 'bipectinate') {
-      // rami each flagellomere, longest at `peak` of the length, gone by the tip (Biston, South fig. 2)
-      const js = alongPl(G.pl, A.rami.n), maxB = len * A.rami.maxK, both = A.kind === 'bipectinate';
+      // rami each flagellomere, longest at `peak` of the length, gone by the tip (Biston, South fig. 2). A shortened
+      // antenna (pose.lenK < 1, #7) keeps its ramus spacing, not its count: the same comb packed into half the length
+      // goes solid black on the 1-bit panel
+      const nR = Math.max(4, Math.round(A.rami.n * pose.lenK));
+      const js = alongPl(G.pl, nR), maxB = len * A.rami.maxK, both = A.kind === 'bipectinate';
       G.rami = [];
-      for (let k = 2; k < A.rami.n; k++) {
-        const u = k / A.rami.n, d = norm(sub(js[k + 1], js[k - 1])), n = perp(d);
+      for (let k = 2; k < nR; k++) {
+        const u = k / nR, d = norm(sub(js[k + 1], js[k - 1])), n = perp(d);
         const g = u < A.rami.peak ? 0.5 * u / A.rami.peak : 0.5 + 0.5 * (u - A.rami.peak) / (1 - A.rami.peak);
         const bl = maxB * Math.pow(Math.sin(Math.PI * g), 0.8) * (u > 0.93 ? (1 - u) / 0.07 : 1);
         if (bl < 1) continue;
