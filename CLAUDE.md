@@ -72,10 +72,10 @@ contract for changes.
   lattice, mesh cells, pile, fringe, and the limb and antenna marks too (shading, spines, comb
   rows, herringbone, arista rami, club annuli), crossvein ladders and the stigma's lines
   (`floorFrac` for a step given as a fraction of a length, `floorSamples` for marks at every
-  k-th sample). A site the floor misses leaves the device assertion in `tests/check.js` blind to
+  k-th sample). A site the floor misses leaves the `device` check of `tests/check.js` blind to
   it. A fan's pitch is held at its nearest outline point; a second hatch family over a first
   takes `floorPitch(v, 2)`. Without `devicePx` the output is byte-for-byte unchanged; `npm test`
-  and the device block of `tests/check.js` are the two gates.
+  and the `device` and `wings` checks of `tests/check.js` (`--only device,wings`) are the two gates.
 
 ## Randomness rules
 
@@ -145,13 +145,19 @@ contract for changes.
 ## Verify before claiming done
 
 ```
-node tests/check.js 3000                 # invariants + determinism + wing uniqueness
+node tests/check.js 3000                 # invariants + determinism + wing uniqueness (about 13 min)
+node tests/check.js 300 --only antennae  # just the named checks (a,b,...), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists them
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster
 node tests/pages.js                      # the three pages in headless Chromium: chrome, panes, hash, redirect
 node tests/snapshot.js write|check f.json 3000 [--engine old.html]   # byte-identity fixture for engine refactors (write on the old engine, check on the new)
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
 ```
+
+`tests/check.js` is a table of named checks: `CHECKS` run per seed as `(meta, svg, fail, ctx)` (`ctx.dev` is the
+device plate, drawn on first use; `ctx.sampled` is true every 50th seed and gates the slow extras, which the report
+counts so a short range cannot pass them by silence), `PRE` / `POST` once per run, and `--only` selects by name. A
+new invariant is one named entry of a few lines with its failure message, never a block appended to a loop.
 
 For a part in isolation use `node tests/sheet.js out.png 4 random:12 --part wings --type wasp`
 or open `parts.html` over HTTP and Reroll. `generatePart` relies on the `partStart()`/`partEnd()`
