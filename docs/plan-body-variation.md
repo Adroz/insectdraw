@@ -11,7 +11,7 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   The wing-family pick is hoisted into the proportions switch as `P.fam` (the wing blocks read it);
   beetles roll `ground / rove / scarab / longhorn / weevil`, grasshoppers `acridid / tettigoniid /
   tetrigid`. `meta.recipe` is now `P.fam` for every order.
-- **Step 2, done.** Leg family ranges (`LEG_FAMS` in `rollBodyGenes`), pose families (`LEG_POSES`
+- **Step 2, done.** Leg family ranges (`legs` in each `ORDERS` entry, since #4), pose families (`LEG_POSES`
   in the legs block: `spread`, `walking`, `tucked`, `raised`, odonate `basket`), per-pair
   attachment and inset, segment ratios, thickness / swelling / flare, armature, tarsomeres, curl.
   Joint angles are rolled in the legs block and validated against the body (ordering, mirror
@@ -43,7 +43,7 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   punctation (fine / coarse) with bead and basal foveae, fly vittae 2 / 4 with humeral calli and
   bristle rows, pile ticks (moth always, bee 60%) with interior ticks, moth patagia and crest.
   Tegula rx 3–7, ry / rx 0.5–0.8, tilt 20–40°, centred on the wing block's forewing root
-  (`WING_ROOTS` table in `generateInsectDetailed` mirrors the wing blocks' `thorax.yAt(t)`), moth
+  (`wingRoots` in the order's `ORDERS` entry, which the wing block reads too, since #4), moth
   tegulae with hair ticks. Deviations from the text above: "notopleural lines (flies)" became the
   humeral calli + bristle rows the references actually show in dorsal view; the plan's "pronotum
   width 0.8–1.3× head" is per order (beetle 1.0–1.5, odonata 0.4–0.7, see the research table).
@@ -57,7 +57,7 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   `headCy`, `P.headW`, `P.headH` keep meaning bounding box and centre. Eyes as ranges (centre,
   radii, tilt, dent mirrored per side, highlight) with fly holoptic / dichoptic, gomphid-style
   separated odonate eyes and the male mayfly turban pair; eye style `lattice` / `stipple` / `plain`
-  with a pitch gene floored at `1.8 / p5 plate scale` per order (`HEAD_SCALE_P5`). Ocelli 0–3 with
+  with a pitch gene floored at `1.8 / p5 plate scale` per order (`headScaleP5` in `ORDERS`). Ocelli 0–3 with
   arrangements (triangle / line / odonate frons+seam / grasshopper laterals / moth behind the eyes /
   rove median). Mouthparts by what shows from above: ground-beetle sickle mandibles (crossing,
   serrated) with labrum and palps, hymenopteran mandible tips, weevil rostrum, lepidopteran palps
@@ -70,7 +70,7 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   above; palps and the fastigium furrow instead); the fly proboscis is not drawn (hidden under the
   head); the antennal socket table `AB` is untouched (step 6 can snap it to `meta.headOutline`).
 - **Step 6, done.** Research first (`research-antennae.md`, six references in `ref/ant-*`), then
-  `rollAntGenes` in `rollBodyGenes`: per-order / per-family weighted kind lists (`ANT_FAMS`:
+  `rollAntGenes` in `rollBodyGenes`: per-order / per-family weighted kind lists (`ant` in `ORDERS`:
   filiform, moniliform, serrate, pectinate, bipectinate, plumose, clubbed with gradual / abrupt /
   hooked / upcurved clubs, lamellate, geniculate with an optional club, aristate with plumose /
   bare / pubescent arista, stylate with annuli or a style, setaceous), length in head widths, body

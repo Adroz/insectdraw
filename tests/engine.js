@@ -11,7 +11,7 @@ const vm = require('vm');
 const ENGINE_RE = /<script id="engine">([\s\S]*?)<\/script>/;
 const DEFAULT_HTML = path.join(__dirname, '..', 'index.html');
 // what the engine exports; a consumer may rely on exactly these names (README "Engine contract")
-const EXPORTS = ['generateInsect', 'generateInsectDetailed', 'generatePart', 'insectName', 'dailySeed', 'brisbaneDay', 'hashString', 'mulberry32', 'TYPES', 'PARTS', 'DEVICE', 'SW_PX', 'CAPTION_H'];
+const EXPORTS = ['generateInsect', 'generateInsectDetailed', 'generatePart', 'insectName', 'dailySeed', 'brisbaneDay', 'hashString', 'mulberry32', 'TYPES', 'ORDERS', 'PARTS', 'DEVICE', 'SW_PX', 'CAPTION_H'];
 
 function loadEngine(htmlPath) {
   const file = htmlPath || DEFAULT_HTML;

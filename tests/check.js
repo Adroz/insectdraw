@@ -16,6 +16,35 @@ let elTotal = 0;
 // the agreed export list; a consumer that scrapes by tag and one that scrapes by module.exports must get the same code
 for (const msg of engineContract()) failures.push({ seed: 0, type: 'engine', msg: 'engine contract: ' + msg });
 
+// The order registry (#4): ORDERS is the one table every per-order fact lives in, keyed by type in pick order (TYPES
+// is its key list, so the first rng draw indexes the registry). Every entry carries what the sections read: the
+// proportions roll, the abdomen / thorax / head / leg / antenna gene tables, the 5th-percentile head scale, the wing
+// roots the wing block and the tegula read (0-2 fractions of the thorax, forewing first), the wing section function
+// and the name tables. A new order is one entry plus one wing function, so a half entry is a failure here, not a
+// crash a thousand seeds in.
+{
+  const rfail = msg => failures.push({ seed: 0, type: 'registry', msg: 'order registry: ' + msg });
+  const O = E.ORDERS;
+  if (!O || typeof O !== 'object') rfail('the engine exports no ORDERS table');
+  else {
+    if (Object.keys(O).join() !== E.TYPES.join()) rfail('TYPES is not the registry key list in order: [' + E.TYPES + '] vs [' + Object.keys(O) + ']');
+    for (const type of E.TYPES) {
+      const o = O[type], f = msg => rfail(type + ': ' + msg);
+      if (!o) { f('no entry'); continue; }
+      if (typeof o.proportions !== 'function') f('proportions is not a function');
+      for (const k of ['abd', 'thorax', 'head', 'legs']) if (!o[k] || typeof o[k] !== 'object') f(k + ' gene table missing');
+      if (!o.ant || !o.ant.base || !o.ant.base.kinds) f('antenna table has no base kinds');
+      if (!(typeof o.headScaleP5 === 'number' && o.headScaleP5 > 0)) f('headScaleP5 missing');
+      if (!Array.isArray(o.wingRoots) || o.wingRoots.length > 2 || o.wingRoots.some(t => !(typeof t === 'number' && t >= 0 && t <= 1))) f('wingRoots is not 0-2 fractions of the thorax: ' + JSON.stringify(o.wingRoots));
+      else if (o.wingRoots.length === 2 && !(o.wingRoots[0] < o.wingRoots[1])) f('forewing root is not ahead of the hindwing root: ' + JSON.stringify(o.wingRoots));
+      if (typeof o.wings !== 'function') f('wings is not a function');
+      const n = o.names;
+      if (!n || !Array.isArray(n.tails) || !n.tails.length || n.tails.some(t => !Array.isArray(t) || t.length !== 2 || !/^[mfn]$/.test(t[1]))) f('names.tails is not a list of [tail, gender]');
+      if (!n || !n.common || !Array.isArray(n.common.nouns) || !n.common.nouns.length || typeof n.common.base !== 'string') f('names.common has no nouns / base');
+    }
+  }
+}
+
 const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
 
 for (let seed = 1; seed <= N; seed++) {
@@ -48,10 +77,13 @@ for (let seed = 1; seed <= N; seed++) {
     if (leg.x < leg.hw * 0.5) fail(leg.pair + ' coxa starts too far inside thorax (' + leg.x.toFixed(1) + ' vs hw ' + leg.hw.toFixed(1) + ')');
     if (leg.hw < 8) fail(leg.pair + ' thorax half-width at attachment suspiciously small: ' + leg.hw.toFixed(1));
   }
-  // Thorax: the wing blocks root their wings at meta.thorax.wingRoots (t along the thorax); the rolled profile must
-  // still have width there, and the scutellum must sit inside the body outline (thorax, or the abdomen / elytra
-  // where it hangs over the junction, as a beetle's does).
+  // Thorax: the wing block and the tegula root the wings at the registry's wingRoots (t along the thorax; the engine
+  // copies them onto meta.thorax.wingRoots, which must agree); the rolled profile must still have width there, and the
+  // scutellum must sit inside the body outline (thorax, or the abdomen / elytra where it hangs over the junction, as a
+  // beetle's does).
   {
+    const reg = E.ORDERS && E.ORDERS[meta.type], roots = reg ? reg.wingRoots : null;
+    if (!roots) fail('no registry entry for the type');
     const th = meta.thorax, profHw = (prof, y) => {   // profiles are sampled every 2 px and rounded to 0.1, so tolerate the last sample's rounding
       if (!prof.length || y < prof[0][0]) return 0;
       if (y > prof[prof.length - 1][0]) return y - prof[prof.length - 1][0] < 0.11 ? prof[prof.length - 1][1] : 0;
@@ -59,8 +91,8 @@ for (let seed = 1; seed <= N; seed++) {
       return a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 0 : (y - a[0]) / (b[0] - a[0]));
     };
     if (!th.profile || th.profile.length < 3) fail('no thorax profile');
-    for (const t of th.wingRoots) {
-      if (t < 0 || t > 1) fail('wing root outside the thorax: t=' + t);
+    if (roots && JSON.stringify(th.wingRoots) !== JSON.stringify(roots)) fail('meta.thorax.wingRoots is not the registry\'s: ' + JSON.stringify(th.wingRoots));
+    for (const t of roots || []) {
       const hw = profHw(th.profile, th.yTop + t * (th.yBot - th.yTop));
       if (hw <= 4) fail('thorax too narrow at a wing root: hw ' + hw.toFixed(1) + ' at t=' + t);
     }

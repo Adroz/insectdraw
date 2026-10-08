@@ -53,3 +53,14 @@ plate specifies. The e-ink gate fails when it drops.
 One of the plate's drawing sections (abdomen, head, legs, antennae, wings), measured separately
 by the gate because they die at different sizes.
 _Avoid_: part (a part is a cropped standalone drawing of a layer)
+
+**Order**:
+One of the twelve body plans a plate can draw (beetle, moth, fly ...), named by its `type`; a
+family (`P.fam`) is a within-order variant that biases the order's ranges.
+_Avoid_: kind, species, category
+
+**Order registry**:
+The engine's `ORDERS` table: one entry per order holding everything the drawing sections read
+about it (proportions, gene tables, wing roots, head scale, wing function, names). Adding an
+order is one entry plus one wing function.
+_Avoid_: type table, config
