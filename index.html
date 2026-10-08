@@ -1710,6 +1710,10 @@ function insectName(seed, type, variant) {
 //     floored at 1.8 / headScaleP5 so facets never fill in on e-ink; update it if the order's plate scale changes.
 //   wingRoots: forewing / hindwing root positions along the thorax (thorax.yAt(t)), read by the wing block and the
 //     tegula (first entry); 0-2 fractions, forewing first. Copied onto meta.thorax.wingRoots.
+//   wingRootX: the root's x as a fraction of the thorax half-width there (thorax.hwAt(y) * wingRootX), read by the wing
+//     block and the tegula; required when the block roots at wingRoots (absent on the elytra and the orthopteran tegmen).
+//   tegula (optional): the order draws a tegula over the forewing root: rx range, optional hairs count range.
+//   legThick (optional, default 1): leg thickness factor on top of body size (slender-legged orders < 1).
 //   wings: the wing section function (hoisted declarations below; the elytra and the orthopteran tegmen draw into
 //     `covers`).
 //   names: tails: genus tails with grammatical gender (m/f/n) so epithets can agree; common: the common-name nouns
@@ -1749,6 +1753,7 @@ const ORDERS = {
       weevil: { kinds: { geniculate: 1 }, club: 'abrupt', len: [0.8, 1.2], socket: [0.08, 0.1] } },   // elbowed, clubbed, on the rostrum
     headScaleP5: 1.3,
     wingRoots: [],
+    legThick: 1.15,
     wings: wingsElytra,
     names: {
       tails: [['cera', 'f'], ['soma', 'n'], ['notus', 'm'], ['derus', 'm'], ['morpha', 'f'], ['gnathus', 'm'], ['cephala', 'f'], ['pus', 'm'],
@@ -1785,6 +1790,9 @@ const ORDERS = {
       papilionid: { kinds: { clubbed: 1 }, clubs: { upcurved: 3, gradual: 1 }, len: [0.3, 0.42], seg: [35, 45] } },
     headScaleP5: 1.28,
     wingRoots: [0.35],
+    wingRootX: 0.5,
+    tegula: { rx: [5, 7], hairs: [3, 5] },
+    legThick: 0.85,
     wings: wingsLepidoptera,
     names: {
       tails: [['ptera', 'f'], ['phora', 'f'], ['noctua', 'f'], ['phila', 'f'], ['mera', 'f'], ['chroa', 'f'], ['stigma', 'n'], ['psyche', 'f'],
@@ -1820,6 +1828,8 @@ const ORDERS = {
       nemato: { kinds: { plumose: 2, moniliform: 2 }, whorls: true, len: [0.9, 1.5], seg: [13, 15] } },
     headScaleP5: 0.78,
     wingRoots: [0.42],
+    wingRootX: 0.72,
+    legThick: 0.85,
     wings: wingsDiptera,
     names: {
       tails: [['myia', 'f'], ['pogon', 'm'], ['cera', 'f'], ['phora', 'f'], ['soma', 'n'], ['rhina', 'f'], ['phaga', 'f'], ['nema', 'n'],
@@ -1846,6 +1856,8 @@ const ORDERS = {
       sawfly: { kinds: { filiform: 3, clubbed: 1, serrate: 1 }, club: 'abrupt', len: [1.2, 1.8], seg: [7, 12] } },
     headScaleP5: 0.85,
     wingRoots: [0.4, 0.62],
+    wingRootX: 0.72,
+    tegula: { rx: [3.5, 5.5] },
     wings: wingsHymenoptera,
     names: {
       tails: [['apis', 'f'], ['melitta', 'f'], ['melissa', 'f'], ['glossa', 'f'], ['cera', 'f'], ['nomia', 'f'], ['phora', 'f'], ['soma', 'n'], ['podia', 'f'], ['trichia', 'f']],
@@ -1867,6 +1879,8 @@ const ORDERS = {
     ant: { base: { ref: 'hw', len: [0.12, 0.22], seg: [4, 7], socket: [0.14, 0.12], kinds: { setaceous: 1 } } },
     headScaleP5: 0.99,
     wingRoots: [0.5, 0.8],
+    wingRootX: 0.6,
+    legThick: 0.8,
     wings: wingsOdonata,
     names: {
       tails: [['gomphus', 'm'], ['lestes', 'm'], ['themis', 'f'], ['ptera', 'f'], ['cordulia', 'f'], ['aeschna', 'f'], ['neura', 'f'],
@@ -1894,6 +1908,7 @@ const ORDERS = {
       tetrigid: { kinds: { filiform: 1 }, ref: 'hw', len: [0.5, 0.8], seg: [11, 16] } },
     headScaleP5: 1.18,
     wingRoots: [0.45, 0.78],   // held for width by tests/check.js; the tegmen itself roots under the pronotum's hind margin (thorax.yBot - 6)
+    legThick: 0.95,
     wings: wingsOrthoptera,
     names: {
       tails: [['locusta', 'f'], ['acris', 'f'], ['cerus', 'm'], ['tettix', 'm'], ['pus', 'm'], ['notus', 'm'], ['tropis', 'f'], ['soma', 'n'],
@@ -1917,6 +1932,8 @@ const ORDERS = {
     ant: { base: { ref: 'hw', len: [0.6, 1.0], seg: [13, 16], socket: [0.1, 0.22], kinds: { moniliform: 4, pectinate: 0.6 }, whorls: true, rami: 'short' } },
     headScaleP5: 0.87,
     wingRoots: [0.42],
+    wingRootX: 0.72,
+    legThick: 0.42,
     wings: wingsDiptera,
     names: {
       tails: [['tipula', 'f'], ['limnobia', 'f'], ['ptera', 'f'], ['phlebia', 'f'], ['cera', 'f'], ['myia', 'f'], ['peza', 'f'], ['nephria', 'f'], ['pus', 'm']],
@@ -1938,6 +1955,9 @@ const ORDERS = {
     ant: { base: { ref: 'bl', len: [0.45, 0.8], seg: [30, 45], socket: [0.18, 0.28], kinds: { filiform: 5, moniliform: 1 } } },
     headScaleP5: 0.81,
     wingRoots: [0.35, 0.65],
+    wingRootX: 0.72,
+    tegula: { rx: [3, 5] },
+    legThick: 0.8,
     wings: wingsNeuroptera,
     names: {
       tails: [['chrysa', 'f'], ['leon', 'm'], ['ptera', 'f'], ['nympha', 'f'], ['neura', 'f'], ['bius', 'm'], ['pteryx', 'f'], ['psectra', 'f'], ['phlebia', 'f'], ['merobius', 'm']],
@@ -1959,6 +1979,8 @@ const ORDERS = {
     ant: { base: { ref: 'hw', len: [0.1, 0.18], seg: [7, 7], socket: [0.22, 0.3], kinds: { setaceous: 1 } } },
     headScaleP5: 0.67,
     wingRoots: [0.4, 0.68],
+    wingRootX: 0.72,
+    tegula: { rx: [3, 5] },
     wings: wingsCicada,
     names: {
       tails: [['cicada', 'f'], ['tettix', 'm'], ['tibicen', 'm'], ['cephala', 'f'], ['psaltria', 'f'], ['soma', 'n'], ['neura', 'f'], ['ptera', 'f'], ['cerus', 'm'], ['notus', 'm']],
@@ -1987,6 +2009,8 @@ const ORDERS = {
       chalcid: { kinds: { geniculate: 1 }, club: 'abrupt', len: [0.7, 1.0], seg: [9, 13], socket: [0.14, 0.26] } },
     headScaleP5: 0.75,
     wingRoots: [0.4, 0.62],
+    wingRootX: 0.72,
+    tegula: { rx: [3.5, 5.5] },
     wings: wingsHymenoptera,
     names: {
       tails: [['vespa', 'f'], ['sphex', 'm'], ['crabro', 'm'], ['cerus', 'm'], ['gaster', 'f'], ['pompilus', 'm'], ['pelta', 'f'], ['cera', 'f'], ['bia', 'f'], ['lestes', 'm']],
@@ -2008,6 +2032,8 @@ const ORDERS = {
     ant: { base: { ref: 'hw', len: [0.12, 0.22], seg: [4, 7], socket: [0.12, 0.25], kinds: { setaceous: 1 } } },
     headScaleP5: 1.02,
     wingRoots: [0.5, 0.78],
+    wingRootX: 0.6,
+    legThick: 0.62,
     wings: wingsOdonata,
     names: {
       tails: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
@@ -2030,6 +2056,8 @@ const ORDERS = {
     ant: { base: { ref: 'hw', len: [0.15, 0.3], seg: [3, 5], socket: [0.08, 0.2], kinds: { setaceous: 1 } } },
     headScaleP5: 0.92,
     wingRoots: [0.45, 0.78],
+    wingRootX: 0.8,
+    legThick: 0.72,
     wings: wingsEphemeroptera,
     names: {
       tails: [['phlebia', 'f'], ['ephemera', 'f'], ['nema', 'n'], ['baetis', 'f'], ['genia', 'f'], ['ptera', 'f'], ['neura', 'f'], ['philus', 'm'], ['bius', 'm'], ['urus', 'm'], ['cercus', 'm']],
@@ -2038,6 +2066,10 @@ const ORDERS = {
     },
   },
 };
+// The registry is read-only (README "Engine contract"): frozen to the leaves, so a consumer that mutates an entry
+// gets a TypeError (or a silent no-op in sloppy mode) instead of re-rooting every later plate. tests/engine.js asserts it.
+const deepFreeze = o => { for (const k of Object.keys(o)) if (o[k] && typeof o[k] === 'object') deepFreeze(o[k]); return Object.freeze(o); };
+deepFreeze(ORDERS);
 const TYPES = Object.keys(ORDERS);   // the body plans, in pick order (see the registry note)
 
 // ---------- body genes ----------
@@ -2054,11 +2086,11 @@ function rollBodyGenes(type, P) {
   // (pointed / rounded / truncate / clubbed), a rolled petiole on the wasp-waisted orders and a width factor.
   // Then segmentation, a markings family (plain / banded / spotted / striped / tip-dark / hairy) and the terminalia.
   const weighted = w => { const ks = Object.keys(w), tot = ks.reduce((a, k) => a + w[k], 0); let x = rng() * tot; for (const k of ks) { x -= w[k]; if (x < 0) return k; } return ks[ks.length - 1]; };
-  const order = ORDERS[type], AD = order.abd;
+  const order = ORDERS[type], abdRanges = order.abd;
   const A = B.abd;
-  A.tip = weighted(AD.tips); A.mark = weighted(AD.marks); A.peak = rr(AD.peak); A.wK = rr(AD.wK) * (P.variant === 'butterfly' ? 0.9 : 1);
-  A.seg = randInt(AD.seg[0], AD.seg[1]); A.startT = rr(AD.start); A.bow = randRange(0.08, 0.3); A.sw = rng() < 0.25 ? SW.F : SW.D; A.double = rng() < 0.25;
-  A.ticks = rng() < AD.ticks ? { spacing: randRange(2.5, 4), len: randRange(3, 5) } : null;
+  A.tip = weighted(abdRanges.tips); A.mark = weighted(abdRanges.marks); A.peak = rr(abdRanges.peak); A.wK = rr(abdRanges.wK) * (P.variant === 'butterfly' ? 0.9 : 1);
+  A.seg = randInt(abdRanges.seg[0], abdRanges.seg[1]); A.startT = rr(abdRanges.start); A.bow = randRange(0.08, 0.3); A.sw = rng() < 0.25 ? SW.F : SW.D; A.double = rng() < 0.25;
+  A.ticks = rng() < abdRanges.ticks ? { spacing: randRange(2.5, 4), len: randRange(3, 5) } : null;
   A.keel = isOdo || ((type === 'grasshopper' || type === 'cicada' || type === 'mayfly') && rng() < 0.4);
   // profile anchors: slide the widest point, then replace the tail with the tip shape
   {
@@ -2070,7 +2102,7 @@ function rollBodyGenes(type, P) {
       truncate: [[0.86, 0.9], [0.97, 0.78], [1, 0.35]], clubbed: [[0.62, randRange(0.55, 0.7)], [0.82, randRange(0.88, 1)], [0.94, 0.7], [1, 0]] };
     const lastT = anchors[anchors.length - 1][0];
     anchors = anchors.concat(tails[A.tip].filter(a => a[0] > lastT + 0.04));
-    if (AD.petiole) {   // waist: the first two anchors set its width and length
+    if (abdRanges.petiole) {   // waist: the first two anchors set its width and length
       const k = randRange(0.6, 1.4), m = randRange(0.7, 1.5);
       anchors[0] = [0, Math.min(0.5, anchors[0][1] * k)]; anchors[1] = [Math.min(anchors[2][0] - 0.05, anchors[1][0] * m), Math.min(0.55, anchors[1][1] * k)];
       A.waist = Math.round(anchors[1][1] * 10);
@@ -2105,9 +2137,9 @@ function rollBodyGenes(type, P) {
   // (pile / punctation / vittae / contour hatching) and the tegula over the forewing root.
   const T = B.thorax;
   {
-    const TD = order.thorax;
+    const thoraxRanges = order.thorax;
     const base = P.thoraxAnchors, maxHw = P.thoraxW / 2;
-    T.front = rr(TD.front); T.peak = rr(TD.peak); T.hump = rr(TD.hump); T.waist = rr(TD.waist); T.lenK = rr(TD.lenK);
+    T.front = rr(thoraxRanges.front); T.peak = rr(thoraxRanges.peak); T.hump = rr(thoraxRanges.hump); T.waist = rr(thoraxRanges.waist); T.lenK = rr(thoraxRanges.lenK);
     P.thoraxLen *= T.lenK;
     let fFront = Math.max(0.35, Math.min(0.92, T.front * P.headW / 2 / maxHw));
     let tRear = base[base.length - 2][0], fRear = base[base.length - 2][1], fEnd = base[base.length - 1][1];
@@ -2192,8 +2224,8 @@ function rollBodyGenes(type, P) {
   }
   T.hatch = !T.pile && rng() < 0.6 ? { n: randInt(2, 4), spacing: randRange(3, 4) } : null;   // contour hatching along the sides
   T.subSeg = T.lines.length;
-  T.tegula = ['moth', 'bee', 'wasp', 'lacewing', 'cicada'].includes(type)
-    ? { rx: rr({ moth: [5, 7], bee: [3.5, 5.5], wasp: [3.5, 5.5] }[type] || [3, 5]), k: randRange(0.5, 0.8), tilt: randRange(20, 40), hairs: type === 'moth' ? randInt(3, 5) : 0 } : null;
+  T.tegula = order.tegula   // the orders whose entry has one (rx range, optional hair count range); the roll order is rx, k, tilt, hairs
+    ? { rx: rr(order.tegula.rx), k: randRange(0.5, 0.8), tilt: randRange(20, 40), hairs: order.tegula.hairs ? randInt(order.tegula.hairs[0], order.tegula.hairs[1]) : 0 } : null;
   B.sig.push(T.shape || T.margin || '-', T.lines.map(l => Math.round(l.t * 10) + (l.gap ? 'g' : '')).join('/'), T.median ? 1 : 0, T.notauli ? 1 : 0, T.para || T.paramedian ? 1 : 0,
     T.humeral ? (T.humeral.double ? 2 : 1) + (T.humeral.stripe ? 's' : '') : 0, T.scut ? T.scut.shape[0] + Math.round(T.scut.w * 10) + (T.scut.hatched ? 'h' : '') + (T.scut.axillae ? 'a' : '') : '-',
     T.pile ? 'p' + (T.pile.interior ? 'i' : '') : T.punct ? 'd' + (T.punct.coarse ? 'c' : '') : T.bands ? 'b' + T.bands.n : '-', T.hatch ? T.hatch.n : 0, T.calli ? 1 : 0, T.bristles, T.latCar ? 1 : 0, T.patagia ? 1 : 0, T.crest ? 1 : 0,
@@ -2203,10 +2235,8 @@ function rollBodyGenes(type, P) {
   // some, the seed rolls every value. headW stays the bounding width of the head including the eyes and headH its
   // front-to-back depth (the ratio roll rewrites P.headH), so the layout and the antennae keep reading them as before.
   {
-    const HD = order.head;
-    // family / variant overrides
-    const FO = order.headFams;
-    const HF = Object.assign({}, HD, (FO && FO[fam]) || {}, P.variant === 'butterfly' ? { ocelli: 0, coil: 0.5, hair: 0.2, cx: [0.29, 0.33], rx: [0.16, 0.19] } : {});
+    const headRanges = order.head, headFams = order.headFams;   // the order's ranges, then the family / variant overrides
+    const HF = Object.assign({}, headRanges, (headFams && headFams[fam]) || {}, P.variant === 'butterfly' ? { ocelli: 0, coil: 0.5, hair: 0.2, cx: [0.29, 0.33], rx: [0.16, 0.19] } : {});
     const G = B.head, w01 = weighted;
     G.outline = HF.outline; G.ratio = rr(HF.ratio); P.headH = P.headW / G.ratio;
     G.flat = HF.flat && rng() < HF.flat ? randRange(0.04, 0.1) : 0;             // front margin flattened at this fraction of H
@@ -2280,7 +2310,7 @@ function rollBodyGenes(type, P) {
   const LD = { lenK: [0.92, 1.08], wk: [0.92, 1.08], swell: [1.0, 1.25], flare: [1.0, 1.3], tibR: [0.88, 1.08], tarR: [0.42, 0.6], frontK: [0.8, 0.95], hindK: [1.08, 1.25],
     spines: 0.3, spineSeg: 'tibia', spineSide: 'outer', spineLen: [0.4, 0.8], spineSp: [5, 9], spurs: [1, 2], fringe: 0.1, pads: 0, clawK: [0.8, 1.4],
     poses: { spread: 3, walking: 2, tucked: 1, raised: 0.4 }, tarsomeres: [5, 5] };
-  const LT = order.legs, F = Object.assign({}, LD, LT.base || {}, LT[fam] || {});
+  const legRanges = order.legs, F = Object.assign({}, LD, legRanges.base || {}, legRanges[fam] || {});
   const poseNames = Object.keys(F.poses), poseW = poseNames.map(k => F.poses[k]), wTot = poseW.reduce((a, b) => a + b, 0);
   let x = rng() * wTot; B.pose = poseNames[poseNames.length - 1];
   for (let k = 0; k < poseNames.length; k++) { x -= poseW[k]; if (x < 0) { B.pose = poseNames[k]; break; } }
@@ -2752,9 +2782,9 @@ function drawHead(C) {
 
 // ---------- tegulae over the forewing roots ----------
 function drawTegulae(C) {
-  const { type, order, L, B, thorax } = C;
+  const { order, L, B, thorax } = C;
   if (B.thorax.tegula) {
-    const G = B.thorax.tegula, ty = thorax.yAt(order.wingRoots[0]), rootX = thorax.hwAt(ty) * (type === 'moth' ? 0.5 : 0.72);   // where the wing block puts the forewing root
+    const G = B.thorax.tegula, ty = thorax.yAt(order.wingRoots[0]), rootX = thorax.hwAt(ty) * order.wingRootX;   // the forewing root, the same entry fields the wing block reads
     const c = [rootX + G.rx * 0.3, ty];
     L.tegulae.push(pathEl(ellipsePath(c, G.rx, G.rx * G.k, G.tilt), SW.D, '#fff'));
     for (let i = 0; i < G.hairs; i++) {   // lepidopteran tegulae are beset with hair-like scales on their outer edge
@@ -2766,10 +2796,10 @@ function drawTegulae(C) {
 
 // ---------- legs ----------
 function drawLegs(C) {
-  const { type, L, meta, P, B, thorax, abdomen } = C;
+  const { type, order, L, meta, P, B, thorax, abdomen } = C;
   {
-    // leg thickness follows body size, with slender-legged orders thinned further
-    const wk0 = Math.sqrt(thorax.length / 60) * ({ beetle: 1.15, fly: 0.85, cranefly: 0.42, dragonfly: 0.8, damselfly: 0.62, mayfly: 0.72, moth: 0.85, lacewing: 0.8, grasshopper: 0.95 }[type] || 1);
+    // leg thickness follows body size, scaled by the entry's legThick (slender-legged orders < 1; default 1)
+    const wk0 = Math.sqrt(thorax.length / 60) * (order.legThick || 1);
     const isOdo = type === 'dragonfly' || type === 'damselfly';
     // Pose families: femur direction F, fold (tibia relative to the femur) and tarsus bend T per pair; 0 points
     // outward, negative toward the head. spread is the classic plate; walking strides front forward / hind back;
@@ -2942,7 +2972,7 @@ function drawAntennae(C) {
 
 // ---------- wings / covers ----------
 // One function per order, named by the registry entry's `wings` (the elytra and the orthopteran tegmen draw into `covers`).
-// A block roots its wings at the entry's wingRoots (C.order), never at a literal t.
+// A block roots its wings at the entry's wingRoots and wingRootX (C.order), never at a literal t or x factor.
 
 function wingsLepidoptera(C) {   // (type === 'moth')
   const { order, L, meta, P, B, thorax } = C;
@@ -2979,7 +3009,7 @@ function wingsLepidoptera(C) {   // (type === 'moth')
   };
   meta.wingSig = ['lep', isB ? 'b' : 'm', fam, G.heavy ? 1 : 0, Math.round(G.sweep / 4), Math.round(G.hindSweep / 4), G.nR, G.nRh, G.stalk, G.scallop ? 1 : 0, G.tail > 0 ? 1 : 0, G.concave > 0 ? 1 : 0, Math.round(G.apexY * 10), Math.round(G.sharp * 2),
     Math.round(G.tornusX * 10), Math.round(G.fU[0] * 10), Math.round(G.fD[1] * 10), Math.round(G.hindK * 10), Math.round(G.hum * 25)].join(',');
-  const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * 0.5;
+  const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * order.wingRootX;
   const j = () => jitter(0.03);
   // forewing: base -> costa -> apex -> termen -> tornus -> inner margin
   const ax = W * G.apexX, ay = -H * G.apexY, tor = [W * G.tornusX, H * G.tornusY];
@@ -3359,7 +3389,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
     k: rr(F.k), uOpen: rr(F.uOpen), angle: randRange(112, 128), lean: rng() < 0.8 ? -1 : 1, bow: randRange(0.01, 0.03), grad: randRange(0, 0.2),
     bend: randRange(0.1, 0.16), dmBow: randRange(-0.06, -0.02),            // the muscid M1 bend (chord fraction M1 rises by); dm-cu bows toward the apex (a bow rotates both end tangents, so it stays gentle for R-D)
   };
-  const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * 0.72;
+  const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * order.wingRootX;
   const theta = G.theta;
   const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * G.len;
   const ky = G.ky * randRange(0.9, 1.1);
@@ -3458,7 +3488,7 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
   const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0 };
   let foreGrown = null;
   for (const d of defs) {
-    const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * 0.72;
+    const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * order.wingRootX;
     const X = f => f * d.L, Y = f => f * d.L * G.hw * d.k;
     const o = [[0, 0], [0.08, -0.45], [0.3, -0.8], [0.6, -0.96], [0.85, -0.8], [lerp(0.95, 0.98, s), -lerp(0.45, 0.22, s)], [1, G.tipY], [lerp(0.88, 0.94, s), lerp(0.52, 0.3, s)], [0.7, 0.84], [0.45, 1], [0.2, 0.8], [0.06, 0.36]]
       .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
@@ -3562,7 +3592,7 @@ function wingsCicada(C) {   // (type === 'cicada')
   const defs = [{ L: LwC * G.hindL, k: G.hindW, th: theta + G.spread, t: order.wingRoots[1], hind: true }, { L: LwC, k: 1, th: theta, t: order.wingRoots[0], hind: false }];
   const s = G.sharp;
   for (const d of defs) {
-    const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * 0.72;
+    const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * order.wingRootX;
     const X = f => f * d.L, Y = f => f * d.L * G.hw * d.k;
     const o = [[0, 0], [0.06, -0.5], [0.3, -0.85], [0.6, -1], [0.85, -0.85], [lerp(0.95, 0.98, s), -lerp(0.5, 0.25, s)], [1, G.tipY], [lerp(0.92, 0.97, s), lerp(0.5, 0.25, s) * G.bulge],
       [0.75, 0.85 * G.bulge], [0.45, 1 * G.bulge], [0.2, 0.85 * G.bulge], [0.06, 0.36]]
@@ -3643,7 +3673,7 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
   // alternate pairs. Every strip is a one-row ladder of rungs placed by the angle rule (cell size shrinking toward
   // the tip and the trailing edge, the costal ladder densest), with rows of polygons only where a basal strip is wider
   // than two cells; uOpen 1.0. Hindwing small, three fan lanes, sparse; often lost. ----
-  const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * 0.8;
+  const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * order.wingRootX;
   const Lw = P.abdLen * randRange(0.9, 1.05);
   const G = {
     nV: randInt(9, 15), inter: rng() < 0.6, hasHind: rng() < 0.8, hindL: randRange(0.22, 0.36),
@@ -3767,13 +3797,13 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
   if (!G.rm) G.rm = [G.xStig + 0.02, G.xStig + randRange(0.07, 0.11)];   // ichneumonid areolet: a tiny cell under the stigma
   const LV = [SW.F, SW.D, SW.O], wgt = k => LV[Math.min(2, k + (G.heavy ? 1 : 0))];   // the heavy gene promotes a weight one level (R-G cap: O)
   const theta = G.theta;
-  const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * 0.72;
+  const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * order.wingRootX;
   const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * randRange(0.92, 1.0) * G.len;
   const w = Lw * G.w, s = G.sharp;
   const fPts = [[0, 0], [Lw * 0.3, -w * 0.35], [Lw * G.costaPeak, -w * 0.46], [Lw * lerp(0.9, 0.95, s), -w * lerp(0.3, 0.12 - G.tipY * 0.3, s)], [Lw, w * G.tipY],
     [Lw * lerp(0.9, 0.95, s), w * lerp(0.3, 0.14 + G.tipY * 0.6, s)], [Lw * 0.74, w * G.bulge * 0.92], [Lw * 0.42, w * G.bulge], [Lw * 0.12, w * G.bulge * 0.5]];
   const fore = makeWing([bx, by], theta, fPts, 1);
-  const hy = thorax.yAt(order.wingRoots[1]), hx = thorax.hwAt(hy) * 0.72;
+  const hy = thorax.yAt(order.wingRoots[1]), hx = thorax.hwAt(hy) * order.wingRootX;
   const Lh = Lw * G.hindL, wh = w * G.hindW;
   const hPts = [[0, 0], [Lh * 0.3, -wh * 0.35], [Lh * 0.7, -wh * 0.45], [Lh, wh * randRange(-0.12, 0.08)], [Lh * 0.8, wh * G.bulge * 0.85], [Lh * 0.45, wh * G.bulge], [Lh * 0.12, wh * 0.25]];
   const hind = makeWing([hx, hy], theta + G.spread, hPts, 1);
@@ -3866,7 +3896,7 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   const ss = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
   const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
   for (const wd of wingDefs) {
-    const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * 0.6;
+    const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * order.wingRootX;
     const w = wd.w, s = G.sharp, bl = G.bulge;
     const apexPts = [[Lw * lerp(0.88, 0.94, s), -w * lerp(0.38, 0.22, s)], [Lw, w * G.tipY], [Lw * lerp(0.9, 0.95, s), w * lerp(0.33, 0.18, s) * bl]];
     const pts = dam

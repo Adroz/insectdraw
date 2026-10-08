@@ -30,7 +30,13 @@ function loadEngine(htmlPath) {
 //    block as one that selects the tag);
 //  - the engine touches no browser global (document, window, location, history, navigator, fetch, storage):
 //    pure generation, the same under node vm as in a page;
-//  - it exports exactly EXPORTS, and generateInsect(seed) is deterministic (tests/check.js asserts that per seed).
+//  - it exports exactly EXPORTS, and generateInsect(seed) is deterministic (tests/check.js asserts that per seed);
+//  - ORDERS, the order registry, is read-only: frozen to the leaves, so no consumer can re-root a later plate.
+const unfrozen = (o, path) => {   // the first path under o that is not frozen (functions are leaves)
+  if (!Object.isFrozen(o)) return path;
+  for (const k of Object.keys(o)) if (o[k] && typeof o[k] === 'object') { const f = unfrozen(o[k], path + '.' + k); if (f) return f; }
+  return null;
+};
 function engineContract(htmlPath) {
   const file = htmlPath || DEFAULT_HTML;
   const html = fs.readFileSync(file, 'utf8'), problems = [];
@@ -55,6 +61,7 @@ function engineContract(htmlPath) {
   try { E = loadEngine(file); } catch (e) { problems.push('the engine block throws when run under vm: ' + e.message); return problems; }
   const got = Object.keys(E).sort(), want = EXPORTS.slice().sort();
   if (got.join() !== want.join()) problems.push('exports differ from the contract: got [' + got + '], contract [' + want + ']');
+  if (E.ORDERS && typeof E.ORDERS === 'object') { const f = unfrozen(E.ORDERS, 'ORDERS'); if (f) problems.push('the order registry is not read-only: ' + f + ' is not frozen'); }
   return problems;
 }
 

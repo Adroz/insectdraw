@@ -27,16 +27,20 @@ contract for changes.
   device plate, every fiftieth part crop, byte for byte; a fixture of a different size fails the check).
 - One registry per order (#4): an order is one entry in `ORDERS` (just above `rollBodyGenes`), holding
   everything the engine knows about it under one key: its `proportions` roll, the `abd` / `thorax` /
-  `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots`, its `wings` function
+  `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots` + `wingRootX` (the root's
+  x as a fraction of the thorax half-width), the `tegula` and `legThick` opt-ins, its `wings` function
   and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
   first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
   re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs
   goes into the entry, never into a new table keyed by type inside the section. The engine exports
-  `ORDERS` read-only and `tests/check.js` asserts every entry's shape. **Adding an order** is one
+  `ORDERS` read-only (deep-frozen; `engineContract()` asserts it) and `tests/check.js` asserts every
+  entry's shape, that its override-table family keys are families its `proportions` roll produces, and
+  that `proportions` sets every field the sections read. **Adding an order** is one
   entry plus one wing function: write the entry (copy the nearest order's and edit the ranges), write
   the wing function (lanes, named crossveins, `meta.wingSig`, `meta.wingStats`, outlines through
-  `makeWing`), name it in `wings`, and give `wingRoots` the `t` values the function uses. The sections'
-  remaining `type ===` cases (thorax dorsal lines, the tegula list, leg thickness) are drawing rules
+  `makeWing`), name it in `wings`, and give `wingRoots` / `wingRootX` the values the function roots at
+  (the tegula sits at the same point, so it never drifts from the wing). The sections' remaining
+  `type ===` cases (thorax dorsal lines, abdomen keel and terminalia, a few leg details) are drawing rules
   with defaults, so an order without them still draws; prefer an opt-in field on the entry or `B` to
   a new `type ===` test.
 - Every node consumer (`tests/*.js`, `scripts/render-daily.js`) loads the engine through

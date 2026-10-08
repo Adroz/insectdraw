@@ -55,7 +55,7 @@ by the gate because they die at different sizes.
 _Avoid_: part (a part is a cropped standalone drawing of a layer)
 
 **Order**:
-One of the twelve body plans a plate can draw (beetle, moth, fly ...), named by its `type`; a
+One of the body plans a plate can draw (beetle, moth, fly ...; one `ORDERS` entry each), named by its `type`; a
 family (`P.fam`) is a within-order variant that biases the order's ranges.
 _Avoid_: kind, species, category
 
