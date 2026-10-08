@@ -16,6 +16,8 @@ let elTotal = 0;
 // the agreed export list; a consumer that scrapes by tag and one that scrapes by module.exports must get the same code
 for (const msg of engineContract()) failures.push({ seed: 0, type: 'engine', msg: 'engine contract: ' + msg });
 
+const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
+
 for (let seed = 1; seed <= N; seed++) {
   const { svg, meta } = E.generateInsectDetailed(seed);
   const key = meta.variant || meta.type;
@@ -127,7 +129,6 @@ for (let seed = 1; seed <= N; seed++) {
         const overX = Math.max(x0 - (e.cx - ex), (e.cx + ex) - x1) / (2 * ex), overY = Math.max(y0 - (e.cy - ey), (e.cy + ey) - y1) / (2 * ey);
         if (overX > 0.1 || overY > 0.1) { fail('eye overhangs the head bbox by more than 10%: ' + Math.round(Math.max(overX, overY) * 100) + '%'); break; }
       }
-      const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
       for (const o of h.ocelli) if (![[o[0] - o[2], o[1]], [o[0] + o[2], o[1]], [o[0], o[1] - o[2]], [o[0], o[1] + o[2]]].every(p => inPoly(p, h.outline))) { fail('ocellus outside the head outline'); break; }
     }
   }
@@ -142,6 +143,11 @@ for (let seed = 1; seed <= N; seed++) {
       const tip = an.tip, tx = 300 + tip[0] * meta.scale, ty = meta.fitted.minY + (tip[1] - meta.bbox.minY) * meta.scale;
       if (tx < 0 || tx > 600 || ty < 0 || ty > 600) fail('antenna tip outside the plate');
       if (!meta.bodySig.includes(an.kind)) fail('antenna kind missing from bodySig');
+      // wings (#6): the antennae are drawn after the wings and the pose is re-rolled until no sampled point of the right
+      // antenna lies inside any wing, elytron or tegmen outline (meta.wingOutlines, right side, body coordinates)
+      const wings = meta.wingOutlines || [];
+      if (!wings.length) fail('no wing outlines on meta');
+      if (wings.some(poly => an.pts.some(p => inPoly(p, poly)))) fail('antenna point inside a wing outline (' + an.kind + ' ' + an.pose + ')');
     }
   }
   // swallowtail: the hindwing veins must not converge into the tail root; the two vein endpoints nearest the tail tip must be

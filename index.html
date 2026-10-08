@@ -86,6 +86,7 @@ function fmt(n) { return Math.round(n * 10) / 10; }
 
 // ---------- bbox tracking (everything emitted passes through here) ----------
 let bbox = null;
+let wingPolys = [];   // body-coordinate outlines of every wing drawn for the current plate: a side effect of makeWing (and the elytron block), reset per plate in drawPlate, read by the antennae section (meta.wingOutlines)
 function bb(p) {
   if (p[0] < bbox.minX) bbox.minX = p[0];
   if (p[0] > bbox.maxX) bbox.maxX = p[0];
@@ -844,6 +845,7 @@ function makeWing(base, thetaDeg, localPts, tension) {
   const T = p => add(base, rot(p, th));
   const worldPts = localPts.map(T);
   const localPoly = sampleSmooth(localPts, true, tension, 8);
+  wingPolys.push(localPoly.map(T));   // for the antenna wing-clearance rule (meta.wingOutlines)
   return {
     path: smoothPath(worldPts, true, tension),
     T, inv: q => rot(sub(q, base), -th), localPoly, localPts,
@@ -2162,14 +2164,14 @@ function drawPlate(seed, opts, dev) {
   pitchFloor = replay ? dev.pitchFloor / dev.scale : 0;             // body units: the device floor is set after pass 1's scale
   pitchMin = Infinity; syncRec = dev && dev.record || null; syncPlay = dev && dev.replay || null; syncI = 0;
   const freshBox = () => ({ minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
-  bbox = freshBox();
+  bbox = freshBox(); wingPolys = [];
   const picked = pick(TYPES);                                  // always drawn, so forcing a type never shifts the stream
   const type = opts && opts.type && TYPES.includes(opts.type) ? opts.type : picked;
   const L = { wings: [], abdomen: [], covers: [], thoraxHead: [], tegulae: [], legs: [], antennae: [] };
   const meta = { seed, type, variant: null, legs: [], partBox: {} };
   // the plate context: everything a drawing section reads. Sections are module-scope functions below, called in
-  // this fixed order so the rng stream is the same as when the plate was one closure; a section adds to C what later
-  // ones need (layoutBody: P, B, thorax, abdomen ...) and draws into L / meta.
+  // this fixed order (the rng order; the antennae moved after the wings in #6, which re-rolled every plate once); a
+  // section adds to C what later ones need (layoutBody: P, B, thorax, abdomen ...) and draws into L / meta.
   const C = { seed, dev, replay, type, L, meta, outerBox: null };
   // per-part bounding boxes (right half, body coordinates) so a single part can be cropped out
   const partStart = () => { C.outerBox = bbox; bbox = freshBox(); };
@@ -2185,8 +2187,8 @@ function drawPlate(seed, opts, dev) {
   partStart(); drawThorax(C); drawHead(C); partEnd('head');
   drawTegulae(C);
   partStart(); drawLegs(C); partEnd('legs');
-  partStart(); drawAntennae(C); partEnd('antennae');
   partStart(); WING_BLOCKS[type](C); partEnd('wings');
+  partStart(); drawAntennae(C); partEnd('antennae');   // after the wings since #6: the pose is checked against their outlines
   return assemblePlate(C);
 }
 
@@ -2787,23 +2789,30 @@ function drawLegs(C) {
 // ---------- antennae ----------
 // Genes come from rollAntGenes (B.ant); only the pose is rolled here, because it is checked against the mirror line
 // (no point at x < m, the left antenna being the mirror image), the plate (the antenna alone must not push the
-// scale under 0.6) and the forelegs where they are raised ahead of the head; a bad pose is re-rolled, then replaced
-// by a known-good forward pose. docs/research-antennae.md R-A, R-C, R-D. Drawn after the legs so the leg polylines
-// are known; the layer order in the assembly is unchanged.
+// scale under 0.6), the forelegs where they are raised ahead of the head, and the wings (no point of the antenna
+// inside a wing, elytron or tegmen outline, #6); a bad pose is re-rolled, then replaced by a known-good forward pose.
+// docs/research-antennae.md R-A, R-C, R-D. Drawn after the legs and the wings so their geometry is known; the layer
+// order in the assembly is unchanged (antennae on top).
 function drawAntennae(C) {
   const { L, meta, outerBox, P, B, thorax, abdomen, headTop } = C;
   {
     const A = B.ant, R = ANT_POSES[A.pose];
     const base = [P.headW * A.socket[0], headTop + P.headH * A.socket[1]];
-    const ob = outerBox;   // everything drawn so far: body and legs
+    const ob = outerBox;   // everything drawn so far: body, legs and wings
+    const wings = meta.wingOutlines = wingPolys;   // every outline makeWing (and the elytron) pushed for this plate, right side, body coordinates
     const legSegs = [];   // leg segments ahead of the thorax, only in the poses that lift the legs toward the head (mantid fold, mayfly forelegs, odonate basket)
     if (['raised', 'basket'].includes(meta.legRoll.pose) && A.pose !== 'swept') for (const lg of meta.legs) for (let k = 2; k + 1 < lg.pts.length; k++) if (Math.min(lg.pts[k][1], lg.pts[k + 1][1]) < thorax.yTop + 4) legSegs.push([lg.pts[k], lg.pts[k + 1]]);
     const antOk = G => {
       const m = Math.max(0.5, G.w0 * 0.6);
       let maxX = 0, minY = Infinity, maxY = -Infinity;
       for (const p of G.pts) { if (p[0] < m) return 'cross'; maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
+      // fit: the antenna alone must not push the plate scale under 0.6. The box already holds the wings, which on a
+      // broad-winged plate set a scale under 0.6 by themselves, so the antenna is blamed only where it extends that box
       const W = 2 * Math.max(Math.abs(ob.minX), ob.maxX, maxX) + 48, H = Math.max(ob.maxY, maxY) - Math.min(ob.minY, minY) + 48;
-      if (Math.min(552 / W, 507 / H) < 0.6) return 'fit';
+      const W0 = 2 * Math.max(Math.abs(ob.minX), ob.maxX) + 48, H0 = ob.maxY - ob.minY + 48;
+      const sc = Math.min(552 / W, 507 / H), sc0 = Math.min(552 / W0, 507 / H0);
+      if (sc < 0.6 && sc < sc0 - 1e-9) return 'fit';
+      for (const poly of wings) for (const p of G.pts) if (pointInPoly(p, poly)) return 'wing';   // the left side is the mirror image
       if (legSegs.length) for (let i = 0; i + 1 < G.pl.length; i++) {
         const a = G.pl[i], b = G.pl[i + 1];
         if (a[1] > thorax.yTop && b[1] > thorax.yTop) continue;   // beside the body the antenna lies over the legs, as on a plate
@@ -2822,9 +2831,10 @@ function drawAntennae(C) {
       pose = { ang: rr(R.ang), curve: rr(R.curve), droop: rr(R.droop), lenK: pose.lenK * (why === 'fit' ? 0.92 : 1) };
       if (why === 'legs') pose.ang = Math.max(-100, pose.ang - randRange(10, 30));   // swing toward straight ahead, inside the raised forelegs
       if (why === 'cross') { pose.curve = Math.abs(pose.curve); A.hookSide = 1; }
+      if (why === 'wing') { pose.ang = Math.max(-95, Math.min(pose.ang, -45) - randRange(5, 20)); pose.curve = randRange(5, 30); pose.droop = 0; }   // forward and nearly straight, out of the wing membrane (a swept pose can only lie across it)
     }
     if (why) {   // known-good fallback: forward at 40 deg from the midline, a little outward curve, shortened
-      pose = { ang: A.pose === 'face' || why === 'legs' ? -86 : -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12, droop: 0, lenK: Math.min(pose.lenK, 0.8) };
+      pose = { ang: A.pose === 'face' || why === 'legs' ? -86 : why === 'wing' ? -70 : -50, curve: why === 'wing' ? 15 : A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12, droop: 0, lenK: Math.min(pose.lenK, 0.8) };
       A.hookSide = 1; G = antennaGeom(A, base, P.headW, pose);
     }
     L.antennae.push(...antennaEls(A, G, P.headW));
@@ -3891,6 +3901,7 @@ function wingsElytra(C) {   // (type === 'beetle')
   }
   const outer = [[0, top], [ew * 0.5, top + 1], [ew * 0.98, top + elen * 0.1], [ew, top + elen * 0.45], [ew * 0.74, top + elen * 0.84], [ew * 0.28, top + elen * 0.985], [0, eBot]];
   L.covers.push(pathEl(halfShield(outer), SW.O, '#fff'));
+  wingPolys.push(sampleSmooth(outer, false, 1, 8));   // the elytron counts as a wing for the antenna clearance rule (closes along the midline)
   // striae (ridges) converging toward the apex
   const nR = randInt(3, 5);
   for (let k = 1; k <= nR; k++) {
