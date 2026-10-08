@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Runs the engine from index.html over many seeds and checks structural invariants.
 'use strict';
-const E = require('./engine').loadEngine();
+const { loadEngine, engineContract } = require('./engine');
+const E = loadEngine();
 
 const N = Number(process.argv[2] || 3000);
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
@@ -10,6 +11,10 @@ const typeCount = {};
 const wingSigs = {};   // type -> Map(structural wing signature -> count)
 const bodySigs = {};   // type -> Map(structural body signature -> count)
 let elTotal = 0;
+
+// the engine contract (README "Engine contract", tests/engine.js): one tagged block, the one that exports, DOM-free,
+// the agreed export list; a consumer that scrapes by tag and one that scrapes by module.exports must get the same code
+for (const msg of engineContract()) failures.push({ seed: 0, type: 'engine', msg: 'engine contract: ' + msg });
 
 for (let seed = 1; seed <= N; seed++) {
   const { svg, meta } = E.generateInsectDetailed(seed);
@@ -274,7 +279,7 @@ console.log('daily seed today:', E.dailySeed());
 if (failures.length) {
   console.log('FAILURES:', failures.length);
   const byMsg = {};
-  for (const f of failures) (byMsg[f.msg.split(':')[0]] ||= []).push(f.seed + '(' + f.type + ')');
+  for (const f of failures) (byMsg[f.seed === 0 ? f.msg : f.msg.split(':')[0]] ||= []).push(f.seed + '(' + f.type + ')');   // whole-file findings (seed 0) keep their full message
   for (const k in byMsg) console.log(' -', k, ':', byMsg[k].length, 'e.g.', byMsg[k].slice(0, 6).join(' '));
   process.exit(1);
 }

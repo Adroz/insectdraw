@@ -23,9 +23,13 @@ contract for changes.
   main:index.html > /tmp/old.html`, `node tests/snapshot.js write before.json 3000 --engine /tmp/old.html`,
   then `node tests/snapshot.js check before.json 3000` on the new engine (every plate, every tenth
   device plate, every fiftieth part crop, byte for byte; a fixture of a different size fails the check).
-- `tests/check.js` and `tests/sheet.js` extract the engine script with a regex on
-  `<script id="engine">` and run it under `node vm`, so keep that tag and the
-  `module.exports` block at the bottom of the engine intact.
+- Every node consumer (`tests/*.js`, `scripts/render-daily.js`) loads the engine through
+  `tests/engine.js` (`loadEngine`), the pages fetch `index.html` and match the tag, and the crowpanel-ha
+  Dockerfile takes the script block containing `module.exports`. The contract they share (one tagged
+  block that is the exporting one, DOM-free, deterministic per seed, the agreed export list) is written
+  in README "Engine contract" and asserted by `engineContract()` in `tests/engine.js`, which
+  `tests/check.js` runs first. Keep the `<script id="engine">` tag and the `module.exports` block at the
+  bottom of the engine intact; a new export goes into `EXPORTS` in `tests/engine.js` in the same commit.
 - `docs/` holds the morphology research the drawing rules are derived from. Add a note there
   when a new body part or venation plan is grounded in a reference.
   `docs/plan-body-variation.md` is the open plan for giving legs, body, head and antennae the
