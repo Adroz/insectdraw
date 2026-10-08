@@ -281,14 +281,15 @@ geniculate 12–13 segments, ichneumonid long filiform, chalcid clubbed; fly
 aristate with a plumose or bare arista or stylate; bristle antennae on
 dragonflies, cicadas and mayflies), with length, segment count, club, rami,
 lamellae, arista, socket and a pose (angle, outward curvature, droop) that is
-checked against the mirror line, the plate, raised forelegs and the wing outlines (no antenna
-lies across a wing) and re-rolled
+checked against the mirror line, the plate, the legs wherever they reach ahead of the thorax in any
+pose (no antenna crosses a leg; beside the body it lies over them, as on a plate) and the wing outlines
+(no antenna lies across a wing) and re-rolled
 (`docs/research-antennae.md`). Each leg pair is also
-rotated 2–6° about its coxa on the left side only (re-validated against the body and
-the other legs), so the two sides are not a mirror stamp. The discrete part is exposed as `meta.bodySig`,
+rotated 2–6° about its coxa on the left side only (re-validated against the body, the
+other legs and the antenna socket), so the two sides are not a mirror stamp. The discrete part is exposed as `meta.bodySig`,
 held to the same 10% / 50% rule as `wingSig` by `tests/check.js`, which also
 asserts the leg invariants above on `meta.legs[i].pts` and the antenna
-invariants on `meta.antennae.pts`.
+invariants on `meta.antennae.pts` and `.lines`.
 
 ## Legs, eyes, antennae
 

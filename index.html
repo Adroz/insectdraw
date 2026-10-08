@@ -590,6 +590,15 @@ function antennaGeom(A, base, hw, pose) {
     }
   }
   if (!G.tip) G.tip = G.pl[G.pl.length - 1];
+  // every drawn stroke of the antenna as a centre-line with its width, for the leg clearance rule (#7) and
+  // tests/check.js: shaft, scape + pedicel, club axis, arista, style, each ramus and each lamella
+  G.lines = [{ pl: G.pl, w: G.w0 }];
+  if (A.kind === 'geniculate') G.lines.push({ pl: [base, G.elbow, G.ped], w: G.sw });
+  if (G.club && A.hookDeg) G.lines.push({ pl: G.club, w: G.cw });
+  if (G.ar) G.lines.push({ pl: G.ar, w: G.w0 });
+  if (G.st) G.lines.push({ pl: [G.pe, G.st], w: G.w0 });
+  if (G.rami) for (const r of G.rami) G.lines.push({ pl: [r.at, add(r.at, mul(r.dir, r.bl))], w: G.w0 });
+  if (G.lam) for (const l of G.lam) G.lines.push({ pl: [G.pl[G.pl.length - 1], l.far], w: Math.max(2.4, hw * 0.07) * A.wK });
   return G;
 }
 function antennaEls(A, G, hw) {
@@ -2841,6 +2850,10 @@ function drawLegs(C) {
     // line, no femur tip / tibia / tarsus inside the abdomen outline below the thorax, no two legs within a femur
     // width of each other, and the legs alone must not push the plate scale under 0.62 (wings come later).
     const halfW = (sp, k) => (k <= 1 ? sp.widths[0][0] : k === 2 ? sp.widths[1][0] : k === 3 ? Math.max(sp.widths[2][0], sp.widths[2][1]) : sp.widths[3][0]) / 2;   // half width of joint segment k
+    // ahead of the head a leg also stays off the antenna socket by the antenna clearance (#7: 3 px + both half widths,
+    // the antenna's at its base width) plus 2 px for the lean of a near-straight shaft, or no antenna pose could clear
+    // it; the odonate basket is exempt like the midline rule below (a bristle antenna beside a wide head)
+    const antX = P.headW * B.ant.socket[0] + 5 + Math.max(1.3, P.headW * 0.05) * B.ant.wK / 2;
     const legsOk = (joints, specs) => {
       const fy = joints.map(j => j[3][1]);
       if (!(fy[0] < fy[1] && fy[1] < fy[2])) return 'order';
@@ -2849,6 +2862,11 @@ function drawLegs(C) {
       for (let i = 0; i < 3; i++) for (let k = 0; k < joints[i].length; k++) {   // nothing on the mirror line; forelegs stay apart in front of the head
         const p = joints[i][k], need = halfW(specs[i], Math.max(1, k)) + 2;
         if (p[0] < (p[1] < 0 && !isOdo ? Math.max(need, P.headW * 0.3) : need)) return 'midline';   // the odonate basket is tiny beside its wide head
+        if (p[1] < 0 && !isOdo && p[0] < antX + halfW(specs[i], Math.max(1, k))) return 'socket';
+      }
+      if (!isOdo) for (let i = 0; i < 3; i++) for (let k = 2; k + 1 < joints[i].length; k++) {   // and where a segment crosses the head top
+        const a = joints[i][k], b = joints[i][k + 1];
+        if ((a[1] < 0) !== (b[1] < 0) && a[0] + (b[0] - a[0]) * (0 - a[1]) / (b[1] - a[1]) < antX + halfW(specs[i], k)) return 'socket';
       }
       for (let i = 0; i < 3; i++) for (let k = 3; k + 1 < joints[i].length; k++) {
         const j = joints[i], a = j[k], b = j[k + 1], n = Math.max(1, Math.ceil(vlen(sub(b, a)) / 3)), m = halfW(specs[i], k) + 3.5;
@@ -2901,6 +2919,7 @@ function drawLegs(C) {
       const lm = legMeta[legMeta.length - 1];
       lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3]; lm.skew = skews[i]; lm.pivot = at.p;
       lm.femW = specs[i].widths[1][0]; lm.femLen = specs[i].lens[1];
+      lm.segHw = joints[i].slice(0, -1).map((_, k) => halfW(specs[i], k));   // half width of segment k -> k+1, for the antenna clearance rule (#7) and tests/check.js
     }
     legMeta.reverse();   // front, mid, hind
     meta.legs = legMeta;
@@ -2913,8 +2932,10 @@ function drawLegs(C) {
 // ---------- antennae ----------
 // Genes come from rollAntGenes (B.ant); only the pose is rolled here, because it is checked against the mirror line
 // (no point at x < m, the left antenna being the mirror image), the plate (the antenna alone must not push the
-// scale under 0.6), the forelegs where they are raised ahead of the head, and the wings (no point of the antenna
-// inside a wing, elytron or tegmen outline, #6); a bad pose is re-rolled, then replaced by a known-good forward pose.
+// scale under 0.6), the legs wherever they reach ahead of the thorax, in every pose (#7: no centre-line of the antenna
+// within 3 px + both half widths of a leg segment there, right legs and the skewed left set; beside the body the
+// antenna lies over the legs as on a plate), and the wings (no point of the antenna inside a wing, elytron or tegmen
+// outline, #6); a bad pose is re-rolled, then replaced by a known-good forward pose.
 // docs/research-antennae.md R-A, R-C, R-D. Drawn after the legs and the wings so their geometry is known; the layer
 // order in the assembly is unchanged (antennae on top).
 function drawAntennae(C) {
@@ -2924,8 +2945,14 @@ function drawAntennae(C) {
     const base = [P.headW * A.socket[0], headTop + P.headH * A.socket[1]];
     const ob = outerBox;   // everything drawn so far: body, legs and wings
     const wings = meta.wingOutlines = wingPolys;   // every outline makeWing (and the elytron) pushed for this plate, right side, body coordinates
-    const legSegs = [];   // leg segments ahead of the thorax, only in the poses that lift the legs toward the head (mantid fold, mayfly forelegs, odonate basket)
-    if (['raised', 'basket'].includes(meta.legRoll.pose) && A.pose !== 'swept') for (const lg of meta.legs) for (let k = 2; k + 1 < lg.pts.length; k++) if (Math.min(lg.pts[k][1], lg.pts[k + 1][1]) < thorax.yTop + 4) legSegs.push([lg.pts[k], lg.pts[k + 1]]);
+    // leg segments reaching ahead of the thorax (#7): every leg from the femur on, in every pose (spread and walking
+    // forelegs reach ahead of the head too), the right side and the skewed left set (each pair rotated about its coxa
+    // by its skew before mirroring), each with its half width
+    const legSegs = [];
+    for (const lg of meta.legs) for (const deg of lg.skew ? [0, lg.skew] : [0]) {
+      const pts = deg ? lg.pts.map(p => add(lg.pivot, rot(sub(p, lg.pivot), deg * D2R))) : lg.pts;
+      for (let k = 2; k + 1 < pts.length; k++) if (Math.min(pts[k][1], pts[k + 1][1]) < thorax.yTop + 4) legSegs.push({ a: pts[k], b: pts[k + 1], hw: lg.segHw[k] });
+    }
     const antOk = G => {
       const m = Math.max(0.5, G.w0 * 0.6);
       let maxX = 0, minY = Infinity, maxY = -Infinity;
@@ -2937,33 +2964,48 @@ function drawAntennae(C) {
       const sc = Math.min(552 / W, 507 / H), sc0 = Math.min(552 / W0, 507 / H0);
       if (sc < 0.6 && sc < sc0 - 1e-9) return 'fit';
       for (const poly of wings) for (const p of G.pts) if (pointInPoly(p, poly)) return 'wing';   // the left side is the mirror image
-      if (legSegs.length) for (let i = 0; i + 1 < G.pl.length; i++) {
-        const a = G.pl[i], b = G.pl[i + 1];
+      if (legSegs.length) for (const ln of G.lines) for (let i = 0; i + 1 < ln.pl.length; i++) {
+        const a = ln.pl[i], b = ln.pl[i + 1];
         if (a[1] > thorax.yTop && b[1] > thorax.yTop) continue;   // beside the body the antenna lies over the legs, as on a plate
-        for (const s of legSegs) if (segDist(a, b, s[0], s[1]) < 4 + G.w0 / 2) return 'legs';
+        for (const s of legSegs) if (segDist(a, b, s.a, s.b) < 3 + s.hw + ln.w / 2) return 'legs';
       }
       return null;
     };
     const rr = r => randRange(r[0], r[1]);
-    let pose = { ang: A.ang, curve: A.curve, droop: A.droop, lenK: 1 }, G, why = null, attempt = 0;
+    let pose = { ang: A.ang, curve: A.curve, droop: A.droop, lenK: 1 }, G, why = null, attempt = 0, straight = false;
     const reasons = [];
     for (; attempt < 24; attempt++) {
       G = antennaGeom(A, base, P.headW, pose);
       why = antOk(G);
       if (!why) break;
       reasons.push(why);
-      pose = { ang: rr(R.ang), curve: rr(R.curve), droop: rr(R.droop), lenK: pose.lenK * (why === 'fit' ? 0.92 : 1) };
-      if (why === 'legs') pose.ang = Math.max(-100, pose.ang - randRange(10, 30));   // swing toward straight ahead, inside the raised forelegs
+      const prev = pose;
+      // a leg or wing hit is sticky: from then on every attempt is forward and nearly straight (a swept or arched antenna
+      // can only lie across them) and walks a few degrees further toward straight ahead each time. A plume or bristle
+      // beside a foreleg standing next to the head has no clear pose at full length (a bipectinate plume is held off the
+      // midline on one side and the leg on the other), so from the 5th straight attempt a leg hit, or a midline cross of
+      // a plume, also shortens it (not under 0.5).
+      const shrink = straight && attempt >= 4 && (why === 'legs' || (why === 'cross' && G.rami));
+      pose = { ang: rr(R.ang), curve: rr(R.curve), droop: rr(R.droop), lenK: why === 'fit' ? prev.lenK * 0.92 : shrink ? Math.max(0.5, prev.lenK * 0.94) : prev.lenK };
       if (why === 'cross') { pose.curve = Math.abs(pose.curve); A.hookSide = 1; }
-      if (why === 'wing') { pose.ang = Math.max(-95, Math.min(pose.ang, -45) - randRange(5, 20)); pose.curve = randRange(5, 30); pose.droop = 0; }   // forward and nearly straight, out of the wing membrane (a swept pose can only lie across it)
+      if (why === 'legs' || why === 'wing') straight = true;
+      if (straight) {
+        pose.ang = why === 'cross' ? Math.min(-45, prev.ang + randRange(5, 15)) : Math.max(why === 'legs' ? -100 : -95, Math.min(prev.ang, -45) - randRange(5, 20));   // back off a little from the midline after a cross, else on toward straight ahead
+        pose.curve = randRange(5, 30); pose.droop = 0;
+      }
     }
-    if (why) {   // known-good fallback: forward at 40 deg from the midline, a little outward curve, shortened
-      pose = { ang: A.pose === 'face' || why === 'legs' ? -86 : why === 'wing' ? -70 : -50, curve: why === 'wing' ? 15 : A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12, droop: 0, lenK: Math.min(pose.lenK, 0.8) };
+    if (why) {   // known-good fallback: forward at 40 deg from the midline, a little outward curve, shortened; after a leg hit
+      // straight ahead, then shortened (and angled back out of the midline, for a plume) until it clears; antOk draws no rng
+      pose = { ang: A.pose === 'face' || why === 'legs' ? -86 : why === 'wing' ? -70 : -50, curve: why === 'wing' ? 15 : why === 'legs' ? 6 : A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12, droop: 0, lenK: Math.min(pose.lenK, 0.8) };
       A.hookSide = 1; G = antennaGeom(A, base, P.headW, pose);
+      for (let k = 0, r; k < 12 && ((r = antOk(G)) === 'legs' || r === 'cross'); k++) {
+        if (r === 'legs') { pose.ang = Math.max(-90, pose.ang - 4); pose.lenK *= 0.9; } else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= 0.9; }
+        G = antennaGeom(A, base, P.headW, pose);
+      }
     }
     L.antennae.push(...antennaEls(A, G, P.headW));
     G.pts.forEach(bb);
-    meta.antennae = { kind: A.kind, pose: A.pose, club: A.club, pts: G.pts, tip: G.tip, base, attempts: attempt + 1, why, reasons, lenK: pose.lenK };
+    meta.antennae = { kind: A.kind, pose: A.pose, club: A.club, pts: G.pts, lines: G.lines, tip: G.tip, base, attempts: attempt + 1, why, reasons, lenK: pose.lenK };
     B.sig.push(A.kind, A.club || '-', A.pose, Math.round(A.nSeg / 4), A.kind === 'lamellate' ? A.lamellae.n : (A.kind === 'pectinate' || A.kind === 'bipectinate') ? Math.round(A.rami.n / 6) : 0,
       Math.round(pose.ang / 10), Math.round(pose.curve / 15), Math.round(G.len / P.headW * 2), Math.round(A.socket[0] * 20));
     if (B.abd.filaments) L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 90 - B.abd.filaments.splay, P.abdLen * B.abd.filaments.len, 14, 8), false), SW.D));   // outer tail filaments (mirrored)

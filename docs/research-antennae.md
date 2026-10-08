@@ -261,12 +261,22 @@ shorten by 8% and re-roll the pose. No sampled point of the antenna may lie insi
 or tegmen outline (the antennae are drawn after the wings for this): a hit re-rolls the pose
 forward (ang at most −45°, then 5–20° further) and nearly straight (curve 5–30°), since a swept
 or arched antenna can only lie across the forewing membrane; the fallback for this reason is
-−70° at curve 15°. Where the legs are `raised`
-(mantid fold, mayfly forelegs straight ahead, odonate basket) the forelegs reach ahead of the head:
-every antenna sample ahead of the thorax (y < thorax top) must stay ≥ 3 px + half widths from every
-leg segment from the femur on; a hit re-rolls the pose toward straight forward. Swept antennae run
-beside the body and over the legs, as they do on a real plate, so the clearance test applies only
-to the part of the antenna ahead of the thorax.
+−70° at curve 15°. The legs reach ahead of the thorax in every pose (spread and walking forelegs
+as much as the mantid fold, the mayfly's forelegs straight ahead or the odonate basket), so in
+every pose (#7) every centre-line of the antenna (shaft, scape, club axis, arista, style, each
+ramus and lamella) with an end ahead of the thorax (y < thorax top) must stay ≥ 3 px + both half
+widths from every leg segment from the femur on, on the right legs and on the skewed left set. A
+hit is sticky like a wing hit: every later attempt is forward and nearly straight and walks a few
+degrees further toward straight ahead; from the fifth such attempt a leg hit (or a midline cross
+of a plume, which is held off the midline on one side and the leg on the other) also shortens the
+antenna by 6%, not under half; the fallback is straight ahead at curve 6°, shortened until it
+clears. Antennae run beside the body and over the legs, as they do on a real plate, so the
+clearance test applies only to the part of the antenna ahead of the thorax. The legs block keeps
+its side of the bargain: a leg joint ahead of the head (and the point where a segment crosses the
+head top) stays off the antenna socket by the same clearance plus 2 px for the lean of a straight
+shaft (`legsOk` reason `socket`, odonates exempt like the midline rule), or no antenna pose could
+clear it. Over 300 seeds per type the fallback fires on 0.7% of moths (bipectinate plumes between
+tucked or walking forelegs) and 0.3% of damselflies, and nowhere else.
 
 ### R-E Socket
 
