@@ -16,6 +16,58 @@ let elTotal = 0;
 // the agreed export list; a consumer that scrapes by tag and one that scrapes by module.exports must get the same code
 for (const msg of engineContract()) failures.push({ seed: 0, type: 'engine', msg: 'engine contract: ' + msg });
 
+// The order registry (#4): ORDERS is the one table every per-order fact lives in, keyed by type in pick order (TYPES
+// is its key list, so the first rng draw indexes the registry). Every entry carries what the sections read: the
+// proportions roll, the abdomen / thorax / head / leg / antenna gene tables, the 5th-percentile head scale, the wing
+// roots the wing block and the tegula read (0-2 fractions of the thorax, forewing first) and the root x factor, the
+// tegula and leg-thickness opt-ins, the wing section function and the name tables. A new order is one entry plus one
+// wing function, so a half entry is a failure here, not a crash a thousand seeds in. The family keys of the override
+// tables (headFams, legs, ant) must be families the entry's proportions roll can produce: a mistyped key would
+// otherwise fall back to the base table silently. proportions is rolled here directly (it is rng-driven, so the
+// module rng is seeded by one plate first) and must set the fields layoutBody and the sections read.
+{
+  const rfail = msg => failures.push({ seed: 0, type: 'registry', msg: 'order registry: ' + msg });
+  const O = E.ORDERS;
+  const frac = x => typeof x === 'number' && x > 0 && x <= 1;
+  const range2 = r => Array.isArray(r) && r.length === 2 && r.every(x => typeof x === 'number') && r[0] <= r[1];
+  const namesBad = n => !n ? 'missing' : !Array.isArray(n.tails) || !n.tails.length || n.tails.some(t => !Array.isArray(t) || t.length !== 2 || !/^[mfn]$/.test(t[1])) ? 'tails is not a list of [tail, gender]'
+    : !n.common || !Array.isArray(n.common.nouns) || !n.common.nouns.length || typeof n.common.base !== 'string' ? 'common has no nouns / base' : null;
+  const P_FIELDS = ['headW', 'headH', 'thoraxW', 'thoraxLen', 'abdW', 'abdLen', 'legScale'];   // numbers > 0 after proportions
+  if (!O || typeof O !== 'object') rfail('the engine exports no ORDERS table');
+  else {
+    if (Object.keys(O).join() !== E.TYPES.join()) rfail('TYPES is not the registry key list in order: [' + E.TYPES + '] vs [' + Object.keys(O) + ']');
+    E.generateInsect(1);   // seeds the engine's module rng so proportions can be rolled outside a plate
+    for (const type of E.TYPES) {
+      const o = O[type], f = msg => rfail(type + ': ' + msg);
+      if (!o) { f('no entry'); continue; }
+      for (const k of ['abd', 'thorax', 'head', 'legs']) if (!o[k] || typeof o[k] !== 'object') f(k + ' gene table missing');
+      if (!o.ant || !o.ant.base || !o.ant.base.kinds) f('antenna table has no base kinds');
+      if (!(typeof o.headScaleP5 === 'number' && o.headScaleP5 > 0)) f('headScaleP5 missing');
+      if (!Array.isArray(o.wingRoots) || o.wingRoots.length > 2 || o.wingRoots.some(t => !(typeof t === 'number' && t >= 0 && t <= 1))) f('wingRoots is not 0-2 fractions of the thorax: ' + JSON.stringify(o.wingRoots));
+      else if (o.wingRoots.length === 2 && !(o.wingRoots[0] < o.wingRoots[1])) f('forewing root is not ahead of the hindwing root: ' + JSON.stringify(o.wingRoots));
+      if (o.wingRootX !== undefined && !frac(o.wingRootX)) f('wingRootX is not a fraction of the thorax half-width: ' + o.wingRootX);
+      if (o.tegula && (!range2(o.tegula.rx) || (o.tegula.hairs !== undefined && !range2(o.tegula.hairs)))) f('tegula is not { rx: [min, max], hairs?: [min, max] }: ' + JSON.stringify(o.tegula));
+      if (o.tegula && o.wingRootX === undefined) f('tegula without a wingRootX to sit at');
+      if (o.legThick !== undefined && !(typeof o.legThick === 'number' && o.legThick > 0)) f('legThick is not a positive factor: ' + o.legThick);
+      if (typeof o.wings !== 'function') f('wings is not a function');
+      const nb = namesBad(o.names); if (nb) f('names: ' + nb);
+      for (const v of Object.keys(o.variantNames || {})) { const vb = namesBad(o.variantNames[v]); if (vb) f('variantNames.' + v + ': ' + vb); }
+      if (typeof o.proportions !== 'function') { f('proportions is not a function'); continue; }
+      // roll the proportions: every required field set, and every family the override tables key on is rollable
+      const fams = new Set();
+      for (let i = 0; i < 400; i++) {
+        const P = { variant: null, fam: null, abdOverlap: 8 };
+        o.proportions(P); fams.add(P.fam);
+        if (i) continue;
+        for (const k of P_FIELDS) if (!(typeof P[k] === 'number' && P[k] > 0)) f('proportions leaves P.' + k + ' unset: ' + P[k]);
+        for (const k of ['thoraxAnchors', 'abdAnchors']) if (!Array.isArray(P[k]) || P[k].length < 3 || P[k].some(a => !Array.isArray(a) || a.length !== 2)) f('proportions leaves P.' + k + ' unset or malformed');
+      }
+      for (const [tab, T] of [['headFams', o.headFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}]])
+        for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
+    }
+  }
+}
+
 const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
 
 for (let seed = 1; seed <= N; seed++) {
@@ -48,10 +100,13 @@ for (let seed = 1; seed <= N; seed++) {
     if (leg.x < leg.hw * 0.5) fail(leg.pair + ' coxa starts too far inside thorax (' + leg.x.toFixed(1) + ' vs hw ' + leg.hw.toFixed(1) + ')');
     if (leg.hw < 8) fail(leg.pair + ' thorax half-width at attachment suspiciously small: ' + leg.hw.toFixed(1));
   }
-  // Thorax: the wing blocks root their wings at meta.thorax.wingRoots (t along the thorax); the rolled profile must
-  // still have width there, and the scutellum must sit inside the body outline (thorax, or the abdomen / elytra
-  // where it hangs over the junction, as a beetle's does).
+  // Thorax: the wing block and the tegula root the wings at the registry's wingRoots (t along the thorax; the engine
+  // copies them onto meta.thorax.wingRoots, which must agree); the rolled profile must still have width there, and the
+  // scutellum must sit inside the body outline (thorax, or the abdomen / elytra where it hangs over the junction, as a
+  // beetle's does).
   {
+    const reg = E.ORDERS && E.ORDERS[meta.type], roots = reg ? reg.wingRoots : null;
+    if (!roots) fail('no registry entry for the type');
     const th = meta.thorax, profHw = (prof, y) => {   // profiles are sampled every 2 px and rounded to 0.1, so tolerate the last sample's rounding
       if (!prof.length || y < prof[0][0]) return 0;
       if (y > prof[prof.length - 1][0]) return y - prof[prof.length - 1][0] < 0.11 ? prof[prof.length - 1][1] : 0;
@@ -59,8 +114,8 @@ for (let seed = 1; seed <= N; seed++) {
       return a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 0 : (y - a[0]) / (b[0] - a[0]));
     };
     if (!th.profile || th.profile.length < 3) fail('no thorax profile');
-    for (const t of th.wingRoots) {
-      if (t < 0 || t > 1) fail('wing root outside the thorax: t=' + t);
+    if (roots && JSON.stringify(th.wingRoots) !== JSON.stringify(roots)) fail('meta.thorax.wingRoots is not the registry\'s: ' + JSON.stringify(th.wingRoots));
+    for (const t of roots || []) {
       const hw = profHw(th.profile, th.yTop + t * (th.yBot - th.yTop));
       if (hw <= 4) fail('thorax too narrow at a wing root: hw ' + hw.toFixed(1) + ' at t=' + t);
     }

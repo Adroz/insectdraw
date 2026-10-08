@@ -326,7 +326,10 @@ Consumers rely on exactly this, and `node tests/check.js` fails if any of it sto
   every platform; the only inputs are the seed and the options (`{ type, devicePx }`). `dailySeed()` is
   the one function that reads the clock.
 - **The exports.** `module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName,
-  dailySeed, brisbaneDay, hashString, mulberry32, TYPES, PARTS, DEVICE, SW_PX, CAPTION_H }`. Adding an
+  dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H }`
+  (`ORDERS` is the order registry, read-only (frozen to the leaves, asserted by `engineContract()`): one entry
+  per body plan with its gene tables, wing roots, head scale, wing function and name tables; `TYPES` is its
+  key list, in pick order). Adding an
   export means updating `EXPORTS` in `tests/engine.js` in the same commit; removing or renaming one is a
   breaking change for every consumer below.
 

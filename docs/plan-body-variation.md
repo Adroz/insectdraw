@@ -5,13 +5,13 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
 
 ### Status detail
 
-- **Step 1, done.** `rollBodyGenes(type, P)` runs right after the proportions switch and returns
+- **Step 1, done.** `rollBodyGenes(type, P)` runs right after the proportions roll (`ORDERS[type].proportions`) and returns
   `B` (`legs[pair]`, `abd`, `thorax`, `head`, `ant`, `sig`); every drawing block reads from it.
   `meta.bodySig` joins `B.sig`; `tests/check.js` prints the table and applies the 10% / 50% rule.
-  The wing-family pick is hoisted into the proportions switch as `P.fam` (the wing blocks read it);
+  The wing-family pick is hoisted into the entry's `proportions` roll as `P.fam` (the wing blocks read it);
   beetles roll `ground / rove / scarab / longhorn / weevil`, grasshoppers `acridid / tettigoniid /
   tetrigid`. `meta.recipe` is now `P.fam` for every order.
-- **Step 2, done.** Leg family ranges (`LEG_FAMS` in `rollBodyGenes`), pose families (`LEG_POSES`
+- **Step 2, done.** Leg family ranges (`legs` in each `ORDERS` entry, since #4), pose families (`LEG_POSES`
   in the legs block: `spread`, `walking`, `tucked`, `raised`, odonate `basket`), per-pair
   attachment and inset, segment ratios, thickness / swelling / flare, armature, tarsomeres, curl.
   Joint angles are rolled in the legs block and validated against the body (ordering, mirror
@@ -43,13 +43,13 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   punctation (fine / coarse) with bead and basal foveae, fly vittae 2 / 4 with humeral calli and
   bristle rows, pile ticks (moth always, bee 60%) with interior ticks, moth patagia and crest.
   Tegula rx 3–7, ry / rx 0.5–0.8, tilt 20–40°, centred on the wing block's forewing root
-  (`WING_ROOTS` table in `generateInsectDetailed` mirrors the wing blocks' `thorax.yAt(t)`), moth
+  (`wingRoots` in the order's `ORDERS` entry, which the wing block reads too, since #4), moth
   tegulae with hair ticks. Deviations from the text above: "notopleural lines (flies)" became the
   humeral calli + bristle rows the references actually show in dorsal view; the plan's "pronotum
   width 0.8–1.3× head" is per order (beetle 1.0–1.5, odonata 0.4–0.7, see the research table).
   `tests/check.js` adds: thorax width > 4 at every wing root, scutellum inside the body outline,
   bodySig ≥ 98% distinct.
-- **Step 5, done.** Head genes in `rollBodyGenes` (`B.head`, order table `HD` with family overrides `FO`),
+- **Step 5, done.** Head genes in `rollBodyGenes` (`B.head`, the entry's `head` ranges with family overrides `headFams`),
   grounded in `docs/research-head-eyes.md`: outline enum (`round` / `transverse` / `triangular` /
   `elongate`) built by `headOutlinePts` from a warped unit circle with a flattened front margin,
   genal swelling, a front bump (odonate frons, cicada postclypeus rounded or pointed with striae,
@@ -57,7 +57,7 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   `headCy`, `P.headW`, `P.headH` keep meaning bounding box and centre. Eyes as ranges (centre,
   radii, tilt, dent mirrored per side, highlight) with fly holoptic / dichoptic, gomphid-style
   separated odonate eyes and the male mayfly turban pair; eye style `lattice` / `stipple` / `plain`
-  with a pitch gene floored at `1.8 / p5 plate scale` per order (`HEAD_SCALE_P5`). Ocelli 0–3 with
+  with a pitch gene floored at `1.8 / p5 plate scale` per order (`headScaleP5` in `ORDERS`). Ocelli 0–3 with
   arrangements (triangle / line / odonate frons+seam / grasshopper laterals / moth behind the eyes /
   rove median). Mouthparts by what shows from above: ground-beetle sickle mandibles (crossing,
   serrated) with labrum and palps, hymenopteran mandible tips, weevil rostrum, lepidopteran palps
@@ -70,7 +70,7 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   above; palps and the fastigium furrow instead); the fly proboscis is not drawn (hidden under the
   head); the antennal socket table `AB` is untouched (step 6 can snap it to `meta.headOutline`).
 - **Step 6, done.** Research first (`research-antennae.md`, six references in `ref/ant-*`), then
-  `rollAntGenes` in `rollBodyGenes`: per-order / per-family weighted kind lists (`ANT_FAMS`:
+  `rollAntGenes` in `rollBodyGenes`: per-order / per-family weighted kind lists (`ant` in `ORDERS`:
   filiform, moniliform, serrate, pectinate, bipectinate, plumose, clubbed with gradual / abrupt /
   hooked / upcurved clubs, lamellate, geniculate with an optional club, aristate with plumose /
   bare / pubescent arista, stylate with annuli or a style, setaceous), length in head widths, body
@@ -87,7 +87,7 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   Deviations from the text above: lengths are per kind and reference (0.1 hw for a cicada bristle,
   1.6 body lengths for a longhorn), not "0.4–2.5× head width"; inward curvature is limited to −5°
   on the costal pose because anything larger crosses the midline on a long antenna; droop is 0–15°
-  and only on the forward poses. The legacy `antenna` / `antLen` fields in the proportions switch
+  and only on the forward poses. The legacy `antenna` / `antLen` fields in each entry's `proportions` roll
   are no longer read but were left in place so the rng stream of the family pick does not move.
 - **Known, outside this plan:** the cicada wing span (`abdomen length / sin(theta) × 1.0–1.12`
   in the wing block) pushes ~0.4% of cicadas below plate scale 0.55 on the baseline engine as
@@ -126,7 +126,7 @@ Success criteria:
    chosen and before layout. It returns `B` with sub-objects `B.legs[pair]`, `B.abd`,
    `B.thorax`, `B.head`, `B.ant`. Every drawing block reads from `B` instead of literals.
 2. **Family coherence.** The wing block already picks a family (`apid`, `ichneumonid`,
-   `papilionid` …). Hoist that pick to the proportions switch so body and wings share it: an
+   `papilionid` …). Hoist that pick to the proportions roll so body and wings share it: an
    ichneumonid gets the long antennae, petiolate abdomen and long ovipositor that go with its
    wing; a sawfly gets the broad sessile abdomen; a sphingid gets the fusiform body. Orders
    without wing families get body families of their own (beetle: ground / rove / scarab /

@@ -11,19 +11,38 @@ contract for changes.
 - A plate is drawn by `drawPlate`, a ~30-line orchestrator that calls one module-scope function per
   section in a fixed order: `rollProportions` (the size table and family pick), `layoutBody` (body
   genes, thorax and abdomen profiles, wing roots), `drawAbdomen`, `drawThorax`, `drawHead`,
-  `drawTegulae`, `drawLegs`, the order's wing block from `WING_BLOCKS` (`wingsLepidoptera`,
+  `drawTegulae`, `drawLegs`, the order's wing function from its `ORDERS` entry (`wingsLepidoptera`,
   `wingsDiptera`, `wingsNeuroptera`, `wingsCicada`, `wingsEphemeroptera`, `wingsHymenoptera`,
   `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`), then `drawAntennae` (after the wings, so the
   pose can be checked against their outlines) and `assemblePlate`.
   `rollProportions` takes the type and returns `P`; every other section takes one context object `C`
-  (`seed`, `type`, `dev`, `replay`, `L`, `meta`, `outerBox` from the orchestrator; `P`, `B`, `thorax`,
-  `abdomen`, `abdHW`, `headTop`, `headCy`, `WING_ROOTS` added by `layoutBody`), destructures only the
+  (`seed`, `type`, `order` (the type's `ORDERS` entry), `dev`, `replay`, `L`, `meta`, `outerBox` from
+  the orchestrator; `P`, `B`, `thorax`, `abdomen`, `abdHW`, `headTop`, `headCy` added by `layoutBody`),
+  destructures only the
   fields it reads, and draws into `C.L` / `C.meta`. The call order is the rng order: never reorder the
   calls, and a new section that draws goes in as another function on `C`, not inline in `drawPlate`.
   A refactor that must not change any drawing proves it with `tests/snapshot.js`: `git show
   main:index.html > /tmp/old.html`, `node tests/snapshot.js write before.json 3000 --engine /tmp/old.html`,
   then `node tests/snapshot.js check before.json 3000` on the new engine (every plate, every tenth
   device plate, every fiftieth part crop, byte for byte; a fixture of a different size fails the check).
+- One registry per order (#4): an order is one entry in `ORDERS` (just above `rollBodyGenes`), holding
+  everything the engine knows about it under one key: its `proportions` roll, the `abd` / `thorax` /
+  `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots` + `wingRootX` (the root's
+  x as a fraction of the thorax half-width), the `tegula` and `legThick` opt-ins, its `wings` function
+  and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
+  first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
+  re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs
+  goes into the entry, never into a new table keyed by type inside the section. The engine exports
+  `ORDERS` read-only (deep-frozen; `engineContract()` asserts it) and `tests/check.js` asserts every
+  entry's shape, that its override-table family keys are families its `proportions` roll produces, and
+  that `proportions` sets every field the sections read. **Adding an order** is one
+  entry plus one wing function: write the entry (copy the nearest order's and edit the ranges), write
+  the wing function (lanes, named crossveins, `meta.wingSig`, `meta.wingStats`, outlines through
+  `makeWing`), name it in `wings`, and give `wingRoots` / `wingRootX` the values the function roots at
+  (the tegula sits at the same point, so it never drifts from the wing). The sections' remaining
+  `type ===` cases (thorax dorsal lines, abdomen keel and terminalia, a few leg details) are drawing rules
+  with defaults, so an order without them still draws; prefer an opt-in field on the entry or `B` to
+  a new `type ===` test.
 - Every node consumer (`tests/*.js`, `scripts/render-daily.js`) loads the engine through
   `tests/engine.js` (`loadEngine`), the pages fetch `index.html` and match the tag, and the crowpanel-ha
   Dockerfile takes the script block containing `module.exports`. The contract they share (one tagged
@@ -83,14 +102,14 @@ contract for changes.
   (leg family and pose, attachment, ratios, armature, abdomen profile, tip, markings, terminalia)
   right after the proportions, and `meta.bodySig` (`B.sig` joined) is held to the same 10% / 50%
   rule. Drawing blocks read `B`, never roll their own literals; push every new discrete choice
-  onto `B.sig`. The wing family is rolled in the proportions switch as `P.fam` so body and wings
+  onto `B.sig`. The wing family is rolled in the entry's `proportions` as `P.fam` so body and wings
   share it; wing blocks read it, they do not roll it. Leg poses are validated against the body
   in the legs block (`legsOk`: ordering, mirror line, abdomen outline, pair clearance, fit) and
   re-rolled; `tests/check.js` asserts the result on `meta.legs[i].pts`, so a new pose or family
   range must keep those invariants rather than relax the test. The left legs are the right legs rotated per pair by `B.legs[i].skew` about the coxa
   (`L.legPairs` in the assembly); any new check on the right legs should also run on the rotated
   set, as `tests/check.js` does. Antennae follow the same shape:
-  `rollAntGenes` (tables `ANT_FAMS`, `ANT_POSES`) rolls the genes, `antennaGeom` builds the
+  `rollAntGenes` (the entry's `ant` table, poses from `ANT_POSES`) rolls the genes, `antennaGeom` builds the
   geometry without rng, and the antennae block (after the legs and the wings) validates the pose: no point of
   the right antenna reaches the mirror line (the left is its mirror image, so that is the
   no-crossing rule), the antenna alone does not push the plate scale under 0.6, raised forelegs are kept
@@ -100,15 +119,17 @@ contract for changes.
   outward-positive; keep inward curvature tiny or the long kinds will cross.
 - Legs and wings attach through `thorax.yAt(t)` / `thorax.hwAt(y)`, so the thorax profile
   (`B.thorax.anchors` → `P.thoraxAnchors`) must keep `bodyPart`'s interface and stay wide where
-  they land. The wing blocks' root positions are mirrored in the `WING_ROOTS` table in
-  `layoutBody` (the tegula sits on the first entry; `tests/check.js` asserts width
-  there): change a wing block's root `t` and update the table in the same commit.
-- The head is drawn from `B.head` (order table `HD` in `rollBodyGenes`, rules in
+  they land. A wing block roots its wings at its order's `wingRoots` (`C.order.wingRoots`, forewing
+  first; the tegula sits on the first entry and `tests/check.js` asserts the thorax has width there),
+  never at a literal `t`: a root moves by editing the entry. The one exception is the orthopteran
+  tegmen, drawn from under the pronotum's hind margin (`thorax.yBot - 6`); the grasshopper entry's
+  roots are the anatomical positions the width check holds.
+- The head is drawn from `B.head` (the entry's `head` / `headFams` tables, rolled in `rollBodyGenes`, rules in
   `docs/research-head-eyes.md`). `P.headW` / `P.headH` / `headTop` / `headCy` stay the bounding box
   and centre of the head; the drawn capsule is `meta.headOutline` (closed polyline, body coords) and
   `meta.head` carries the eyes, ocelli and rostrum that `tests/check.js` asserts (eyes inside the
   bbox with ≤ 10 % overhang, ocelli inside the outline). Eye lattice pitch is floored at
-  `1.8 / HEAD_SCALE_P5[type]` so facets never fill in on e-ink; update that table if an order's
+  `1.8 / order.headScaleP5` so facets never fill in on e-ink; update the entry if an order's
   plate scale changes.
 - Terminal veins must end on the outline: use `marginTargets`, `tipPoint`, or evaluate
   `topAt`/`botAt` at the same x as the endpoint. Only anatomically open cells may stop short.
