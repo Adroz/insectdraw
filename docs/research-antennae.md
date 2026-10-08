@@ -254,8 +254,14 @@ R-A like everything else.
 ### R-D Fit and clearance
 
 The antenna alone must not drive the plate scale under 0.6 (same floor as the legs' 0.62 minus a
-little, because the wings come after): compute the plate scale from the body bbox extended by the
-antenna points; if it fails, shorten by 8% and re-roll the pose. Where the legs are `raised`
+little): compute the plate scale from the bbox of everything drawn so far (body, legs and, since
+#6, the wings) extended by the antenna points, and blame the antenna only where it lowers that
+scale below 0.6 (a broad-winged plate sits under 0.6 before the antenna is drawn); if it fails,
+shorten by 8% and re-roll the pose. No sampled point of the antenna may lie inside a wing, elytron
+or tegmen outline (the antennae are drawn after the wings for this): a hit re-rolls the pose
+forward (ang at most −45°, then 5–20° further) and nearly straight (curve 5–30°), since a swept
+or arched antenna can only lie across the forewing membrane; the fallback for this reason is
+−70° at curve 15°. Where the legs are `raised`
 (mantid fold, mayfly forelegs straight ahead, odonate basket) the forelegs reach ahead of the head:
 every antenna sample ahead of the thorax (y < thorax top) must stay ≥ 3 px + half widths from every
 leg segment from the femur on; a hit re-rolls the pose toward straight forward. Swept antennae run

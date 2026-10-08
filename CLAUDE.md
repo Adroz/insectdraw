@@ -11,9 +11,10 @@ contract for changes.
 - A plate is drawn by `drawPlate`, a ~30-line orchestrator that calls one module-scope function per
   section in a fixed order: `rollProportions` (the size table and family pick), `layoutBody` (body
   genes, thorax and abdomen profiles, wing roots), `drawAbdomen`, `drawThorax`, `drawHead`,
-  `drawTegulae`, `drawLegs`, `drawAntennae`, then the order's wing block from `WING_BLOCKS`
-  (`wingsLepidoptera`, `wingsDiptera`, `wingsNeuroptera`, `wingsCicada`, `wingsEphemeroptera`,
-  `wingsHymenoptera`, `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`) and `assemblePlate`.
+  `drawTegulae`, `drawLegs`, the order's wing block from `WING_BLOCKS` (`wingsLepidoptera`,
+  `wingsDiptera`, `wingsNeuroptera`, `wingsCicada`, `wingsEphemeroptera`, `wingsHymenoptera`,
+  `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`), then `drawAntennae` (after the wings, so the
+  pose can be checked against their outlines) and `assemblePlate`.
   `rollProportions` takes the type and returns `P`; every other section takes one context object `C`
   (`seed`, `type`, `dev`, `replay`, `L`, `meta`, `outerBox` from the orchestrator; `P`, `B`, `thorax`,
   `abdomen`, `abdHW`, `headTop`, `headCy`, `WING_ROOTS` added by `layoutBody`), destructures only the
@@ -90,9 +91,11 @@ contract for changes.
   (`L.legPairs` in the assembly); any new check on the right legs should also run on the rotated
   set, as `tests/check.js` does. Antennae follow the same shape:
   `rollAntGenes` (tables `ANT_FAMS`, `ANT_POSES`) rolls the genes, `antennaGeom` builds the
-  geometry without rng, and the antennae block (after the legs) validates the pose: no point of
+  geometry without rng, and the antennae block (after the legs and the wings) validates the pose: no point of
   the right antenna reaches the mirror line (the left is its mirror image, so that is the
-  no-crossing rule), the plate scale stays above 0.6, raised forelegs are kept clear; re-roll,
+  no-crossing rule), the antenna alone does not push the plate scale under 0.6, raised forelegs are kept
+  clear, no point lies inside a wing, elytron or tegmen outline (`meta.wingOutlines`, pushed by `makeWing`
+  and the elytra; a swept pose that fails is re-rolled forward and nearly straight); re-roll,
   then a known-good pose. `tests/check.js` asserts it on `meta.antennae.pts`. Curvature is signed
   outward-positive; keep inward curvature tiny or the long kinds will cross.
 - Legs and wings attach through `thorax.yAt(t)` / `thorax.hwAt(y)`, so the thorax profile
