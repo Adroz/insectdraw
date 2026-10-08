@@ -348,8 +348,8 @@ How each consumer loads it:
 ## Dev
 
 ```
-node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks, plus the device plate floors at 440 (about 15 min)
-node tests/check.js 300 --only antennae      # just the named checks (comma-separated), in seconds; --seeds 100-130 takes a seed range; an unknown name lists the checks
+node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks, plus the device plate floors at 440 (about 13 min)
+node tests/check.js 300 --only antennae      # just the named checks (comma-separated), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists the checks
 npm install && npm test                      # e-ink survival gate: every layer rasterised at the device size through the panel pipeline (sharp), all strokes and fine strokes alone
 node scripts/render-daily.js 2026-01-01      # the daily plate for a Brisbane calendar day into daily/ (insect.svg, insect.png, insect.json); no date = today
 npm run check:daily                          # runs that script for a fixed day and checks the three files, the sidecar fields and the 1-bit 440×440 raster

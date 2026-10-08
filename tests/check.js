@@ -1,20 +1,25 @@
 #!/usr/bin/env node
 // Runs the engine from index.html over many seeds and checks structural invariants.
 //
-//   node tests/check.js [N] [--seeds A-B] [--only name,name]
+//   node tests/check.js [N | --seeds A-B] [--only name,name]
 //
-// N (default 3000) checks seeds 1..N; --seeds A-B checks that range instead. --only runs just the named checks
-// (a name from CHECKS, PRE or POST below; an unknown name lists them). The invariants are a table of named check
-// functions: CHECKS run per seed as (meta, svg, fail, plate), where fail(msg) records a failure for that seed and
-// plate.dev is the device plate at 440 px, drawn once on first use (so a check that never reads it costs nothing);
-// PRE and POST run once as (fail), before and after the seed loop. Adding an invariant is adding one entry; the
-// order of the tables is the order the failures are recorded and reported in.
+// N (default 3000) checks seeds 1..N; --seeds A-B checks that range instead (the two are exclusive). --only runs just
+// the named checks (a name from PRE, CHECKS or POST below; an unknown or empty list exits 2 and lists them, so a
+// selection can never pass by running nothing). The invariants are a table of named check functions: CHECKS run per
+// seed as (meta, svg, fail, ctx), where fail(msg) records a failure for that seed, ctx.seed is the seed, ctx.sampled
+// is true on every SAMPLE-th seed (the gate of the slow extras: part crops, the 800 px device plate) and ctx.dev is
+// the device plate at DEV px, drawn once on first use (so a check that never reads it costs nothing). PRE and POST
+// run once as (fail), before and after the seed loop, where fail(msg, type) records a seed-0 finding under the
+// check's name (or the type given). Adding an invariant is adding one entry; the order of the tables is the order
+// the failures are recorded and reported in.
 'use strict';
 const { loadEngine, engineContract } = require('./engine');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
 const DEV = 440;   // device plate size the device checks draw at (spec #32, ADR 0001)
+const SAMPLE = 50;   // the slow extras (parts, the 800 px device plate) run on every SAMPLE-th seed
+const SAMPLED = ['parts', 'device'];   // the checks that read ctx.sampled, for the report
 const failures = [];
 const typeCount = {};
 const wingSigs = {};   // type -> Map(structural wing signature -> count)
@@ -23,19 +28,16 @@ let elTotal = 0;
 
 // ---- geometry helpers shared by the checks ----
 const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
-// half-width of a sampled body profile ([y, hw] every 2 px, rounded to 0.1) at y: 0 outside it; the thorax form
-// tolerates the last sample's rounding, the abdomen form does not
-const profHw = (prof, y) => {
+// half-width of a sampled body profile ([y, hw] every 2 px, rounded to 0.1) at y: 0 outside it, where "outside" past
+// the last sample tolerates tol (the thorax sites pass 0.11 for the last sample's rounding, the abdomen sites 0)
+const profHw = (prof, y, tol = 0) => {
   if (!prof.length || y < prof[0][0]) return 0;
-  if (y > prof[prof.length - 1][0]) return y - prof[prof.length - 1][0] < 0.11 ? prof[prof.length - 1][1] : 0;
+  const last = prof[prof.length - 1];
+  if (y > last[0]) return y - last[0] < tol ? last[1] : 0;
   const k = Math.min(prof.length - 2, Math.floor((y - prof[0][0]) / 2)), a = prof[k], b = prof[k + 1];
   return a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 0 : (y - a[0]) / (b[0] - a[0]));
 };
-const abdHwAt = (prof, y) => {
-  if (y < prof[0][0] || y > prof[prof.length - 1][0]) return 0;
-  const k = Math.min(prof.length - 2, Math.floor((y - prof[0][0]) / 2)), a = prof[k], b = prof[k + 1];
-  return a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 0 : (y - a[0]) / (b[0] - a[0]));
-};
+const drawn = svg => (svg.match(/<(path|line|polyline|circle)\b/g) || []).length;   // elements drawn on a plate or a part crop
 const segsCross = (a, b, c, d) => { const cr = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
   const d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); };
 const rotAbout = (p, c, deg) => { const a = deg * Math.PI / 180, dx = p[0] - c[0], dy = p[1] - c[1]; return [c[0] + dx * Math.cos(a) - dy * Math.sin(a), c[1] + dx * Math.sin(a) + dy * Math.cos(a)]; };
@@ -51,7 +53,7 @@ const checkLegSet = (meta, sets, label, fail) => {
     if (pts.some(p => p[0] < 0)) fail(pair + label + ' leg crosses the mirror line');
     for (let k = 3; k + 1 < pts.length; k++) {   // femur tip onward, sampled every 2 px
       const a = pts[k], b = pts[k + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 2));
-      for (let q = 0; q <= n; q++) { const x = a[0] + (b[0] - a[0]) * q / n, y = a[1] + (b[1] - a[1]) * q / n; if (y > meta.thorax.yBot && x < abdHwAt(meta.abdomen.profile, y) - 0.5) { fail(pair + label + ' leg inside the abdomen'); break; } }
+      for (let q = 0; q <= n; q++) { const x = a[0] + (b[0] - a[0]) * q / n, y = a[1] + (b[1] - a[1]) * q / n; if (y > meta.thorax.yBot && x < profHw(meta.abdomen.profile, y) - 0.5) { fail(pair + label + ' leg inside the abdomen'); break; } }
     }
     const [tx, ty] = toPlate(meta, pts[pts.length - 1]);
     if (tx < 0 || tx > 600 || ty < 0 || ty > 600) fail(pair + label + ' tarsus tip outside the plate');
@@ -63,7 +65,7 @@ const checkLegSet = (meta, sets, label, fail) => {
   }
 };
 
-// ---- whole-run checks before the seed loop: (fail) => void, fail(msg) records a seed-0 finding ----
+// ---- whole-run checks before the seed loop: (fail) => void, fail(msg, type) records a seed-0 finding ----
 const PRE = {
   // the engine contract (README "Engine contract", tests/engine.js): one tagged block, the one that exports, DOM-free,
   // the agreed export list; a consumer that scrapes by tag and one that scrapes by module.exports must get the same code
@@ -121,7 +123,7 @@ const PRE = {
   },
 };
 
-// ---- per-seed checks: (meta, svg, fail, plate) => void; plate = { seed, dev } with dev the device plate at DEV px ----
+// ---- per-seed checks: (meta, svg, fail, ctx) => void; ctx = { seed, sampled, dev }, dev the device plate at DEV px ----
 const CHECKS = {
   // the plate is a drawing: no bad numbers, the same bytes every time, a bodySig, and forcing the rolled type is a no-op
   sanity(meta, svg, fail, { seed }) {
@@ -130,18 +132,18 @@ const CHECKS = {
     if (E.generateInsect(seed) !== svg) fail('non-deterministic');
     if (E.generateInsectDetailed(seed, { type: meta.type }).svg !== svg) fail('forcing the rolled type changes the drawing');
   },
-  // part crops (every fiftieth seed): no bad numbers, something drawn
-  parts(meta, svg, fail, { seed }) {
-    if (seed % 50) return;
+  // part crops (every SAMPLE-th seed): no bad numbers, something drawn
+  parts(meta, svg, fail, { seed, sampled }) {
+    if (!sampled) return;
     for (const part of E.PARTS) {
       const p = E.generatePart(seed, meta.type, part).svg;
       if (/NaN|Infinity|undefined/.test(p)) fail('bad number in part svg: ' + part);
-      if ((p.match(/<(path|line|polyline|circle)\b/g) || []).length < 1) fail('empty part: ' + part);
+      if (drawn(p) < 1) fail('empty part: ' + part);
     }
   },
   // enough drawn, inside the 600 x 600 plate, not shrunk past readability
   fit(meta, svg, fail) {
-    const els = (svg.match(/<(path|line|polyline|circle)\b/g) || []).length;
+    const els = drawn(svg);
     if (els < 60) fail('too few elements: ' + els);
     const f = meta.fitted;
     if (f.minX < 0 || f.maxX > 600 || f.minY < 0 || f.maxY > 600) fail('does not fit: ' + JSON.stringify(f));
@@ -164,11 +166,11 @@ const CHECKS = {
     if (!th.profile || th.profile.length < 3) fail('no thorax profile');
     if (roots && JSON.stringify(th.wingRoots) !== JSON.stringify(roots)) fail('meta.thorax.wingRoots is not the registry\'s: ' + JSON.stringify(th.wingRoots));
     for (const t of roots || []) {
-      const hw = profHw(th.profile, th.yTop + t * (th.yBot - th.yTop));
+      const hw = profHw(th.profile, th.yTop + t * (th.yBot - th.yTop), 0.11);
       if (hw <= 4) fail('thorax too narrow at a wing root: hw ' + hw.toFixed(1) + ' at t=' + t);
     }
     for (const p of th.scutellum) {
-      const hw = p[1] <= th.yBot ? profHw(th.profile, p[1]) : profHw(meta.abdomen.profile, p[1]);
+      const hw = p[1] <= th.yBot ? profHw(th.profile, p[1], 0.11) : profHw(meta.abdomen.profile, p[1], 0.11);
       if (Math.abs(p[0]) > hw + 0.6) { fail('scutellum outside the body outline'); break; }
     }
   },
@@ -252,8 +254,9 @@ const CHECKS = {
   // px (devicePx < 600 x subtitleMinPx / 11, i.e. 546): absent at 440, present with no option and at 800. The binomial
   // stays, floored at 24 device px on a device plate (ticket #38, ADR 0001): 32.7 plate px at 440, 18 at 800, 16
   // (unchanged) with no option. Worked examples, not the engine's formula, so a wrong constant cannot agree with itself.
-  // The gate (tests/eink.js) measures that the caption reads after the threshold.
-  device(meta, svg, fail, { seed, dev }) {
+  // The gate (tests/eink.js) measures that the caption reads after the threshold. The 800 px plate is drawn on the
+  // sampled seeds only.
+  device(meta, svg, fail, { seed, sampled, dev }) {
     const devK = 600 / DEV, D = E.DEVICE, dm = dev.meta;
     if (dm.type !== meta.type || dm.variant !== meta.variant) fail('device plate rolls a different type');
     if (dm.bodySig !== meta.bodySig) fail('device plate rolls a different bodySig');
@@ -272,10 +275,10 @@ const CHECKS = {
     if (texts(svg) !== 2) fail('default plate caption is not binomial + subtitle');
     if (texts(dev.svg) !== 1) fail('device plate at 440 keeps the subtitle');
     if (!dev.svg.includes(meta.name.binomial.replace(/&/g, '&amp;'))) fail('device plate lost the binomial');
-    if (seed % 50 === 0 && texts(E.generateInsect(seed, { devicePx: 800 })) !== 2) fail('device plate at 800 drops the subtitle');
+    if (sampled && texts(E.generateInsect(seed, { devicePx: 800 })) !== 2) fail('device plate at 800 drops the subtitle');
     if (capSize(svg) !== 16) fail('default plate binomial is not 16 px');
     if (capSize(dev.svg) !== 32.7) fail('device plate binomial at 440 is ' + capSize(dev.svg) + ' px, not 32.7');
-    if (seed % 50 === 0 && capSize(E.generateInsect(seed, { devicePx: 800 })) !== 18) fail('device plate binomial at 800 is not 18 px');
+    if (sampled && capSize(E.generateInsect(seed, { devicePx: 800 })) !== 18) fail('device plate binomial at 800 is not 18 px');
   },
   // grown venation (every winged type: bee / wasp / fly / cranefly / dragonfly / damselfly / lacewing / mayfly /
   // grasshopper / cicada / moth): every crossvein junction is obtuse within R-D's band, no crossvein is dropped more
@@ -324,17 +327,18 @@ const CHECKS = {
 // segment counts ...), held to the same rule so the insect under the wings varies as much as the wings do.
 // The body signature carries far more discrete genes (legs, abdomen, thorax) than a wing's, so it is held to a
 // stricter floor: at least 98% of a type's plates must be distinct.
+const sigStats = m => ({ n: [...m.values()].reduce((a, b) => a + b, 0), top: Math.max(...m.values()) });   // plates counted, largest repeat
 const sigReport = sigs => {   // the per-type table printed in the report (seeds, distinct, topShare)
   const report = {};
   for (const key in sigs) {
-    const m = sigs[key], n = [...m.values()].reduce((a, b) => a + b, 0), top = Math.max(...m.values());
+    const m = sigs[key], { n, top } = sigStats(m);
     report[key] = { seeds: n, distinct: m.size, topShare: Math.round(top / n * 1000) / 10 + '%' };
   }
   return report;
 };
 const sigRule = (sigs, what, distinctFloor, fail) => {
   for (const key in sigs) {
-    const m = sigs[key], n = [...m.values()].reduce((a, b) => a + b, 0), top = Math.max(...m.values());
+    const m = sigs[key], { n, top } = sigStats(m);
     if (n < 40) continue;
     if (top / n > 0.1) fail(what + ' signature repeats: one layout covers ' + Math.round(top / n * 100) + '% of ' + key + ' plates', key);
     if (m.size < n * distinctFloor) fail(what + ' signature repeats: only ' + m.size + ' distinct layouts in ' + n + ' ' + key + ' plates', key);
@@ -364,44 +368,58 @@ const POST = {
 // ---- the run: arguments, the seed loop over the selected checks, the report ----
 const NAMES = [...Object.keys(PRE), ...Object.keys(CHECKS), ...Object.keys(POST)];
 function parseArgs(argv) {
-  let n = 3000, from = 1, to = null, only = null;
+  let n = null, from = 1, to = null, only = null;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
-    if (a === '--only') only = (argv[++i] || '').split(',').map(s => s.trim()).filter(Boolean);
-    else if (a === '--seeds') { const m = /^(\d+)(?:-(\d+))?$/.exec(argv[++i] || ''); if (!m) throw new Error('--seeds wants N or N-M'); from = +m[1]; to = m[2] === undefined ? from : +m[2]; }
-    else if (/^\d+$/.test(a)) n = +a;
+    if (a === '--only') {
+      only = (argv[++i] || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!only.length) throw new Error('--only wants a comma-separated list of check names; the checks are: ' + NAMES.join(', '));
+    } else if (a === '--seeds') {
+      const m = /^(\d+)-(\d+)$/.exec(argv[++i] || '');
+      if (!m) throw new Error('--seeds wants a range A-B');
+      from = +m[1]; to = +m[2];
+    } else if (/^\d+$/.test(a)) n = +a;
     else throw new Error('unknown argument ' + a);
   }
-  if (to === null) to = n;
+  if (n !== null && to !== null) throw new Error('give N (seeds 1..N) or --seeds A-B, not both');
+  if (to === null) to = n === null ? 3000 : n;
   if (from < 1 || to < from) throw new Error('--seeds range must be ascending and start at 1 or above');
   const bad = (only || []).filter(x => !NAMES.includes(x));
   if (bad.length) throw new Error('unknown check(s) ' + bad.join(', ') + '; the checks are: ' + NAMES.join(', '));
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
+const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
 function run() {
   let args;
   try { args = parseArgs(process.argv.slice(2)); } catch (e) { console.error(e.message); process.exit(2); }
   const { from, to, only } = args, count = to - from + 1;
   const pre = selected(PRE, only), checks = selected(CHECKS, only), post = selected(POST, only);
-  for (const name of pre) PRE[name]((msg, type) => failures.push({ seed: 0, type: type || name, msg }));
+  let sampledCount = 0;
+  for (const name of pre) PRE[name](onceFail(name));
   for (let seed = from; seed <= to; seed++) {
     const { svg, meta } = E.generateInsectDetailed(seed);
     const key = meta.variant || meta.type;
     typeCount[key] = (typeCount[key] || 0) + 1;
     if (meta.wingSig) { const m = wingSigs[key] ||= new Map(); m.set(meta.wingSig, (m.get(meta.wingSig) || 0) + 1); }
     if (meta.bodySig) { const m = bodySigs[key] ||= new Map(); m.set(meta.bodySig, (m.get(meta.bodySig) || 0) + 1); }
-    elTotal += (svg.match(/<(path|line|polyline|circle)\b/g) || []).length;
+    elTotal += drawn(svg);
     const fail = msg => failures.push({ seed, type: key, msg });
+    const sampled = seed % SAMPLE === 0; if (sampled) sampledCount++;
     let devPlate = null;
-    const plate = { seed, get dev() { return devPlate ||= E.generateInsectDetailed(seed, { devicePx: DEV }); } };
-    for (const name of checks) CHECKS[name](meta, svg, fail, plate);
+    const ctx = { seed, sampled, get dev() { return devPlate ||= E.generateInsectDetailed(seed, { devicePx: DEV }); } };
+    for (const name of checks) CHECKS[name](meta, svg, fail, ctx);
   }
-  for (const name of post) POST[name]((msg, type) => failures.push({ seed: 0, type: type || name, msg }));
+  for (const name of post) POST[name](onceFail(name));
 
   console.log('seeds checked:', count, ...(from === 1 ? [] : ['(' + from + '-' + to + ')']));
   if (only) console.log('checks run:', [...pre, ...checks, ...post].join(', '));
+  // the sampled extras assert nothing on a range with no SAMPLE-th seed: report their count on any --only / --seeds
+  // run, and on every run where it is zero, so a short run cannot pass them by silence (the default report is unchanged)
+  const sampledRun = checks.filter(k => SAMPLED.includes(k));
+  if (sampledRun.length && (only || from !== 1 || !sampledCount))
+    console.log('sampled every ' + SAMPLE + 'th seed (' + sampledRun.join(', ') + '):', sampledCount, 'of', count, 'seeds' + (sampledCount ? '' : ' -- the sampled assertions did not run'));
   console.log('type distribution:', typeCount);
   console.log('wing signatures:', sigReport(wingSigs));
   console.log('body signatures:', sigReport(bodySigs));
@@ -417,5 +435,4 @@ function run() {
   console.log('OK');
 }
 
-if (require.main === module) run();
-else module.exports = { PRE, CHECKS, POST, NAMES, DEV };   // for probes that drive one check on a hand-built meta
+run();
