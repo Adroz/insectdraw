@@ -314,6 +314,8 @@ npm install && npm test                      # e-ink survival gate: every layer 
 node scripts/render-daily.js 2026-01-01      # the daily plate for a Brisbane calendar day into daily/ (insect.svg, insect.png, insect.json); no date = today
 npm run check:daily                          # runs that script for a fixed day and checks the three files, the sidecar fields and the 1-bit 440×440 raster
 node tests/pages.js                          # the three pages in headless Chromium over a local server: chrome, panes, hash and redirect, file:// still renders
+node tests/snapshot.js write before.json 3000 --engine old.html   # hash every plate (and device plates, part crops) on an engine (default: index.html) ...
+node tests/snapshot.js check before.json 3000  # ... and prove a refactored engine draws every one of them byte for byte
 node tests/sheet.js out.png 3 wasp:6         # contact sheet PNG via headless Chromium (first 6 wasp seeds, 3 columns)
 node tests/sheet.js out.png 3 1,2,3,4,5,6    # ... or explicit seeds; set CHROMIUM=/path/to/chrome if it is not found
 node tests/sheet.js out.png 4 random:12 --part wings --type wasp   # one part only, 12 random seeds all forced to wasps
