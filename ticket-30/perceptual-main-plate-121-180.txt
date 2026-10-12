@@ -1,0 +1,17 @@
+perceptual: plate, 60 plates per type from seed 121, 100 px thumbnails, blur 3, ink difference (%), floor 9.0
+type                min     p5  median  sheet9   closest pair
+beetle            12.30  19.05   31.24   17.47   156,171
+moth               9.15  16.64   28.62   14.27   147,161
+moth:moth          9.02  14.85   25.73   13.17   190,196
+moth:butterfly     9.15  16.73   26.78   15.07   147,161
+fly                7.11  17.67   28.77   15.96   150,166   below floor
+bee                9.95  15.57   25.40   14.02   165,168
+dragonfly          6.69  10.98   19.16    9.53   131,172   below floor
+grasshopper        7.51  13.85   23.39   12.30   142,165   below floor
+cranefly          11.01  16.83   27.36   14.73   130,166
+lacewing           4.73  13.95   29.38   11.97   142,143   below floor
+cicada             5.71  10.67   19.63    9.23   125,131   below floor
+wasp              11.11  20.49   30.76   18.11   121,154
+damselfly          6.13  11.16   23.58    9.15   158,161   below floor
+mayfly             7.35  12.15   21.71   10.65   141,153   below floor
+perceptual: 7 of 14 below floor 9.0: fly, dragonfly, grasshopper, lacewing, cicada, damselfly, mayfly (report only, not a gate)

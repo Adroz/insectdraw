@@ -1,0 +1,17 @@
+perceptual: plate, 60 plates per type from seed 1, 100 px thumbnails, blur 3, ink difference (%), floor 10.0 (cranefly 12.5, fly 12.5)
+type                min     p5  median  sheet9   closest pair
+beetle             8.93  17.36   28.58   15.07   15,18   below floor 10.0
+moth               9.17  17.60   30.23   15.33   10,38   below floor 10.0
+moth:moth          9.17  16.37   27.73   14.35   10,38   below floor 10.0
+moth:butterfly     8.75  17.06   29.04   14.92   47,72   below floor 10.0
+fly               10.59  16.56   30.35   14.12   7,12   below floor 12.5
+bee               10.31  15.37   24.79   13.98   26,53
+dragonfly          6.27  10.99   19.10    9.82   26,32   below floor 10.0
+grasshopper        8.24  14.13   25.75   12.11   9,17   below floor 10.0
+cranefly          11.28  17.13   28.24   15.56   4,48   below floor 12.5
+lacewing           7.77  13.82   26.38   11.95   38,44   below floor 10.0
+cicada             6.20  10.04   18.82    9.01   13,41   below floor 10.0
+wasp              12.32  20.70   31.44   17.19   3,47
+damselfly          5.28  11.08   22.50    8.71   33,54   below floor 10.0
+mayfly             7.47  13.31   25.01   11.49   37,49   below floor 10.0
+perceptual: 12 of 14 below their floor: beetle, moth, moth:moth, moth:butterfly, fly, dragonfly, grasshopper, cranefly, lacewing, cicada, damselfly, mayfly (report only, not a gate)
