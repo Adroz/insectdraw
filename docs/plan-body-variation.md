@@ -1,7 +1,9 @@
 # Plan: per-seed variation for legs, body, head, eyes and antennae
 
-Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07). Follows the wing-genes work (see README "Venation" and
-`meta.wingSig`).
+Status: two plans in one file. The first, the per-seed genes for legs, body, head, eyes and antennae, has all seven
+steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07); it follows the wing-genes work (see
+README "Venation" and `meta.wingSig`). The second, "Nine plates, nine insects (#30)" at the end, is open: the
+perceptual criterion (`tests/perceptual.js`) and eight steps, one ticket per order (#48–#55).
 
 ### Status detail
 
@@ -264,22 +266,23 @@ separate agents in worktrees if wanted; step 7 waits for all of them.
   mirror-line, abdomen and crossing checks on the rotated set. Wings, antennae and body stay exactly
   mirrored: the plate style depends on that symmetry and the venation mirror is load-bearing.
 
-# Nine plates, nine species (#30)
+# Nine plates, nine insects (#30)
 
 Status: plan, 2026-10-13, measured on main at 4a9ad53. Steps 1–8 below are filed as one implementation ticket
 per order, #48–#55 (numbers in the step headings). Nothing here changes the engine.
 
 The seven steps above made every body choice a gene and `bodySig` passes its 10% / 50% rule on every type, yet the
-2026-10-07 audit read nine plates of most orders as one to four species: moth 2/9, butterfly 1/9, lacewing 2/9,
-mayfly 3/9, cicada 2–3/9, dragonfly 3–4/9, crane fly 2–3/9 (one pose on all nine), fly 3–4/9 (the wing outline
-dominates), beetles one species redrawn within each family. Bee and wasp were the only orders reading as 5–7
-species. A signature counts discrete genes; two plates can differ in every one of them and still look alike, because
-most genes move small things (a suture, an eye style, a 4° skew) while the silhouette (wing set, abdomen shape, leg
-pose, overall proportions) stays the order's one drawing.
+2026-10-07 audit read nine plates of most orders as one to four distinct insects (GLOSSARY "Distinct insects"; the
+audit wrote "species"): moth 2/9, butterfly 1/9, lacewing 2/9, mayfly 3/9, cicada 2–3/9, dragonfly 3–4/9, crane fly
+2–3/9 (one pose on all nine), fly 3–4/9 (the wing outline dominates), beetles one insect redrawn within each family.
+Bee and wasp were the only orders reading as 5–7 distinct insects. A signature counts discrete genes; two plates can
+differ in every one of them and still look alike, because most genes move small things (a suture, an eye style, a 4°
+skew) while the silhouette (wing set, abdomen shape, leg pose, overall proportions) stays the order's one drawing.
 
 ## Perceptual criterion
 
-Decision (Nik, 2026-10-13): judge uniqueness perceptually. **The smallest difference between any two plates of a
+Proposed in #30 (PR #56, an unattended run, 2026-10-13), pending Nik's sign-off: judge uniqueness perceptually
+instead of replacing the `bodySig` rule, which stays as it is. **The smallest difference between any two plates of a
 type, rendered as 100 px thumbnails, must reach the type's floor.** Implemented as a report, `tests/perceptual.js`;
 it is not wired into `tests/check.js` and fails nothing.
 
@@ -305,7 +308,7 @@ margin between the lower of bee and wasp and the highest of the orders the audit
   the crane fly, and it is the version kept.
 
 The closest pairs it finds were checked by eye and are the right ones: cicada 13,41, dragonfly 26,32, fly 7,12,
-crane fly 4,48, lacewing 38,44, mayfly 37,49 are each one species drawn twice; beetle 15,18 is one ground beetle
+crane fly 4,48, lacewing 38,44, mayfly 37,49 are each one insect drawn twice; beetle 15,18 is one ground beetle
 with a different antenna; the bee's closest pair (26,53, two vespid-form bees) differs in legs and abdomen.
 
 **Calibration on main** (N = 60; `min` is the criterion; the 61–120 and 121–180 columns are the same measure on the
@@ -320,7 +323,7 @@ next seed blocks, to show its noise; `body` is `--view body` on seeds 1–60):
 | moth (both) | 9.17 | 10,38 | 11.27 | 9.15 | 9.20 | 15.33 | — |
 | moth variant | 9.17 | 10,38 | 10.16 | — | 9.90 | 14.35 | 2 / 9 |
 | butterfly | 8.75 | 47,72 | 7.56 | — | 8.72 | 14.92 | 1 / 9 |
-| beetle | 8.93 | 15,18 | 11.99 | 12.30 | 10.25 | 15.07 | one species per family |
+| beetle | 8.93 | 15,18 | 11.99 | 12.30 | 10.25 | 15.07 | one insect per family |
 | grasshopper | 8.24 | 9,17 | 9.54 | 7.51 | 8.06 | 12.11 | not named |
 | lacewing | 7.77 | 38,44 | 7.25 | 4.73 | 7.50 | 11.95 | 2 / 9 |
 | mayfly | 7.47 | 37,49 | 5.78 | 7.35 | 7.43 | 11.49 | 3 / 9 |
@@ -333,7 +336,7 @@ canonical block; every order the audit named fails. The crane fly and the fly ne
 plates are mostly single strokes (legs, wing margin): the measure scores their closest pairs at 11.3 and 10.6 although
 those pairs are visibly the same insect, so they are held to the wasp's level. Damselfly and grasshopper, which
 the audit did not name, fall under 10.0 too: the damselfly is the lowest type of all and joins the dragonfly in step 1;
-the grasshopper is left to its open tickets (#22, #23) and watched.
+the grasshopper is left to its open tickets (#22, #23) and tracked by #57, which re-measures it after them.
 
 **Limits, stated so nobody over-reads the number.**
 
@@ -349,6 +352,9 @@ the grasshopper is left to its open tickets (#22, #23) and watched.
 **How a ticket uses it.** Before: `node tests/perceptual.js 60 --type <type> --pairs 3` on main, and
 `--view body`; after: the same on the branch. Both runs go in the PR with the before / after sheets
 (`node tests/sheet.js out.png 3 random:9 --type <type>`) and the three closest pairs rendered side by side.
+Because the floor was fitted on seeds 1–60 and the minimum moves by about ±1 between blocks, a ticket also reports
+the second block, `--from 61`, before and after: the minimum there must rise as well and land within 1 of the floor,
+and `sheet9` must rise on both blocks. A change that clears the floor on 1–60 alone is fitted to that block.
 
 ## Plan
 
@@ -431,4 +437,4 @@ rules for all of them:
    each on ≥ 15% of 300 seeds.
 
 Not in this plan: bee and wasp (above the floor; #12 is a separate habitus fix) and the grasshopper (8.24 under
-10.0 but not named by the audit; #22 and #23 change its body anyway, re-measure after them).
+10.0 but not named by the audit; #22 and #23 change its body anyway; #57 re-measures it after them).
