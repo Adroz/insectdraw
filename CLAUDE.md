@@ -52,8 +52,9 @@ contract for changes.
   bottom of the engine intact; a new export goes into `EXPORTS` in `tests/engine.js` in the same commit.
 - `docs/` holds the morphology research the drawing rules are derived from. Add a note there
   when a new body part or venation plan is grounded in a reference.
-  `docs/plan-body-variation.md` is the open plan for giving legs, body, head and antennae the
-  same per-seed "genes" treatment the wings have.
+  `docs/plan-body-variation.md` holds the finished plan that gave legs, body, head and antennae the
+  per-seed "genes" treatment the wings have, and the open #30 plan "Nine plates, nine insects": the
+  perceptual criterion (`tests/perceptual.js`, a report) and one step per order (#48–#55).
 
 ## Hard constraints (e-ink plates)
 
@@ -158,6 +159,7 @@ npm run check:daily                      # daily plate script: files, sidecar, 1
 node tests/pages.js                      # the three pages in headless Chromium: chrome, panes, hash, redirect
 node tests/snapshot.js write|check f.json 3000 [--engine old.html]   # byte-identity fixture for engine refactors (write on the old engine, check on the new)
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
+node tests/perceptual.js 60 --type wasp       # perceptual uniqueness report (about a minute for every type): min thumbnail difference vs the order's floor; not a gate
 ```
 
 `tests/check.js` is a table of named checks: `CHECKS` run per seed as `(meta, svg, fail, ctx)` (`ctx.dev` is the

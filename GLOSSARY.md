@@ -59,6 +59,11 @@ One of the body plans a plate can draw (beetle, moth, fly ...; one `ORDERS` entr
 family (`P.fam`) is a within-order variant that biases the order's ranges.
 _Avoid_: kind, species, category
 
+**Distinct insects**:
+How many different-looking insects the plates of one order on a contact sheet read as (the 2026-10-07 audit's count,
+e.g. 2 / 9); two plates that read as one insect redrawn are what `tests/perceptual.js` finds as the closest pair.
+_Avoid_: species (the second word of a plate's binomial, never a count of drawings)
+
 **Order registry**:
 The engine's `ORDERS` table: one entry per order holding everything the drawing sections read
 about it (proportions, gene tables, wing roots, head scale, wing function, names). Adding an
