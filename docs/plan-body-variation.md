@@ -263,3 +263,172 @@ separate agents in worktrees if wanted; step 7 waits for all of them.
   plate bbox. `meta.legSkew` and `meta.legs[i].skew` / `pivot` expose it; `tests/check.js` re-runs the
   mirror-line, abdomen and crossing checks on the rotated set. Wings, antennae and body stay exactly
   mirrored: the plate style depends on that symmetry and the venation mirror is load-bearing.
+
+# Nine plates, nine species (#30)
+
+Status: plan, 2026-10-13, measured on main at 4a9ad53. Steps 1–8 below are filed as one implementation ticket
+per order, #48–#55 (numbers in the step headings). Nothing here changes the engine.
+
+The seven steps above made every body choice a gene and `bodySig` passes its 10% / 50% rule on every type, yet the
+2026-10-07 audit read nine plates of most orders as one to four species: moth 2/9, butterfly 1/9, lacewing 2/9,
+mayfly 3/9, cicada 2–3/9, dragonfly 3–4/9, crane fly 2–3/9 (one pose on all nine), fly 3–4/9 (the wing outline
+dominates), beetles one species redrawn within each family. Bee and wasp were the only orders reading as 5–7
+species. A signature counts discrete genes; two plates can differ in every one of them and still look alike, because
+most genes move small things (a suture, an eye style, a 4° skew) while the silhouette (wing set, abdomen shape, leg
+pose, overall proportions) stays the order's one drawing.
+
+## Perceptual criterion
+
+Decision (Nik, 2026-10-13): judge uniqueness perceptually. **The smallest difference between any two plates of a
+type, rendered as 100 px thumbnails, must reach the type's floor.** Implemented as a report, `tests/perceptual.js`;
+it is not wired into `tests/check.js` and fails nothing.
+
+**Measure.** Plate k of type T is `generateInsectDetailed(k, { type: T })`, k = 1..60. Each plate goes through the
+panel pipeline (`tests/raster.js` `grey`) at 100 px with the caption band cropped off (the name must not count), is
+blurred with a gaussian of sigma 3 px, and every pair is compared by its ink difference
+`Σ|inkA − inkB| / Σ(inkA + inkB)` in %, ink = 255 − grey. The report prints, per type and for the moth's two
+variants, the minimum over all pairs and its seeds (the criterion), the 5th percentile and median of all pairs, and
+`sheet9`, the median over 300 fixed 9-plate subsets of each subset's closest pair (what one `random:9` sheet shows).
+`--view body` redraws the plate's own layers minus wings, elytra and tegulae at the plate's transform, to tell a
+repeated body from a repeated wing set; `--from` takes another seed block; `--pairs k` lists the k closest pairs.
+
+**Why this measure.** Sixty combinations were tried on main (view plate / body × raw grey difference, ink-normalised
+difference, correlation, chamfer distance between line pixels × blur sigma 0–5 × min / p5 / sheet9), scoring the
+margin between the lower of bee and wasp and the highest of the orders the audit named:
+
+- the raw mean grey difference ranks plates by how much ink they carry, upside down: butterfly 3.61, lacewing 3.38,
+  moth 3.04 at the top, bee 2.32 and wasp 2.40 in the middle;
+- unblurred, every metric over-counts a thin line drifting by a pixel (crane fly legs, fly wing margins): the
+  chamfer distance puts the crane fly (0.83) level with the wasp (0.84), correlation puts crane fly (44.0) and beetle
+  (41.6) above the bee (40.8);
+- normalising by the ink and blurring at sigma 3 was the best of the sixty: every named order under the bee except
+  the crane fly, and it is the version kept.
+
+The closest pairs it finds were checked by eye and are the right ones: cicada 13,41, dragonfly 26,32, fly 7,12,
+crane fly 4,48, lacewing 38,44, mayfly 37,49 are each one species drawn twice; beetle 15,18 is one ground beetle
+with a different antenna; the bee's closest pair (26,53, two vespid-form bees) differs in legs and abdomen.
+
+**Calibration on main** (N = 60; `min` is the criterion; the 61–120 and 121–180 columns are the same measure on the
+next seed blocks, to show its noise; `body` is `--view body` on seeds 1–60):
+
+| type | min 1–60 | closest | min 61–120 | min 121–180 | body | sheet9 | audit 2026-10-07 |
+|---|---|---|---|---|---|---|---|
+| wasp | 12.32 | 3,47 | 12.11 | 11.11 | 11.47 | 17.19 | 5–7 / 9 |
+| bee | 10.31 | 26,53 | 9.58 | 9.95 | 9.98 | 13.98 | 5–7 / 9 |
+| crane fly | 11.28 | 4,48 | 9.92 | 11.01 | 12.99 | 15.56 | 2–3 / 9, one pose |
+| fly | 10.59 | 7,12 | 9.68 | 7.11 | 9.54 | 14.12 | 3–4 / 9, wings dominate |
+| moth (both) | 9.17 | 10,38 | 11.27 | 9.15 | 9.20 | 15.33 | — |
+| moth variant | 9.17 | 10,38 | 10.16 | — | 9.90 | 14.35 | 2 / 9 |
+| butterfly | 8.75 | 47,72 | 7.56 | — | 8.72 | 14.92 | 1 / 9 |
+| beetle | 8.93 | 15,18 | 11.99 | 12.30 | 10.25 | 15.07 | one species per family |
+| grasshopper | 8.24 | 9,17 | 9.54 | 7.51 | 8.06 | 12.11 | not named |
+| lacewing | 7.77 | 38,44 | 7.25 | 4.73 | 7.50 | 11.95 | 2 / 9 |
+| mayfly | 7.47 | 37,49 | 5.78 | 7.35 | 7.43 | 11.49 | 3 / 9 |
+| dragonfly | 6.27 | 26,32 | 6.67 | 6.69 | 5.36 | 9.82 | 3–4 / 9 |
+| cicada | 6.20 | 13,41 | 6.09 | 5.71 | 6.69 | 9.01 | 2–3 / 9 |
+| damselfly | 5.28 | 33,54 | 4.87 | 6.13 | 4.24 | 8.71 | not named |
+
+**Floor.** 10.0 for every type, 12.5 for the crane fly and the fly. Bee (10.31) and wasp (12.32) pass on the
+canonical block; every order the audit named fails. The crane fly and the fly need the higher floor because their
+plates are mostly single strokes (legs, wing margin): the measure scores their closest pairs at 11.3 and 10.6 although
+those pairs are visibly the same insect, so they are held to the wasp's level. Damselfly and grasshopper, which
+the audit did not name, fall under 10.0 too: the damselfly is the lowest type of all and joins the dragonfly in step 1;
+the grasshopper is left to its open tickets (#22, #23) and watched.
+
+**Limits, stated so nobody over-reads the number.**
+
+- The minimum is an extreme value: it moves by about ±1 between seed blocks (bee 10.31 / 9.58 / 9.95) and falls as
+  N grows (at N = 180 the bee's is 7.70), so runs are compared only at N = 60, seeds 1–60, and a ticket passes on that
+  block. The floor separates the tiers, it does not rank neighbours within ±1.
+- It sees ink, not anatomy: a wing set swung by 10° moves it as much as a new abdomen family. That is the point (the
+  eye sees the same), but a ticket cannot buy its way past the floor with jitter that is not anatomy; every change
+  still answers to the references, the sheet and `tests/check.js`.
+- It is not a gate. Wiring it into `tests/check.js` waits until the eight steps below have landed and the floor has
+  been re-tuned on the result.
+
+**How a ticket uses it.** Before: `node tests/perceptual.js 60 --type <type> --pairs 3` on main, and
+`--view body`; after: the same on the branch. Both runs go in the PR with the before / after sheets
+(`node tests/sheet.js out.png 3 random:9 --type <type>`) and the three closest pairs rendered side by side.
+
+## Plan
+
+Ordered by how far each order sits under its floor. Each step is one ticket and independent of the others. Shared
+rules for all of them:
+
+- New families are rolled in the order's `proportions` as `P.fam` (dragonfly, damselfly, cicada, lacewing and mayfly
+  have none today; the crane fly's is the constant `tipulid`). A new `rng()` there moves every later roll of that
+  type's seeds; say so in the commit. Family weights go in the entry, the per-family ranges in the gene tables
+  (`abd`, `thorax`, `head`, `legs`, `ant` overrides), never as `type ===` / `fam ===` literals inside a section.
+- Every new discrete choice goes on `B.sig`; the 10% / 50% `bodySig` rule and every `tests/check.js` invariant stay
+  as they are (legs off the abdomen and wings (#8), antenna clearance (#6, #7), plate scale ≥ 0.55, e-ink floors).
+- A wing *set* (the angle the wings are spread at) is a body-plan gene the wing block reads, rolled with the body;
+  the venation inside the wing does not change in these steps.
+- New anatomy is grounded first: a short note in the matching `docs/research-*.md` (or a new one) with references in
+  `docs/ref/`, the way steps 4–6 were.
+
+1. **Odonata: family habitus and wing set, #48** (dragonfly 6.27, damselfly 5.28). The sheets show one drawing: wings
+   straight out at one angle, the abdomen a uniform rod, the legs one basket. Families: dragonfly aeshnid (long
+   slender abdomen, eyes meeting broadly), libellulid (short, broad, flattened abdomen 1.8–2.5× the current width,
+   tapering from S3), gomphid (eyes apart, which `apart` already rolls; clubbed S7–S9), corduliid (waisted at S3, a
+   slight club); damselfly coenagrionid (thin rod), lestid (wings held half open, swept back 20–35°), calopterygid
+   (broad, unstalked wings, longer abdomen), platycnemidid (broad, flattened mid and hind tibiae). Genes: abdomen
+   width profile per family (rod / broad / club / waisted), wing set (forewing sweep −10…+15°, hindwing a further
+   0–12°, both on the root, nothing in the venation), bolder dorsal abdomen pattern families (paired spots, rings,
+   dark tip) as hatch bands, leg pose basket / tucked under the thorax. Grounded in `research-thorax.md` (Odonata),
+   `research-head-eyes.md` (gomphid eyes); the abdomen families need a note.
+2. **Cicada: wing set, body breadth, mesonotum pattern, #49** (6.20). Same tented spread and the same stout body on all
+   nine. Genes: wing set from spread to half-open to roofed over the abdomen (in dorsal view the tegmina cover the
+   abdomen and meet along the midline, the hindwings hidden: the resting pose of most cicada plates); forewing
+   breadth and apex (narrow and pointed / broad and round); family habitus: cicadine (broad, tymbal covers showing at
+   the abdomen base), cicadettine (slender, small, narrow head), platypleurine (pronotal collar flared into lateral
+   flanges wider than the head); mesonotum markings (the paired obconical spots and the M mark, as hatched shapes);
+   abdomen width / taper families. Grounded in `research-thorax.md` (Hemiptera) and `research-head-eyes.md`
+   (cicada); #26 fixes the forelegs and composition first or alongside.
+3. **Mayfly: family habitus, hindwing size, tails, #50** (7.47). One triangular wing set, one body, two or three tails of
+   one length. Families: ephemerid (large, three tails, dark dorsal triangles on the tergites), baetid (small, two
+   tails, a tiny or absent hindwing), heptageniid (flattened, broad head, two tails), caenid (no hindwing, broad
+   forewings, three tails). Genes: hindwing size class (large / small / absent), tail count 2 / 3 and length
+   0.8–2.5× the abdomen (the largest silhouette lever on this order), tail splay, male foreleg length and pose
+   (held forward along the antennae), abdomen width profile and tergite pattern families. #20 (the reference image
+   is a stonefly) and #21 are wing / attachment fixes that should land first or with it.
+4. **Lacewing: Neuroptera families, #51** (7.77). Four spread wings, long filiform antennae, slender abdomen on every
+   plate. Families with their own habitus: chrysopid (as now), hemerobiid (smaller, moniliform antennae, broader
+   wings), myrmeleontid (antlion: abdomen 1.3–1.6× the wing length reaching past the wings, short clubbed antennae),
+   ascalaphid (owlfly: antennae as long as the body with an abrupt club, large eyes), mantispid (raptorial forelegs
+   on a long prothorax, the `raised` pose with a folded tibia), osmylid (stippled wing spots). Genes: family, abdomen
+   length relative to the wing, pronotum length (0.1–0.6 of the thorax), antenna kind per family (the `clubbed` kind
+   exists), foreleg family. Wing-outline changes (nemopterid ribbons) are out of scope. #19 corrects the forelegs.
+5. **Lepidoptera: abdomen families, leg pose and wing set, #52** (moth 9.17, butterfly 8.75). The audit: same abdomen,
+   same hairy thorax, same raised-foreleg V, same hind-leg stubs. Genes by `P.fam`: sphingid (long fusiform abdomen
+   tapering to a point, lateral spot row), saturniid (short, stout, hairy), geometrid (slender, long), arctiid
+   (dorsal spot row, banded), noctuid (medium, dorsal crests); papilionid (long slender), lycaenid (small, short),
+   nymphalid (forelegs reduced to brushes: four walking legs showing). Leg pose families beyond the raised V (spread,
+   walking, hidden under the wings). Wing set: the forewing's hind margin square to the body (the setting-board
+   pose, as now), swept back into a delta (sphingid, noctuid at rest) or pushed forward, with the hindwing overlap
+   following. Grounded in `research-lepidoptera-wings.md` and `research-thorax.md` (Lepidoptera); #13 and #27 cover
+   the pattern bands and the head.
+6. **Beetle: within-family genes, #53** (8.93). Families differ already; inside one family it is the same beetle. Genes:
+   elytral outline (parallel, oval, rounded, tapering apex; square or rounded shoulders), elytral sculpture families
+   (striae, puncture rows, costae, smooth, tubercles; #24 does the texture rendering) and pattern families (spots,
+   bands, stripes as hatch shapes), pronotum : elytra width ratio, pronotal armature (scarab cephalic and pronotal
+   horns, longhorn lateral spines), mandible size (stag-beetle mandibles in the scarab group or a lucanid family),
+   foretibia type (fossorial toothed / slender), plus the round families the sheet never shows (coccinellid,
+   chrysomelid) as new entries in the `P.fam` pick. Grounded in `research-thorax.md` (Coleoptera) and
+   `research-head-eyes.md`; #25 and #47 cover the head, antennae and longhorn forelegs.
+7. **Fly: wing set and abdomen families, #54** (10.59 under 12.5; body view 9.54). The wing outline covers the body on
+   every plate. Genes: wing set (spread / half-folded / folded over the abdomen, scissor-wise, the resting pose that
+   shows the abdomen's sides and is how most fly plates are drawn), abdomen family by `P.fam` (syrphid flat oval with
+   bands, tachinid round with bristle rows, asilid long and tapering, tabanid broad and flat, bombyliid round and
+   hairy, conopid petiolate), abdominal macrochaetae, leg pose and length per family (asilid long raptorial legs).
+   #9 and #10 cover the wing outline and venation.
+8. **Crane fly: pose families and Tipulomorpha families, #55** (11.28 under 12.5). One leg pose on every plate, and the
+   wings always spread. Genes: leg pose families for very long legs (spread as now; trailing, hind pairs swept back
+   past the abdomen tip; forward, front pair reaching ahead past the antennae; and a pose with the mid legs out and
+   the others back, the usual pinned-specimen look), per-pair length ratios (front or hind longest), wing set
+   (spread / folded over the abdomen, the limoniid resting pose), families: tipulid (as now), limoniid (smaller,
+   shorter legs, wings folded), ctenophorine (pectinate antennae, banded wasp-like abdomen), pediciid (patterned
+   wings, which the wing block may only stipple). Acceptance adds a pose count: at least three leg-pose families
+   each on ≥ 15% of 300 seeds.
+
+Not in this plan: bee and wasp (above the floor; #12 is a separate habitus fix) and the grasshopper (8.24 under
+10.0 but not named by the audit; #22 and #23 change its body anyway, re-measure after them).

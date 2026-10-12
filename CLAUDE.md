@@ -158,6 +158,7 @@ npm run check:daily                      # daily plate script: files, sidecar, 1
 node tests/pages.js                      # the three pages in headless Chromium: chrome, panes, hash, redirect
 node tests/snapshot.js write|check f.json 3000 [--engine old.html]   # byte-identity fixture for engine refactors (write on the old engine, check on the new)
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it
+node tests/perceptual.js 60 --type wasp       # perceptual uniqueness report (about a minute for every type): min thumbnail difference vs the order's floor; not a gate
 ```
 
 `tests/check.js` is a table of named checks: `CHECKS` run per seed as `(meta, svg, fail, ctx)` (`ctx.dev` is the

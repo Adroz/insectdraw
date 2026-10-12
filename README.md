@@ -340,7 +340,7 @@ How each consumer loads it:
 | --- | --- |
 | `index.html` | the block runs inline; the page's own UI script is a second `<script>` after it |
 | `compare.html`, `parts.html`, `tests/sheet.html` | `fetch` `index.html` (`../index.html` from `tests/`), match the tag, inject the text as a script (so they need HTTP) |
-| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm`, returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
+| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `perceptual.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm`, returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
 | crowpanel-ha `services/insectdraw-render` | the Dockerfile curls `index.html` from `main` at build time and writes the script block containing `module.exports` to `insectdraw-engine.js`, which `server.js` requires |
 
 `tests/engine.js` also exports `engineContract(path)`, the list of violations (empty on a good file), and
@@ -360,6 +360,7 @@ node tests/snapshot.js check before.json 3000  # ... and prove a refactored engi
 node tests/sheet.js out.png 3 wasp:6         # contact sheet PNG via headless Chromium (first 6 wasp seeds, 3 columns)
 node tests/sheet.js out.png 3 1,2,3,4,5,6    # ... or explicit seeds; set CHROMIUM=/path/to/chrome if it is not found
 node tests/sheet.js out.png 4 random:12 --part wings --type wasp   # one part only, 12 random seeds all forced to wasps
+node tests/perceptual.js 60 [--type t] [--view body]   # report: smallest 100 px thumbnail difference between two plates of a type ("read as one species"), closest seeds; not a gate (docs/plan-body-variation.md)
 python3 -m http.server 8765                  # or open tests/sheet.html?seeds=1,2,3,4,5,6&cols=3 in a browser
 ```
 
