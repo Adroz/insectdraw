@@ -112,11 +112,17 @@ contract for changes.
   `rollAntGenes` (the entry's `ant` table, poses from `ANT_POSES`) rolls the genes, `antennaGeom` builds the
   geometry without rng, and the antennae block (after the legs and the wings) validates the pose: no point of
   the right antenna reaches the mirror line (the left is its mirror image, so that is the
-  no-crossing rule), the antenna alone does not push the plate scale under 0.6, raised forelegs are kept
-  clear, no point lies inside a wing, elytron or tegmen outline (`meta.wingOutlines`, pushed by `makeWing`
-  and the elytra; a swept pose that fails is re-rolled forward and nearly straight); re-roll,
-  then a known-good pose. `tests/check.js` asserts it on `meta.antennae.pts`. Curvature is signed
-  outward-positive; keep inward curvature tiny or the long kinds will cross.
+  no-crossing rule), the antenna alone does not push the plate scale under 0.6, no centre-line of the
+  antenna (`meta.antennae.lines`: shaft, club, rami, lamellae, arista) comes within 3 px + both half widths of a
+  leg segment ahead of the thorax in any leg pose (#7: every leg from the femur on, right side and the skewed
+  left set, each segment's half width on `meta.legs[i].segHw`; beside the body the antenna lies over the legs),
+  no point lies inside a wing, elytron or tegmen outline (`meta.wingOutlines`, pushed by `makeWing`
+  and the elytra). A leg or wing hit is sticky: every later attempt is forward and nearly straight (a swept pose
+  can only lie across them) and walks toward straight ahead, shortening a plume that has no clear pose at full
+  length; re-roll, then a known-good pose shortened until it clears. `tests/check.js` asserts it on
+  `meta.antennae.pts` and `.lines`. The legs block holds up its end: `legsOk` keeps every leg ahead of the head
+  off the antenna socket by that clearance (`socket`), so a foreleg can never stand where no antenna fits.
+  Curvature is signed outward-positive; keep inward curvature tiny or the long kinds will cross.
 - Legs and wings attach through `thorax.yAt(t)` / `thorax.hwAt(y)`, so the thorax profile
   (`B.thorax.anchors` → `P.thoraxAnchors`) must keep `bodyPart`'s interface and stay wide where
   they land. A wing block roots its wings at its order's `wingRoots` (`C.order.wingRoots`, forewing

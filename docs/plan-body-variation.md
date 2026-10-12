@@ -80,10 +80,11 @@ Status: all seven steps implemented (steps 1–6 on 2026-10-02, step 7 mirror sk
   (`ANT_POSES`: v, wide, costal, face, arc, swept) and validated in the antennae block, which now
   runs after the legs: no point of the right antenna at x < max(0.5, 0.6 × shaft width) (the left is
   the mirror image, so that is the no-crossing rule), the antenna alone must not push the plate
-  scale under 0.6, and where the legs are raised ahead of the head the antenna keeps clear of them;
-  re-roll up to 24 times, then a known-good forward pose. `meta.antennae` exposes the geometry and
-  `tests/check.js` asserts it; the discrete genes are on `B.sig`. Over 3000 seeds the fallback fires
-  on about 1% of damselflies (basket legs around a bristle antenna) and nowhere else.
+  scale under 0.6, and wherever the legs reach ahead of the thorax, in any pose, the antenna keeps
+  clear of them (#7; beside the body it lies over them); re-roll up to 24 times, then a known-good
+  forward pose. `meta.antennae` exposes the geometry and `tests/check.js` asserts it; the discrete
+  genes are on `B.sig`. Over 300 seeds per type the fallback fires on under 1% of moths and
+  damselflies and nowhere else (`docs/research-antennae.md` R-D).
   Deviations from the text above: lengths are per kind and reference (0.1 hw for a cicada bristle,
   1.6 body lengths for a longhorn), not "0.4–2.5× head width"; inward curvature is limited to −5°
   on the costal pose because anything larger crosses the midline on a long antenna; droop is 0–15°
