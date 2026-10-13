@@ -60,6 +60,23 @@ const LEP_MIN = 40;  // lepidopteran plates a run needs before a variant with no
 // (ORDERS[type].laneFloor === false opts one out: the moth's wings are #67's, lepInk; the beetle has no lanes).
 const LANE_FLOOR = 1.8, LANE_JOIN = 6, LANE_TOUCH = 0.3, LANE_STEP = 0.5;
 const laneRun = {};   // type -> { n, worst, seed } over the run: the closest non-junction approach, for the report
+// #15: the marks inside an abdominal segment (the segment line and its doubled membrane line, the plain curves, the banded
+// / tip-dark hatch, the side ticks or pile) keep ABD_PITCH plate px apart at plate scale, so a narrow plate's segments do
+// not read as dark bars and two families never interleave at the rim (the damselfly's S1-S4).
+// meta.abdMarks.segs lists each segment's drawn transverse marks (body units: y at the rim, and the bezier midpoint's y on
+// the midline for the bowed lines; a tick is compared at the rim only, at its outer end's y); every neighbouring pair but a
+// segment line and the membrane line doubling it is held to the floor at both, and the spot and stripe hatch pitches in
+// .pitches are too. Not covered: a spot's hatch lines against its own rim, and the tip segment against the outline's tip
+// (it has no segment line at its end). The number is stated here, not read from the engine.
+const ABD_PITCH = 3;
+const abdRun = {};    // type -> { n, worst, seed, at } over the run: the closest pair of abdominal marks, for the report
+// #15: on a beetle the elytral striae converge toward the apex (and fan out of a narrow base), and half the beetles carry
+// a puncture row between each pair. meta.elytra holds the drawn striae (polylines, body units), the punctures' centres
+// and the elytron's outline (closed along the suture); this check measures them itself, point to segment: no stria point
+// within ELY_PITCH plate px of another stria or the outline, and no puncture within it of a stria, the outline or another
+// puncture. The number is stated here, not read from the engine.
+const ELY_PITCH = 3;
+const elyRun = { n: 0, worst: Infinity, seed: 0, at: '' };   // over the run: the closest elytral pair, for the report
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -487,6 +504,56 @@ const CHECKS = {
       });
     }
   },
+  // #15: abdominal marks ABD_PITCH px apart at plate scale (meta.abdMarks), on the default plate and on the device plate
+  abdPitch(meta, svg, fail, { seed, dev }) {
+    const o = abdRun[meta.type] ||= { n: 0, worst: Infinity, seed: 0, at: '' };
+    o.n++;
+    for (const [m, what] of [[meta, ''], [dev.meta, 'device plate: ']]) {
+      const A = m.abdMarks;
+      if (!A || !Array.isArray(A.segs) || !Array.isArray(A.pitches)) { fail(what + 'no abdominal marks on meta.abdMarks'); continue; }
+      let worst = Infinity, at = '';
+      A.segs.forEach((seg, i) => {
+        const ms = seg.slice().sort((a, b) => a.y - b.y);
+        for (let j = 1; j < ms.length; j++) {
+          const a = ms[j - 1], b = ms[j];
+          if (a.k === 'edge' && b.k === 'membrane') continue;   // a segment line and the membrane line doubling it are one joint
+          let d = (b.y - a.y) * m.scale;
+          if (a.mid !== null && b.mid !== null) d = Math.min(d, (b.mid - a.mid) * m.scale);
+          if (d < worst) { worst = d; at = 'segment ' + i + ' ' + a.k + '/' + b.k; }
+        }
+      });
+      for (const [site, v] of A.pitches) if (v * m.scale < worst) { worst = v * m.scale; at = site; }
+      if (!what && worst < o.worst) { o.worst = worst; o.seed = seed; o.at = at; }
+      if (worst < ABD_PITCH - 1e-6) fail(what + 'abdominal marks closer than ' + ABD_PITCH + ' px: ' + worst.toFixed(2) + ' px (' + at + ')');
+    }
+  },
+  // #15: elytral striae and punctures ELY_PITCH px apart at plate scale (meta.elytra), on the default plate and on the device plate
+  elytraPitch(meta, svg, fail, { seed, dev }) {
+    if (meta.type !== 'beetle') return;
+    elyRun.n++;
+    const ptSeg = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0; return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
+    const toPl = (p, pl) => { let d = Infinity; for (let i = 0; i + 1 < pl.length; i++) d = Math.min(d, ptSeg(p, pl[i], pl[i + 1])); return d; };
+    for (const [m, what] of [[meta, ''], [dev.meta, 'device plate: ']]) {
+      const Y = m.elytra;
+      if (!Y || !Array.isArray(Y.striae) || !Array.isArray(Y.dots) || !Array.isArray(Y.outline)) { fail(what + 'no elytral marks on meta.elytra'); continue; }
+      if (!Y.striae.length) fail(what + 'the elytron draws no striae');
+      let worst = Infinity, at = '';
+      const near = (d, where) => { if (d * m.scale < worst) { worst = d * m.scale; at = where; } };
+      Y.striae.forEach((pl, k) => {
+        for (const p of pl) {
+          near(toPl(p, Y.outline), 'stria ' + k + ' / outline');
+          Y.striae.forEach((ql, j) => { if (j > k) near(toPl(p, ql), 'stria ' + k + ' / stria ' + j); });
+        }
+      });
+      Y.dots.forEach((c, i) => {
+        near(toPl(c, Y.outline), 'puncture / outline');
+        Y.striae.forEach((pl, k) => near(toPl(c, pl), 'puncture / stria ' + k));
+        for (let j = i + 1; j < Y.dots.length; j++) near(Math.hypot(c[0] - Y.dots[j][0], c[1] - Y.dots[j][1]), 'puncture / puncture');
+      });
+      if (!what && worst < elyRun.worst) { elyRun.worst = worst; elyRun.seed = seed; elyRun.at = at; }
+      if (worst < ELY_PITCH - 1e-6) fail(what + 'elytral marks closer than ' + ELY_PITCH + ' px: ' + worst.toFixed(2) + ' px (' + at + ')');
+    }
+  },
   // #13: no lepidopteran wing window reaches LEP_INK_MAX ink at 600 px with the tone layers putting LEP_TONE_SHARE or more
   // of it there (darks keep their tone by hatch pitch, not by stacking a second full family; the hatch keeps off the line
   // art and the other wing; the fringe keeps off the other wing, the costa and the tail). Every lep plate is rasterised
@@ -571,6 +638,14 @@ const POST = {
     console.log('lep wing ink (largest tone share of a solid ' + LEP_WIN + 'x' + LEP_WIN + ' window, max ' + LEP_TONE_SHARE + '; plates solid from line art alone):',
       ['moth', 'butterfly'].map(v => lepInk[v] ? v + ' ' + lepInk[v].share.toFixed(3) + ' (seed ' + lepInk[v].seed + ', n ' + lepInk[v].n + ', line art ' + lepInk[v].art + ')' : v + ' none').join('; ') +
       (missing.length && total < LEP_MIN ? '; too few lepidopteran plates (' + total + ' < ' + LEP_MIN + ') to require ' + missing.join(', ') : ''));
+  },
+  // the report for CHECKS.abdPitch: plates per type and the closest pair of abdominal marks seen
+  abdPitch() {
+    console.log('abdomen pitch (closest pair of abdominal marks, px; floor ' + ABD_PITCH + '):', Object.keys(abdRun).map(t => t + ' ' + (abdRun[t].worst === Infinity ? 'none' : abdRun[t].worst.toFixed(2) + ' (seed ' + abdRun[t].seed + ', ' + abdRun[t].at + ')') + ' n ' + abdRun[t].n).join('; '));
+  },
+  // the report for CHECKS.elytraPitch: beetle plates and the closest elytral pair seen
+  elytraPitch() {
+    console.log('elytral pitch (closest pair of striae / punctures / outline, px; floor ' + ELY_PITCH + '):', elyRun.worst === Infinity ? 'none' : elyRun.worst.toFixed(2) + ' (seed ' + elyRun.seed + ', ' + elyRun.at + ')', 'n ' + elyRun.n);
   },
   // the report for CHECKS.laneSep: plates per type and the closest non-junction approach seen
   laneSep() {
