@@ -3458,7 +3458,7 @@ function wingsLepidoptera(C) {   // (type === 'moth')
   const nearHind = lepNear([hind.localPoly], LEP_CLEAR, true), overHind = q => hind.inside(q) || nearHind(q);   // hindwing local
   function drawLepWing(wing, S, veins, o, hindW) {
     const toneAt = lepTone(S, o.ground, o.elems, o.spots), mask = hindW ? fore.localPoly.map(p => hind.inv(fore.T(p))) : null;   // forewing outline in hindwing-local coordinates
-    // the wings as the density gate in tests/check.js measures them (#13): meta.lepInk, every element in draw order, and
+    // the wings as the 1-bit ink gate (lepInk) in tests/check.js measures them (#13): meta.lepInk, every element in draw order, and
     // meta.lepArt, the line art alone (outline, costa, veins, band edges, cross-lines, spot rings), without the tone
     // layers (hatch, stipple, fringe)
     const ink = meta.lepInk ||= [], lineArt = meta.lepArt ||= [];
@@ -4367,7 +4367,7 @@ function assemblePlate(C) {
   const tokens = t => t.replace(/SW_H/g, sw(meta.weights.H)).replace(/SW_O/g, sw(meta.weights.O)).replace(/SW_D/g, sw(meta.weights.D)).replace(/SW_F/g, sw(meta.weights.F));
   const svg = tokens(head + order.join('') + '</g>' + caption + '</svg>');
   // a lepidopteran plate's wings alone (meta.lepInk) and their line art alone (meta.lepArt), placed, weighted and
-  // mirrored exactly as on the plate, for the density gate in tests/check.js (#13)
+  // mirrored exactly as on the plate, for the 1-bit ink gate (lepInk) in tests/check.js (#13)
   if (meta.lepInk) { meta.lepInkSvg = tokens(head + mirrorEls(meta.lepInk) + '</g></svg>'); meta.lepArtSvg = tokens(head + mirrorEls(meta.lepArt) + '</g></svg>'); }
   return { svg, meta };
 }
