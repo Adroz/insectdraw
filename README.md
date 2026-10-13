@@ -145,8 +145,8 @@ shaded or stippled), tapering into Sc+R and R1. Vein weight follows anatomy
 carry a marginal fringe.
 
 Every winged body plan rolls a set of **wing genes** per seed before drawing.
-First a **family** with its own topology (hymenoptera: apid, vespid,
-ichneumonid, sawfly, chalcid; diptera: muscid, nematoceran, syrphid, tabanid,
+First a **family** with its own topology (hymenoptera: apid under type bee;
+vespid, ichneumonid, sawfly, chalcid under type wasp; diptera: muscid, nematoceran, syrphid, tabanid,
 asilid, tipulid; lepidoptera: nymphalid, satyrine, pierid, lycaenid,
 papilionid, noctuid, geometrid, arctiid, saturniid, sphingid), then
 **posture** (wing angle, fore/hind spread, span), the **outline** (apex
@@ -240,7 +240,9 @@ The insect under the wings rolls a set of **body genes** per seed too
 (`rollBodyGenes`, right after the proportions). The family is shared with the
 wings where the order has one (an ichneumonid gets long slender legs and a long
 sheathed ovipositor with its ichneumonid wing; a chalcid short legs with swollen
-hind femora; an apid hairy legs and a corbicula), and beetles and grasshoppers
+hind femora; a bee (apid, #12) a stout habitus: head nearly as wide as the
+thorax, the abdomen broader than it, no leg longer than the abdomen and the hind
+tibia a broad fringed corbicula), and beetles and grasshoppers
 roll body families of their own (ground / rove / scarab / longhorn / weevil;
 acridid / tettigoniid / tetrigid). **Legs**: a pose family rolled once per
 insect (spread, walking, tucked, raised mantid-like forelegs, the odonate prey

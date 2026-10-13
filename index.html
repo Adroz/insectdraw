@@ -370,7 +370,8 @@ function tarsusEls(p, dir0, total, w0, n, curl, opts) {
 
 // ---------- eyes: compound eye outline with the ommatidia shown as a lattice, a stipple or a plain highlight ----------
 // opts: { rot, dent: [angleDeg, depth, width], highlight: [dx, dy] (fractions of rx/ry, eye-local before rot), highlightR,
-//         pitch (body px; the caller applies the e-ink floor), style: 'lattice' | 'stipple' | 'plain' }
+//         pitch (body px; the caller applies the e-ink floor), style: 'lattice' | 'stipple' | 'plain', full: the lattice over the
+//         highlight too (bee, #12), out: an object that receives the lattice's { cells, pitch } }
 // Engraving convention (docs/research-head-eyes.md): facets are never to scale, the honeycomb or the dot field only says
 // "compound eye"; the highlight is left unworked toward the upper left on both eyes (the plate is lit from the upper left).
 function eyeEls(c, rx, ry, opts) {
@@ -405,24 +406,25 @@ function eyeEls(c, rx, ry, opts) {
   }
   const pitch = floorPitch(opts.pitch || Math.max(1.9, Math.min(3.2, (rx + ry) / 7.5)));
   const R = pitch / Math.sqrt(3) * 0.82;   // hex circumradius, shrunk so the cells separate
-  const inset = Math.min(0.88, 1 - pitch * 0.55 / Math.min(rx, ry));
+  const inset = Math.min(opts.full ? 0.94 : 0.88, 1 - pitch * 0.55 / Math.min(rx, ry));   // a full lattice runs out to the rim
   const hex = [];
   for (let k = 0; k < 6; k++) hex.push([R * Math.cos((k * 60 + 30) * D2R), R * Math.sin((k * 60 + 30) * D2R)]);
   const rowH = pitch * 0.866;
-  let row = 0;
+  let row = 0, cells = 0;
   for (let y = -ry; y <= ry; y += rowH, row++) {
     let col = 0;
     for (let x = -rx + (row % 2) * pitch / 2; x <= rx; x += pitch, col++) {
       const q = [x, y];
       if (!pointInPoly([x / inset, y / inset], poly)) continue;
       const hx = (x - hl[0] * rx) / (hlR * rx), hy = (y - hl[1] * ry) / (hlR * ry), d2 = hx * hx + hy * hy;
-      if (d2 < 1) continue;
+      if (d2 < 1 && !(opts.full && style === 'lattice')) continue;   // a full lattice (bee, #12) works the whole eye, highlight included
       if (style === 'stipple') {   // dots, thinned to every other site in a ring around the highlight so the tone grades
         if (d2 < 2.4 && (row + col) % 2) continue;
         const p = T(q); els.push(lineEl(p, [p[0] + 0.01, p[1]], SW.D));
-      } else els.push(polygonEl(hex.map(h => T(add(q, h))), SW.F));
+      } else { els.push(polygonEl(hex.map(h => T(add(q, h))), SW.F)); cells++; }
     }
   }
+  if (opts.out) Object.assign(opts.out, { cells, pitch });   // the lattice's cell count and pitch, for meta.head.eyes (#12)
   return els;
 }
 
@@ -524,7 +526,7 @@ function rollAntGenes(type, P) {
   const long = F.rami !== 'short';   // rami: count, longest ramus / length, where the longest sits, sweep toward the tip
   A.rami = { n: randInt(long ? 26 : 20, long ? 44 : 34), maxK: long ? randRange(0.2, 0.3) : randRange(0.08, 0.14), peak: randRange(0.3, 0.5), sweep: randRange(0.25, 0.6) };
   A.lamellae = { n: randInt(3, 7), spread: rng() < 0.7 ? randRange(14, 40) : randRange(3, 8), clubK: randRange(0.3, 0.45) };
-  A.scapeK = randRange(0.28, 0.42); A.elbow = randRange(45, 80);
+  A.scapeK = rr(F.scape || [0.28, 0.42]); A.elbow = randRange(45, 80);
   A.arista = F.arista ? (F.aristas ? weightedPick(F.aristas) : F.arista) : 'bare'; A.aristaK = randRange(1.0, 1.6);
   A.annuli = F.annuli ? randInt(F.annuli[0], F.annuli[1]) : 0; A.styleK = randRange(0.3, 0.6);
   A.whorls = !!F.whorls; A.taper = randRange(0.4, 0.6);
@@ -2142,22 +2144,24 @@ const ORDERS = {
     },
   },
   bee: {
+    // #12 habitus (Apis / Bombus): a stout body, head nearly as wide as the thorax, the abdomen broader than the thorax and
+    // sessile-looking (the petiole hidden under its base), short legs (legCap: no leg longer than the abdomen) with the
+    // hind tibia a broad fringed corbicula. Only the bee family rolls (apid); sawfly and vespid draw under type wasp.
     proportions: P => {
-      Object.assign(P, { headW: 42 * jitter(0.12), headH: 34 * jitter(0.12), thoraxW: 60 * jitter(0.12), thoraxLen: 64 * jitter(0.12),
-        abdW: 58 * jitter(0.12), abdLen: 150 * jitter(0.15), legScale: 1.0 * jitter(0.1), abdOverlap: 1,
+      const thoraxW = 60 * jitter(0.1);
+      Object.assign(P, { headW: thoraxW * randRange(0.85, 0.97), headH: 34 * jitter(0.12), thoraxW, thoraxLen: 64 * jitter(0.12),
+        abdW: thoraxW * randRange(1.15, 1.35), abdLen: 105 * jitter(0.12), legScale: 0.54 * jitter(0.08), abdOverlap: 1,
         thoraxAnchors: [[0, 0.55], [0.35, 1], [0.8, 0.9], [1, 0.5]],
-        abdAnchors: [[0, 0.22], [0.1, 0.35], [0.3, 0.95], [0.55, 1], [0.8, 0.7], [0.95, 0.3], [1, 0]],
+        abdAnchors: [[0, 0.35], [0.1, 0.55], [0.3, 0.92], [0.45, 1], [0.7, 0.85], [0.9, 0.45], [1, 0]],
         antenna: 'geniculate', antLen: 58 * jitter(0.15) });
-      P.fam = pick(['apid', 'apid', 'apid', 'sawfly', 'vespid']);
+      P.fam = 'apid';
     },
-    abd: { tips: { pointed: 3, rounded: 2 }, marks: { banded: 5, plain: 1, tipdark: 1, hairy: 1 }, peak: [0.4, 0.62], wK: [0.85, 1.2], start: [0.15, 0.3], seg: [5, 7], ticks: 0.2, petiole: 1 },
-    thorax: { front: [0.85, 1.15], peak: [0.3, 0.45], hump: [0.02, 0.12], waist: [0.04, 0.12], lenK: [0.9, 1.2] },
-    head: { outline: 'round', ratio: [1.1, 1.35], flat: 0.5, cx: [0.32, 0.36], rx: [0.12, 0.16], ry: [0.36, 0.44], cy: [-0.05, 0.02], tilt: [-8, 8], dent: [0.15, 0.3], ocelli: 3, oc: 'triangle', ocY: [0.3, 0.5], ocR: [1.2, 1.8], clypeus: 0.9, mandTips: 0.6, styles: { lattice: 3, stipple: 2 }, hair: 0.5, hatch: 0.3 },
-    headFams: { sawfly: { ratio: [1.15, 1.4], cx: [0.31, 0.34], rx: [0.14, 0.17], dent: [0, 0.1], mandTips: 0.3 } },
+    abd: { tips: { rounded: 3, pointed: 2 }, marks: { banded: 5, plain: 1, tipdark: 1, hairy: 1 }, peak: [0.35, 0.55], wK: [1.0, 1.12], start: [0.12, 0.25], seg: [5, 6], ticks: 0.2, petiole: 0 },
+    thorax: { front: [0.65, 0.85], peak: [0.3, 0.45], hump: [0.02, 0.12], waist: [0.04, 0.12], lenK: [0.9, 1.1] },
+    head: { outline: 'round', ratio: [1.1, 1.35], flat: 0.5, cx: [0.32, 0.36], rx: [0.12, 0.16], ry: [0.36, 0.44], cy: [-0.05, 0.02], tilt: [-8, 8], dent: [0.15, 0.3], ocelli: 3, oc: 'triangle', ocY: [0.3, 0.45], ocDy: [0.1, 0.15], ocLine: 0, ocR: [1.2, 1.8], clypeus: 0.9, mandTips: 0.6, styles: { lattice: 3, stipple: 2 }, latticeFull: true, hair: 0.5, hatch: 0.3 },
     legs: { base: { spurs: [1, 1], fringe: 0.5, swell: [1.05, 1.35], poses: { spread: 3, walking: 2, tucked: 1.5 } },
-      apid: { wk: [1.0, 1.2], fringe: 0.9, hindK: [1.25, 1.45] }, sawfly: { lenK: [0.85, 1.0], wk: [1.0, 1.15], fringe: 0.2, spines: 0.2 }, vespid: { spines: 0.7, spineLen: [0.35, 0.55], fringe: 0.1 } },
-    ant: { base: { ref: 'hw', len: [1.2, 1.6], seg: [12, 13], socket: [0.16, 0.3], kinds: { geniculate: 1 } },
-      sawfly: { kinds: { filiform: 3, clubbed: 1, serrate: 1 }, club: 'abrupt', len: [1.2, 1.8], seg: [7, 12] } },
+      apid: { wk: [1.0, 1.2], fringe: 0.9, hindK: [1.15, 1.3], corbicula: 1, legCap: 0.95 } },
+    ant: { base: { ref: 'hw', len: [1.2, 1.6], seg: [12, 13], socket: [0.16, 0.3], kinds: { geniculate: 1 }, scape: [0.3, 0.36] } },
     headScaleP5: 0.85,
     wingRoots: [0.4, 0.62],
     wingRootX: 0.72,
@@ -2298,7 +2302,7 @@ const ORDERS = {
         thoraxAnchors: [[0, 0.55], [0.35, 1], [0.8, 0.9], [1, 0.45]],
         abdAnchors: [[0, 0.12], [0.22, 0.14], [0.4, 0.75], [0.6, 1], [0.82, 0.7], [0.95, 0.3], [1, 0]],
         antenna: 'geniculate', antLen: 80 * jitter(0.15) });
-      P.fam = pick(['vespid', 'vespid', 'ichneumonid', 'ichneumonid', 'sawfly', 'apid', 'chalcid']);
+      P.fam = pick(['vespid', 'vespid', 'ichneumonid', 'ichneumonid', 'sawfly', 'vespid', 'chalcid']);   // no apid: bees draw under type bee (#12)
     },
     abd: { tips: { pointed: 4, rounded: 1 }, marks: { banded: 3, plain: 2, tipdark: 1, spotted: 1 }, peak: [0.45, 0.65], wK: [0.8, 1.2], start: [0.2, 0.35], seg: [5, 7], ticks: 0.4, petiole: 1 },
     thorax: { front: [0.85, 1.15], peak: [0.3, 0.45], hump: [0.02, 0.12], waist: [0.04, 0.12], lenK: [0.9, 1.2] },
@@ -2306,7 +2310,7 @@ const ORDERS = {
     headFams: { sawfly: { ratio: [1.15, 1.4], cx: [0.31, 0.34], rx: [0.14, 0.17], dent: [0, 0.1] }, ichneumonid: { ratio: [1.2, 1.45] }, chalcid: { ratio: [1.3, 1.5], cx: [0.31, 0.35], rx: [0.13, 0.16] } },
     legs: { base: { spines: 0.7, spineLen: [0.35, 0.6], spineSp: [6, 9], poses: { spread: 3, walking: 2, tucked: 1, raised: 0.6 } },
       vespid: { lenK: [1.0, 1.2] }, ichneumonid: { lenK: [1.25, 1.5], wk: [0.75, 0.9], tibR: [1.0, 1.15], tarR: [0.55, 0.7], spines: 0.2 }, sawfly: { lenK: [0.85, 1.0], wk: [1.0, 1.15], spines: 0.3 },
-      apid: { fringe: 0.6, spines: 0.3 }, chalcid: { lenK: [0.8, 0.95], swell: [1.4, 1.7], spurs: [1, 1], spines: 0.1 } },
+      chalcid: { lenK: [0.8, 0.95], swell: [1.4, 1.7], spurs: [1, 1], spines: 0.1 } },
     ant: { base: { ref: 'hw', len: [1.2, 1.6], seg: [12, 13], socket: [0.16, 0.3], kinds: { geniculate: 1 } },
       ichneumonid: { kinds: { filiform: 1 }, ref: 'bl', len: [0.5, 0.9], seg: [16, 40] },
       sawfly: { kinds: { filiform: 3, serrate: 1, pectinate: 1 }, rami: 'short', len: [1.2, 1.8], seg: [7, 12] },
@@ -2558,7 +2562,7 @@ function rollBodyGenes(type, P) {
       G.eye = { cx, rx, ry: rr(ER.ry), cy: rr(HF.cy), tilt: HF.tilt ? rr(HF.tilt) : 0,
         dent: HF.dent && HF.dent[1] > 0 ? [HF.dentAt || 180, rr(HF.dent), randRange(0.7, 0.95)] : null,
         hl: [(HF.hl ? HF.hl[0] : -0.42) + randRange(-0.08, 0.08), (HF.hl ? HF.hl[1] : -0.42) + randRange(-0.08, 0.08)], hlR: HF.hlR ? rr(HF.hlR) : randRange(0.3, 0.42),
-        style: w01(HF.styles), pitch: randRange(1.8, 3.0) };
+        style: w01(HF.styles), pitch: randRange(1.8, 3.0), full: !!HF.latticeFull };
       G.turbinate = HF.turbinate && rng() < HF.turbinate;                          // male mayfly: a second pair of dorsal lobes
       if (G.turbinate) { G.eye.cx = randRange(0.36, 0.4); G.eye.rx = randRange(0.1, 0.12); G.eye.ry = randRange(0.3, 0.36); G.turban = { cx: randRange(0.16, 0.19), rx: randRange(0.16, 0.19), ry: randRange(0.34, 0.4), cy: randRange(-0.1, -0.02) }; G.turban.cx = G.turban.rx; }
     }
@@ -2575,7 +2579,7 @@ function rollBodyGenes(type, P) {
         else {
           const y0 = HF.ocY ? rr(HF.ocY) : G.holoptic ? randRange(0.76, 0.82) : randRange(0.55, 0.66);
           const dx = HF.ocDx ? rr(HF.ocDx) : G.holoptic ? randRange(0.04, 0.06) : randRange(0.07, 0.1), dy = HF.ocDy ? rr(HF.ocDy) : randRange(0.06, 0.12);
-          const line = rng() < 0.2;
+          const line = rng() < (HF.ocLine !== undefined ? HF.ocLine : 0.2);   // a straight row; bees always a triangle (#12)
           pos.push([0, y0], [dx, line ? y0 : y0 + dy], line ? 'line' : null);
         }
         if (n === 2) pos[0] = null;
@@ -2623,7 +2627,7 @@ function rollBodyGenes(type, P) {
   const midFem = (isOdo ? 42 : 48) * u * lenK;
   const tRanges = isOdo ? [[0.08, 0.2], [0.27, 0.37], [0.44, 0.54]] : [[0.12, 0.32], [0.42, 0.62], [0.72, 0.92]];   // odonate legs cluster forward on the thorax
   const pairWk = [[0.85, 1.0], [0.9, 1.05], [1.0, 1.2]];
-  const saltatorial = type === 'grasshopper', corbicula = type === 'bee' && fam === 'apid' && rng() < 0.85;
+  const saltatorial = type === 'grasshopper', corbicula = !!F.corbicula && rng() < F.corbicula;
   for (let i = 0; i < 3; i++) {
     const femK = i === 0 ? rr(F.frontK) : i === 2 ? rr(F.hindK) : 1;
     const fem = midFem * femK * jitter(0.05);
@@ -2650,14 +2654,22 @@ function rollBodyGenes(type, P) {
       g.ang = B.pose === 'tucked' ? { F: [40, 62], fold: [24, 40], T: [5, 18] } : { F: [40, 65], fold: [30, 52], T: [5, 20] };
     }
     if (saltatorial && i === 1 && B.pose === 'tucked') g.ang = { F: [-20, 5], tib: [35, 70], T: [10, 25] };   // the mid leg keeps clear of the big hind femur
-    if (corbicula && i === 2) { g.corbicula = true; g.basitarsus = true; g.spurs = 0; g.ang = { F: [40, 62], tib: [85, 112], T: [8, 22] }; }   // corbicula + flat basitarsus, swung outward
+    if (corbicula && i === 2) { g.corbicula = true; g.basitarsus = true; g.spurs = 0; g.ang = { F: [45, 65], tib: [70, 92], T: [4, 16] }; g.safe = [28, 38, 62, 74]; }   // corbicula + flat basitarsus, swung out clear of the broad abdomen (#12)
     if (type === 'mayfly' && i === 0 && B.pose === 'raised') g.ang = { F: [-88, -68], tib: [-100, -70], T: [-10, 10] };   // forelegs held straight out ahead
     if (type === 'cicada' && i === 0 && rng() < 0.9) { g.femurTeeth = randInt(2, 3); g.femW = randRange(8.5, 10.5); }   // fore femora armed beneath with strong teeth
     if (type === 'cranefly') g.shade = false;
     if (type === 'fly') g.pulvilli = g.pads;
     B.legs[i] = g;
   }
+  // legCap (bee, #12): no leg (femur + tibia + tarsus) longer than this fraction of the abdomen; a long roll is scaled
+  // down whole, so the segment ratios survive. No rng: the cap is a bound on the rolled lengths, recorded on the sig.
+  B.legCapped = false;
+  if (F.legCap) {
+    const longest = Math.max(...B.legs.map(g => g.lens[1] + g.lens[2] + g.lens[3] * (g.basitarsus ? 1.02 : 1))), cap = F.legCap * P.abdLen;
+    if (longest > cap) { B.legCapped = true; for (const g of B.legs) for (let k = 1; k < 4; k++) g.lens[k] *= cap / longest; }
+  }
   B.sig.push(B.pose, fam || type, tarsomeres, Math.round(lenK * 5), B.thorax.subSeg, B.abd.seg, B.abd.ovipositor ? 1 : 0,
+    ...(F.legCap ? ['p' + Math.round(P.headW / P.thoraxW * 10) + Math.round(P.abdW / P.thoraxW * 10) + (B.legs[2].corbicula ? 'c' : '') + (B.legCapped ? 'k' : '')] : []),   // #12 (bee): head and abdomen to thorax width, corbicula, leg cap
     ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4), Math.round(g.skew)].join('')));
   return B;
 }
@@ -3141,8 +3153,9 @@ function drawHead(C) {
       for (const s of [-1, 1]) {
         const c = [s * W * E.cx, headCy + H * E.cy], rx = W * E.rx, ry = H * E.ry, rot = s * (E.tilt || 0);
         const dent = E.dent ? [s > 0 ? E.dent[0] : 180 - E.dent[0], E.dent[1], E.dent[2]] : null;   // the notch faces the antennal socket on both sides
-        HE.push(...eyeEls(c, rx, ry, { rot, dent, highlight: G.eye.hl, highlightR: G.eye.hlR, pitch, style: G.eye.style }));
-        eyes.push({ cx: c[0], cy: c[1], rx, ry, rot });
+        const out = {};
+        HE.push(...eyeEls(c, rx, ry, { rot, dent, highlight: G.eye.hl, highlightR: G.eye.hlR, pitch, style: G.eye.style, full: G.eye.full, out }));
+        eyes.push({ cx: c[0], cy: c[1], rx, ry, rot, cells: out.cells, pitch: out.pitch });
       }
     };
     drawEyes(G.eye);
@@ -3273,7 +3286,7 @@ function drawLegs(C) {
       pose = attempt < 16 ? B.pose : attempt < 32 ? (isOdo ? 'basket' : 'spread') : 'safe';
       specs = []; joints = [];
       for (let i = 0; i < 3; i++) {
-        specs[i] = makeSpec(i, pose === 'safe' ? safeDirs[i].slice() : rollDirs(i, pose), lenK);
+        specs[i] = makeSpec(i, pose === 'safe' ? (B.legs[i].safe || safeDirs[i]).slice() : rollDirs(i, pose), lenK);   // a gene's own fallback (bee hind leg, wide of the broad abdomen, #12)
         joints[i] = legJoints(attachOf(B.legs[i]).p, specs[i]);
       }
       why = legsOk(joints, specs);

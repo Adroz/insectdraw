@@ -219,9 +219,8 @@ headH + thoraxLen + abdLen, or forewing `fw` = wingSpan × family len)
 | fly tabanid | stylate annulated 1 | 0.3–0.45 hw | 3 + 4–8 annuli |
 | fly asilid | stylate style 1 | 0.3–0.42 hw | 3 + style |
 | fly nemato | plumose 2, moniliform-whorled 2 | 0.9–1.5 hw | 13–15 |
-| bee apid / vespid | geniculate 1 | 1.2–1.6 hw | 12–13 |
-| bee sawfly | filiform 3, clubbed abrupt 1, serrate 1 | 1.2–1.8 hw | 9 (7–12) |
-| wasp vespid / apid | geniculate 1 | 1.2–1.6 hw | 12–13 |
+| bee apid (the only bee family since #12) | geniculate 1, scape 0.30–0.36 of the antenna | 1.2–1.6 hw | 12–13 |
+| wasp vespid | geniculate 1 | 1.2–1.6 hw | 12–13 |
 | wasp ichneumonid | filiform 1 (long, arc or swept) | 0.5–0.9 bl | 16–40 |
 | wasp sawfly | filiform 3, serrate 1, pectinate 1 | 1.2–1.8 hw | 9 |
 | wasp chalcid | geniculate (club) 1 | 0.7–1.0 hw | scape + 5–7 + club |

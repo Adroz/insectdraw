@@ -39,6 +39,10 @@ const DIP_BMCU_ALWAYS = ['tabanid', 'asilid'];   // families whose bm cell is al
 const HYM_CELLS = { apid: { sub: 3, disc: 2 }, vespid: { sub: 3, disc: 2 } };   // closed submarginal / discoidal cells per family
 const HYM_AREOLET = ['ichneumonid'];   // families that always close an areolet
 const HYM_AREOLET_MAX = 0.08;   // the areolet is tiny: its two r-m at most this far apart (fraction of the span; ~0.06 on the diagram)
+// #12, from the habitus (Apis / Bombus: abdomen broader than the thorax, short legs, the hind tibia a broad corbicula,
+// head about as wide as the thorax, three ocelli in a triangle on the vertex; research-antennae: bee scape 0.3-0.4)
+const BEE_FAMS = ['apid', 'andrenid', 'megachilid'];   // the bee families; type bee rolls only these, type wasp none
+const BEE = { abd: 1.05, tibia: 1.5, head: 0.8, ocelli: 0.6, lattice: 0.82, scape: [0.27, 0.4] };
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
@@ -355,6 +359,48 @@ const CHECKS = {
           if (d < leg.segHw[k] + ANT_LEG_CLEAR) return fail('antenna within ' + d.toFixed(1) + ' of the' + label + ' ' + leg.pair + ' leg ahead of the thorax (' + an.kind + ' ' + an.pose + ', legs ' + meta.legRoll.pose + ')');
         }
       }
+    }
+  },
+  // #12 the caption and the drawing agree: type bee draws bee families only and type wasp none of them
+  hymFamilies(meta, svg, fail) {
+    if (meta.type === 'bee' && !BEE_FAMS.includes(meta.fam)) fail('bee plate rolls the non-bee family ' + meta.fam);
+    if (meta.type === 'wasp' && BEE_FAMS.includes(meta.fam)) fail('wasp plate rolls the bee family ' + meta.fam);
+  },
+  // #12 bees read as bees (stated from the habitus, not read from the engine's tables): the abdomen wider than the
+  // thorax, no leg (femur + tibia + tarsus) longer than the abdomen, the hind tibia a broad fringed corbicula, a head at
+  // least BEE.head of the thorax width, the ocelli a triangle (not a row), the lattice eye worked over the whole eye
+  // (BEE.lattice of it inside a one-cell rim, the highlight included: the old lattice left out its upper outer part, a
+  // median 0.80) and the geniculate scape about a third of the antenna
+  beeHabitus(meta, svg, fail) {
+    if (meta.type !== 'bee') return;
+    const maxHw = prof => Math.max(...prof.map(p => p[1])), thHw = maxHw(meta.thorax.profile), abHw = maxHw(meta.abdomen.profile);
+    if (abHw < BEE.abd * thHw) fail('bee abdomen ' + (abHw / thHw).toFixed(2) + 'x the thorax width (want >= ' + BEE.abd + ')');
+    const abLen = meta.abdomen.yBot - meta.abdomen.yTop, d = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+    for (const leg of meta.legs) {   // pts: attach, coxa, trochanter, femur tip, tibia tip, tarsomeres, claw tip
+      let len = 0; for (let k = 2; k + 2 < leg.pts.length; k++) len += d(leg.pts[k], leg.pts[k + 1]);
+      if (len > abLen) fail('bee ' + leg.pair + ' leg ' + (len / abLen).toFixed(2) + 'x the abdomen length (want <= 1)');
+    }
+    const byPair = {}; for (const leg of meta.legs) byPair[leg.pair] = leg;
+    const g = meta.bodyGenes && meta.bodyGenes.legs[2];
+    if (!g || !g.corbicula) fail('bee hind leg without the fringed corbicula');
+    if (byPair.hind.segHw[3] < BEE.tibia * byPair.mid.segHw[3]) fail('bee hind tibia only ' + (byPair.hind.segHw[3] / byPair.mid.segHw[3]).toFixed(2) + 'x the mid tibia width (want >= ' + BEE.tibia + ')');
+    const h = meta.head;
+    if (h.W < BEE.head * 2 * thHw) fail('bee head ' + (h.W / (2 * thHw)).toFixed(2) + 'x the thorax width (want >= ' + BEE.head + ')');
+    if (h.ocelli.length !== 3) fail('bee with ' + h.ocelli.length + ' ocelli');
+    else {
+      const med = h.ocelli.find(o => Math.abs(o[0]) < 1e-9), lat = h.ocelli.find(o => o[0] > 0);
+      if (!med || !lat || lat[1] - med[1] < BEE.ocelli * lat[0]) fail('bee ocelli are not a triangle: height ' + (med && lat ? ((lat[1] - med[1]) / lat[0]).toFixed(2) : '?') + ' of the lateral offset (want >= ' + BEE.ocelli + ')');
+    }
+    if (meta.bodyGenes.head.eye.style === 'lattice') for (const e of h.eyes) {
+      if (!(e.cells >= 0 && e.pitch > 0)) { fail('bee lattice eye without a cell count on meta.head.eyes'); break; }
+      const rim = 1 - 0.55 * e.pitch / Math.min(e.rx, e.ry), cover = e.cells * e.pitch * e.pitch * 0.866 / (Math.PI * e.rx * e.ry * rim * rim);   // cells over the eye less a one-cell rim
+      if (cover < BEE.lattice) { fail('bee eye lattice covers ' + cover.toFixed(2) + ' of the eye (want >= ' + BEE.lattice + ')'); break; }
+    }
+    const an = meta.antennae;
+    if (an.kind === 'geniculate') {   // pts: base, elbow, pedicel tip, then the flagellum shaft (lines[0].pl)
+      const pl = an.lines[0].pl; let fl = 0; for (let i = 1; i < pl.length; i++) fl += d(pl[i], pl[i - 1]);
+      const scape = d(an.pts[0], an.pts[1]), share = scape / (scape + d(an.pts[1], an.pts[2]) + fl);
+      if (share < BEE.scape[0] || share > BEE.scape[1]) fail('bee scape ' + share.toFixed(2) + ' of the antenna (want ' + BEE.scape.join('-') + ')');
     }
   },
   // swallowtail: the hindwing veins must not converge into the tail root; the two vein endpoints nearest the tail tip must be
