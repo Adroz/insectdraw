@@ -311,18 +311,88 @@ again (`drift`); 1–4 **m-cu** rungs. Sites (`k` 1.4–2.2, `minSep` 0.05) fill
 outer parts of the inter-branch strips; `uOpen` 1.0; the subcostal strip and M–Cu are `noPair`. Every
 branch, Rs, M and Cu end-twig on the outline. 137 joins per plate, 3 dropped, mean angle 117°.
 
-### Ephemeroptera (ref: eph-mayfly-1956)
+### Ephemeroptera (ref: eph-ameletus-li2021)
 
-Observed:
+Re-derived 2026-10-13 (#20). The rules below were first written against `eph-mayfly-1956`, which is a
+stonefly (Plecoptera): five anal veins, a large hindwing with an anal fan, long antennae, cerci with
+claspers. The new reference is a slide photo of a real mayfly forewing and hindwing, *Ameletus
+daliensis* (Ameletidae), a generalised family with the full mayfly plan (triangular forewing,
+intercalaries, dense crossveins, small hindwing). Positions are pixels in `ref/eph-ameletus-li2021.jpg`
+(1200 × 324; forewing on the left with the base at x ≈ 10 and the apex at x ≈ 663, 1 mm ≈ 60 px;
+hindwing on the right at twice that magnification, 0.5 mm ≈ 61 px).
 
-- Triangular forewing with 9–15 longitudinals (C, Sc, R1, Rs, M1+2, M3+4, Cu1, Cu2, 1A–5A) and
-  **intercalaries (IR)** between them that start mid-wing.
-- Dense ladders of crossveins between every pair of longitudinals, rungs tilted toward the
-  apex; costal ladder densest.
-- Longitudinals bow toward the trailing edge and undulate.
-- Hindwing small and rounded, often lost.
+Observed (forewing unless stated):
 
-Rules: grown by `growVeins` v2, the ladder regime everywhere. The forewing is a triangle with the apex at
+1. **Outline.** Length about 11 mm, length : greatest width about 2.5. The costa is nearly straight from
+   the base to x ≈ 630 and then turns down into a blunt, rounded apex at about (663, 171), roughly half the
+   wing's depth below the costal line; nothing projects beyond the costa's tangent (the frayed tip at
+   (640, 90) is damage, not anatomy). The hind margin runs nearly straight from the apex back to the
+   tornus, deepest at x ≈ 310 (about 45% of the length), then curves up to a narrow base. It is a
+   triangle whose apex is the rounded distal corner set about half the depth below the costa, not a dome
+   and not a point at the costal (top) corner.
+2. **Costal field.** C, Sc and R1 run together, nearly parallel and close (each strip about 0.05 of the
+   wing's width) from the base to the apex. Sc meets the costa just before the apex; R1 reaches the apex.
+3. **Costal crossveins thin out basally, crowd apically.** In the C–Sc strip the rungs are sparse and
+   simple over the basal half (x 40–330) and closer together beyond; over the apical third (x 450–630,
+   the stigmatic area) they are dense, and many fork or join their neighbours so the strip becomes a row
+   of small irregular cells, sometimes two rows. There is no filled or outlined pterostigma.
+4. **Fan from a few stems, not from one point.** Below R1 the longitudinals leave the dark basal knot as
+   a handful of stems already a strip-width apart at x ≈ 40 (Rs, M, Cu, the anals), diverge, and multiply
+   across the wing: some fork in the basal half (around x 120–200, y 140–160) and the rest of the count is
+   made up by intercalaries (7), so most veins reaching the margin never reach the root. The anterior
+   ones run nearly parallel to the costa; each one further back is more oblique, and the rear ones curve
+   to meet the hind margin in the basal third.
+5. **Veins are smooth.** Every longitudinal is a long gentle curve (concave toward the base in the rear
+   half of the wing) with no visible zigzag at the crossvein junctions.
+6. **About 12–16 vein ends on the hind margin and apex**, counting branches and intercalaries, spaced
+   roughly evenly along the margin; closer together near the apex than at the tornus.
+7. **Intercalaries.** Long free intercalary veins lie between the main branches in the outer half,
+   starting from a crossvein (not from a vein) around mid-wing and running to the margin; along the hind
+   margin there are also short marginal intercalaries, one or two between each pair of vein ends,
+   attached by a crossvein or free (bottom edge, x 380–620).
+8. **Cubital field.** Between CuA and CuP (and behind CuP) a series of 4–7 curved, nearly parallel
+   veinlets runs from the vein to the hind margin, the sigmoid "cubital intercalaries" (lower left,
+   x 50–260, y 130–280).
+9. **Crossveins: one-row ladders, near-perpendicular.** Every strip carries one row of crossveins from
+   base to margin. Most meet the longitudinals within about 10–20° of a right angle, leaning either way
+   and wavering slightly; there is **no consistent lean toward the apex**, and nothing like a herringbone.
+   Cells are rounded rectangles 1–2× as long (along the strip) as wide, larger in the middle of the wing
+   and smaller toward the apex and the margin.
+10. **Marginal polygons.** In the last cell or two before the hind margin and apex the crossveins split
+    into Y-forks and small pentagonal cells (x 470–640 along the bottom edge), so the ladders end in a
+    narrow band of polygons rather than running square to the margin.
+11. **Weight.** C, Sc and R1 are the heaviest lines and the base is a dark sclerotised knot; the fan
+    branches are lighter; crossveins and intercalaries are the finest, the marginal polygons finest of
+    all. (The dark pigment on some crossveins under R1, x 340–600, is this species' colour pattern, not
+    venation.)
+12. **Hindwing** (right half of the image): about 3.7 mm against the forewing's 11 mm, so about a third of
+    its length, and length : width about 1.6. A rounded oval, broadest at about 40% of its length, with a
+    raised angular costal process near the base (x ≈ 812, y ≈ 28). The costal strip carries a ladder;
+    behind it 7–10 longitudinals radiate from the base, the rear ones short and curved, with sparse
+    one-row ladders between them.
+13. **Not visible here.** The base of the costa is torn in this specimen, so the costal (humeral) brace
+    cannot be checked against it; families without hindwings (Baetidae in part, Caenidae) are not shown
+    either. Both stay as unverified notes, not rules.
+
+Which current rules survive (the implementation is still the one written against the stonefly; the
+changes are filed as #59; outline and root items overlap #21):
+
+| current rule (2026-10-02) | verdict | against |
+|---|---|---|
+| Ladder regime everywhere, one-row ladders to the margin, `uOpen` 1.0, no mesh | survives; add the marginal polygons | 9, 10 |
+| Sc and R1 pre-built under the costa, Sc ending on the costa near the apex, R1 at the apex, both heavy | survives | 2, 11 |
+| Costal ladder on its own step (`costStep` 0.022–0.034), densest of all | changes: sparse basally, dense and forked over the apical third (stigmatic area) | 3 |
+| Triangular forewing "with the apex at the top corner" | changes: the apex is the rounded front-distal corner, about half the depth below the costal line; costa nearly straight; tornus at about 45% | 1 |
+| 7–13 fan lanes as rays from the root to targets spaced along the hind margin | changes: a few basal stems that fork across the basal half; 12–16 ends with the intercalaries | 4, 6 |
+| Fan lanes bent by a share of the costa's convexity and undulating (`und`) | survives as smooth curves; keep `und` small, no visible zigzag | 5 |
+| Intercalaries between alternate pairs from `u0i` 0.4–0.5 to the margin | survives; add short marginal intercalaries along the hind margin and the cubital veinlets | 7, 8 |
+| Rungs "tilted toward the apex" (`angle` 110–124, `lean` mostly one way) | changes: near-perpendicular (about 90–110°) leaning either way. The check.js band (100–145 on every winged order) would reject part of that range, so the band for this order is a decision for Nik, not something to relax in passing | 9 |
+| Cell size shrinking toward the tip and the trailing edge | survives | 9 |
+| First three fan lanes D, the rest F; crossveins F | survives | 11 |
+| Hindwing small and rounded, 3 fan lanes, 1.6× coarser cell, `hindL` 0.22–0.36, present with odds 0.8 | survives in size (measured 0.33); changes in shape (costal process near the base) and in vein count (7–10) | 12, 13 |
+| "1A–5A", "9–15 longitudinals" | dropped: read off the stonefly | — |
+
+Current implementation (unchanged by #20): grown by `growVeins` v2, the ladder regime everywhere. The forewing is a triangle with the apex at
 the top corner (a domed outline sent Rs diving away from R1 and no rung could bridge them). Lanes: C and
 the trailing edge as `noDraw` walls; Sc and R1 as pre-built offsets under the costa (`sub` 0.035–0.055 of
 the chord each, Sc ending on the costa at 0.9, R1 at the apex, O / D); 7–13 fan lanes (`nV` − 2: Rs, M,
@@ -509,7 +579,7 @@ type; bee / wasp / fly / cranefly / dragonfly / damselfly byte-identical to befo
   branches leaving Rs toward the costal side and the gradates leaning with the ladders so no staircase
   showed; branches now bend down from a shallow start and the gradates carry their own target angle.
   Costal ladder, im cell, 1–3 staircases, twigged ends, 105–140° everywhere, mean 117°. Pass.
-- Ephemeroptera (eph-mayfly-1956; seeds 4, 7, 13, 36): the domed outline sent Rs diving from R1 so the
+- Ephemeroptera (eph-mayfly-1956, since found to be a stonefly, #20; seeds 4, 7, 13, 36): the domed outline sent Rs diving from R1 so the
   R1–Rs strip had no rungs, and chord-fraction fan lanes bunched toward the costa; the forewing is now a
   triangle with the apex at the top corner, the fan radiates from the root, `gapNear` / `reachW` let the
   ladders fill every strip. A trial of the mesh regime in the apical strips was dropped: the reference
