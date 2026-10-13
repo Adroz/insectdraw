@@ -32,6 +32,11 @@ const DIP_MIN = 15;   // plates a family needs before its median is asserted
 const DIP_RUNG_FAMS = ['muscid', 'syrphid', 'tabanid'];   // the short-rung plan: r-m always drawn, r-m and bm-cu at most DIP_RUNG_MAX
 const DIP_RUNG_MAX = 0.06;   // per-plate cap on r-m and bm-cu, fraction of the span
 const DIP_BMCU_ALWAYS = ['tabanid', 'asilid'];   // families whose bm cell is always closed by bm-cu
+// #11, stated from the references (hym-apis: marginal + SM1-SM3 + ME1-ME2; Vespidae the same plan; hym-ichneumonidae-diagram:
+// the areolet, the small cell between 2r-m and the first r-m under the stigma), not read from the engine's family table
+const HYM_CELLS = { apid: { sub: 3, disc: 2 }, vespid: { sub: 3, disc: 2 } };   // closed submarginal / discoidal cells per family
+const HYM_AREOLET = ['ichneumonid'];   // families that always close an areolet
+const HYM_AREOLET_MAX = 0.08;   // the areolet is tiny: its two r-m at most this far apart (fraction of the span; ~0.06 on the diagram)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -360,6 +365,23 @@ const CHECKS = {
     };
     one(meta.wingStats, '');
     one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry, as the wings check reads it
+  },
+  // Hymenoptera cell plan (#11): the Rs-M band holds the named submarginal cells and the M-Cu band the discoidals, never
+  // an even ladder (wingStats.submarginal / .discoidal count the closed cells, rungs included); the ichneumonid closes its
+  // areolet, a tiny cell (wingStats.areolet / .areoletLen); and no hindwing vein fades out in the membrane (wingStats.hStubs,
+  // every family)
+  hymCells(meta, svg, fail, { dev }) {
+    if (meta.type !== 'bee' && meta.type !== 'wasp') return;
+    if (!meta.wingFam) return fail('Hymenoptera plate has no meta.wingFam');
+    const fam = meta.wingFam, want = HYM_CELLS[fam];
+    const one = (s, what) => {
+      if (!s || typeof s.submarginal !== 'number' || typeof s.discoidal !== 'number') return fail(what + 'Hymenoptera wingStats has no submarginal / discoidal count');
+      if (want && (s.submarginal !== want.sub || s.discoidal !== want.disc)) fail(what + 'Hymenoptera ' + fam + ' cell plan: ' + s.submarginal + ' submarginal / ' + s.discoidal + ' discoidal cells (want ' + want.sub + ' / ' + want.disc + ')');
+      if (HYM_AREOLET.includes(fam) && !(s.areolet && s.areoletLen <= HYM_AREOLET_MAX)) fail(what + 'Hymenoptera ' + fam + ' wing has no areolet' + (s.areolet ? ' (the cell is ' + s.areoletLen.toFixed(3) + ' of the span long, max ' + HYM_AREOLET_MAX + ')' : ''));
+      if (s.hStubs !== 0) fail(what + 'Hymenoptera hindwing vein ends in the membrane (' + s.hStubs + ' stub lanes)');
+    };
+    one(meta.wingStats, '');
+    one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
   },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {

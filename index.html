@@ -1433,7 +1433,7 @@ function growVeins(g, G) {
     const la = laneOf[nv.a], lb = laneOf[nv.b]; if (!la || !lb) return;
     const ub = nv.ub === undefined ? nv.ua : nv.ub, reach = (nv.reach === undefined ? 0.05 : nv.reach) * Lw;
     const bow = nv.maxLen && nv.bow === undefined ? randRange(-0.03, 0.03) : nv.bow;   // a capped rung resolves its bow before the slide, so the trials and the placement share it (the same single draw place would make; the trials are rng-free)
-    const opts = { sw: nv.sw || joinSw(la, lb), bow, ang: nv.ang, angT: nv.angT, maxLen: nv.maxLen && nv.maxLen * Lw };
+    const opts = { sw: nv.sw || joinSw(la, lb), bow, ang: nv.ang, angT: nv.angT, maxLen: nv.maxLen && nv.maxLen * Lw, xMin: nv.xMin === undefined ? undefined : nv.xMin * Lw, xMax: nv.xMax === undefined ? undefined : nv.xMax * Lw };   // nv.xMin / xMax (span fractions): the far end's slide stays between its neighbours' (the hymenopteran r-m, #11)
     let du = 0;   // nv.maxLen: when no position on lb gives a rung under the cap, the near end slides along la (SLIDE_STEP of the span a step, at most SLIDE_N steps either way, nearest first) to where the strip is narrow enough
     if (nv.maxLen) for (let k = 0; k <= SLIDE_N * 2; k++) {
       const d = (k & 1 ? -1 : 1) * Math.ceil(k / 2) * SLIDE_STEP;   // 0, -1, +1, -2, +2, ... steps
@@ -3862,15 +3862,17 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
   // edge; M and Cu fade as stubs into the open apex. ----
   const fam = P.fam;
   const F = {   // w breadth/Lw; stig styles; k site spacing / strip width; forks [min,max]; uOpen [min,max]; stub odds; anal / extra lane odds;
-    // basalSw basal vein weight; rsAt where Rs leaves Sc+R; rm = r-m crossvein u's (submarginals); mcu = recurrents; aEnd where A meets the margin; cuS / mS Cu and M target chord fractions
-    apid:        { w: [0.26, 0.34], stig: ['solid', 'cross', 'axis'], stigL: [0.03, 0.07], stigD: [0.06, 0.1], xStig: [0.44, 0.52], xMarg: [0.9, 0.97], margOpen: 0.05, k: [2.0, 2.8], forks: [0, 1], uOpen: [0.74, 0.82], stub: 0.85, anal: 0.3, extra: 0.3, hind: [0.58, 0.72],
-                   basalSw: SW.O, rsAt: 'basal', rm: [[0.55, 0.67, 0.8], [0.55, 0.67, 0.8], [0.58, 0.76]], mcu: [[0.45, 0.62]], aEnd: [0.46, 0.56], cuS: [0.62, 0.7], mS: 0.36 },
-    vespid:      { w: [0.2, 0.26], stig: ['axis', 'stipple', 'none', 'solid'], stigL: [0.03, 0.05], stigD: [0.04, 0.06], xStig: [0.46, 0.54], xMarg: [0.94, 0.99], margOpen: 0.15, k: [1.8, 2.6], forks: [0, 1], uOpen: [0.78, 0.86], stub: 0.7, anal: 0.2, extra: 0.2, hind: [0.5, 0.66],
-                   basalSw: SW.D, rsAt: 'basal', rm: [[0.52, 0.66, 0.8], [0.56, 0.74]], mcu: [[0.58, 0.72]], aEnd: [0.44, 0.54], cuS: [0.56, 0.64], mS: 0.32 },
-    ichneumonid: { w: [0.22, 0.3], stig: ['solid', 'solid', 'cross'], stigL: [0.09, 0.14], stigD: [0.1, 0.16], xStig: [0.48, 0.56], xMarg: [0.94, 0.99], margOpen: 0, k: [1.5, 2.2], forks: [0, 2], uOpen: [0.74, 0.84], stub: 0.6, anal: 0.3, extra: 0.3, hind: [0.52, 0.68],
-                   basalSw: SW.D, rsAt: 'stigma', rm: 'areolet', mcu: [[0.4, 0.6]], aEnd: [0.44, 0.56], cuS: [0.6, 0.68], mS: 0.27 },
+    // basalSw basal vein weight; rsAt where Rs leaves Sc+R; rm = r-m crossveins as [u on Rs, u on M] (submarginals; the second u sets
+    // the lean, bottom end distal as on hym-apis), one plan picked per seed; mcu = recurrents; aEnd where A meets the margin; cuS / mS Cu
+    // and M target chord fractions; cells: the Rs-M and M-Cu bands hold only the named cells (no site ladder, no random fork across them, #11)
+    apid:        { w: [0.26, 0.34], stig: ['solid', 'cross', 'axis'], stigL: [0.03, 0.07], stigD: [0.06, 0.1], xStig: [0.44, 0.52], xMarg: [0.9, 0.97], margOpen: 0.05, k: [2.0, 2.8], forks: [0, 0], uOpen: [0.74, 0.82], stub: 0.85, anal: 0.3, extra: 0.3, hind: [0.58, 0.72],
+                   basalSw: SW.O, rsAt: 'basal', rm: [[[0.53, 0.56], [0.62, 0.68], [0.74, 0.78]], [[0.53, 0.57], [0.64, 0.7], [0.77, 0.8]], [[0.54, 0.57], [0.63, 0.66], [0.75, 0.8]]], mcu: [[0.5, 0.68]], aEnd: [0.46, 0.56], cuS: [0.62, 0.7], mS: 0.36, cells: true },
+    vespid:      { w: [0.32, 0.38], stig: ['axis', 'stipple', 'none', 'solid'], stigL: [0.03, 0.05], stigD: [0.04, 0.06], xStig: [0.46, 0.54], xMarg: [0.94, 0.99], margOpen: 0.15, k: [1.8, 2.6], forks: [0, 0], uOpen: [0.78, 0.86], stub: 0.7, anal: 0.2, extra: 0.2, hind: [0.5, 0.66],
+                   basalSw: SW.D, rsAt: 'basal', rm: [[[0.5, 0.54], [0.6, 0.64], [0.76, 0.8]], [[0.49, 0.52], [0.62, 0.68], [0.77, 0.8]]], mcu: [[0.58, 0.72]], aEnd: [0.44, 0.54], cuS: [0.56, 0.64], mS: 0.32, cells: true },
+    ichneumonid: { w: [0.32, 0.38], stig: ['solid'], stigL: [0.09, 0.14], stigD: [0.1, 0.16], xStig: [0.48, 0.56], xMarg: [0.94, 0.99], margOpen: 0, k: [1.5, 2.2], forks: [0, 0], uOpen: [0.74, 0.84], stub: 0.6, anal: 0.3, extra: 0.3, hind: [0.52, 0.68],
+                   basalSw: SW.D, rsAt: 'stigma', rm: 'areolet', mcu: [[0.4, 0.6]], aEnd: [0.44, 0.56], cuS: [0.6, 0.68], mS: 0.27, cells: true },
     sawfly:      { w: [0.3, 0.37], stig: ['solid', 'cross'], stigL: [0.08, 0.12], stigD: [0.08, 0.12], xStig: [0.42, 0.5], xMarg: [0.88, 0.95], margOpen: 0, k: [0.9, 1.4], forks: [1, 3], uOpen: [0.8, 0.9], stub: 0.3, anal: 1, extra: 0.8, hind: [0.7, 0.84],
-                   basalSw: SW.D, rsAt: 'mid', rm: [[0.5, 0.64, 0.78]], mcu: [[0.42, 0.6]], aEnd: [0.5, 0.6], cuS: [0.64, 0.72], mS: 0.36 },
+                   basalSw: SW.D, rsAt: 'mid', rm: [[[0.5, 0.5], [0.64, 0.64], [0.78, 0.78]]], mcu: [[0.42, 0.6]], aEnd: [0.5, 0.6], cuS: [0.64, 0.72], mS: 0.36 },
     chalcid:     { w: [0.26, 0.34], stig: ['solid', 'cross'], stigL: [0.03, 0.06], stigD: [0.04, 0.07], xStig: [0.5, 0.62], xMarg: [0.7, 0.8], margOpen: 1, k: [9, 9], forks: [0, 0], uOpen: [0.3, 0.3], stub: 1, anal: 0, extra: 0, hind: [0.5, 0.62],
                    basalSw: SW.F, rsAt: 'basal', rm: [[]], mcu: [[]], aEnd: [0.3, 0.4], cuS: [0.66, 0.74], mS: 0.36, bare: true },
   }[fam];
@@ -3883,9 +3885,13 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
     forks: ri(F.forks), uOpen: rr(F.uOpen), k: rr(F.k), minGap: randRange(0.06, 0.12), angle: randRange(112, 128), lean: rng() < 0.8 ? -1 : 1, bow: randRange(0.01, 0.035), grad: randRange(0, 0.2),
     stubProb: F.stub, stubLen: randRange(0.06, 0.14),
     anal: rng() < F.anal, extra: rng() < F.extra, basalU: randRange(0.22, 0.34), basalLean: randRange(0.02, 0.06), heavy: rng() < 0.4,
-    rm: F.rm === 'areolet' ? null : pick(F.rm).map(u => u * jitter(0.05)), mcu: pick(F.mcu).map(u => u * jitter(0.06)), cuS: rr(F.cuS), aEnd: rr(F.aEnd),
+    rm: F.rm === 'areolet' ? null : pick(F.rm).map(([ua, ub]) => { const j = jitter(0.05); return [ua * j, ub * j]; }), mcu: pick(F.mcu).map(u => u * jitter(0.06)), cuS: rr(F.cuS), aEnd: rr(F.aEnd),
   };
-  if (!G.rm) G.rm = [G.xStig + 0.02, G.xStig + randRange(0.07, 0.11)];   // ichneumonid areolet: a tiny cell under the stigma
+  if (!G.rm) {   // ichneumonid areolet (hym-ichneumonidae-diagram): a tiny cell just past the stigma, its two r-m converging on Rs
+    G.rsBow = randRange(0.08, 0.13);   // Rs sags toward M past the stigma, so the areolet is small where the two run closest
+    const u0 = G.xStig + G.stigL + randRange(-0.02, 0.02), top = randRange(0.015, 0.03);
+    G.rm = [[u0, u0 - randRange(0.015, 0.03)], [u0 + top, u0 + top + randRange(0.015, 0.03)]];
+  }
   const LV = [SW.F, SW.D, SW.O], wgt = k => LV[Math.min(2, k + (G.heavy ? 1 : 0))];   // the heavy gene promotes a weight one level (R-G cap: O)
   const theta = G.theta;
   const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * order.wingRootX;
@@ -3904,7 +3910,7 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
   let hGrown;
   {
     const h = wingGraph(hind, Lh);
-    const lanes = [{ id: 'R', s0: 0.4, s1: 0.08, sw: wgt(1), uEnd: randRange(0.82, 0.96), stub: false, noFork: true }, { id: 'M', s0: 0.5, s1: 0.5, sw: SW.D, stub: rng() < 0.5 }];
+    const lanes = [{ id: 'R', s0: 0.4, s1: 0.08, sw: wgt(1), uEnd: randRange(0.82, 0.96), stub: false, noFork: true }, { id: 'M', s0: 0.5, s1: 0.5, sw: SW.D, stub: false }];   // every hindwing vein reaches the margin (#11)
     if (rng() < 0.7) lanes.push({ id: 'Cu', s0: 0.6, s1: 0.85, sw: SW.F, uEnd: randRange(0.45, 0.7), stub: false, noFork: true });
     hGrown = growVeins(h, { lanes, forks: G.hForks, uOpen: 0.75, k: G.hK, minGap: 0.15, angle: G.angle, lean: G.lean, bowAmt: G.bow, stubProb: 0, stubLen: 0.08 });
     L.wings.push(...h.emit());
@@ -3921,7 +3927,7 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
   g.nodeAt('S0', S0); g.nodeAt('S1', S1); g.margin('MA', G.xMarg, 'top');
   const bare = !!F.bare, openMarg = G.margOpen || bare;
   const branchSw = bare ? SW.F : SW.D, armSw = bare ? SW.F : wgt(1);   // R-G: stems O, named branches D; heavy plates promote M and Cu to O
-  const rsSpec = { id: 'Rs', s1: fam === 'sawfly' ? 0.2 : 0.16, uEnd: G.xMarg, end: openMarg ? undefined : 'MA', stub: openMarg, sw: branchSw, noFork: false };   // Rs closes the marginal cell against R1
+  const rsSpec = { id: 'Rs', s1: fam === 'sawfly' ? 0.2 : 0.16, uEnd: G.xMarg, end: openMarg ? undefined : 'MA', stub: openMarg, sw: branchSw, noFork: false, bow: G.rsBow };   // Rs closes the marginal cell against R1
   const lanes = [
     { id: 'ScR', s0: 0.34, s1: 0.1, uEnd: G.xStig, end: 'S0', sw: bare ? SW.D : SW.O, noFork: true, ctrl: 1 },                          // Sc+R into the stigma (a stem: O all the way)
     { id: 'R1', s0: 0.06, s1: 0.1, uEnd: G.xMarg, start: 'S1', end: G.margOpen ? undefined : 'MA', stub: G.margOpen, sw: SW.D, noFork: true, ctrl: 1 },   // R1 from the stigma tip
@@ -3929,12 +3935,17 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
     { id: 'A', s0: 0.72, s1: 0.84, uEnd: G.aEnd, sw: SW.F, noFork: true, stub: false },
   ];
   if (G.anal) lanes.push({ id: 'A2', s0: 0.84, s1: 0.94, uEnd: randRange(0.2, 0.32), sw: SW.F, noFork: true, stub: false });
-  const named = [];
+  const named = [], rmNv = [];   // rmNv: the r-m entries, read back (placed or not) for wingStats
   if (!bare) {
     // basal vein: from the M+Cu fork back up to Sc+R, top end more distal; in apids Rs leaves Sc+R from its top
     named.push({ early: true, a: 'MCu', ua: G.basalU, b: 'ScR', ub: G.basalU + G.basalLean, reach: 0.05, sw: G.heavy ? swAbove(F.basalSw) : F.basalSw, bow: randRange(-0.02, 0.02), forkB: F.rsAt === 'basal' ? rsSpec : undefined });
     if (F.rsAt !== 'basal') named.push({ early: true, forkOn: 'ScR', u: F.rsAt === 'stigma' ? G.xStig - randRange(0.04, 0.08) : randRange(0.3, 0.38), spec: rsSpec });
-    for (const u of G.rm) named.push({ a: 'Rs', ua: u, b: 'MCu', reach: 0.05 });            // r-m crossveins: submarginal cells (or the areolet)
+    G.rm.forEach(([ua, ub], i) => {   // r-m crossveins: submarginal cells (or the areolet); a short reach keeps each cell's drawn shape, and each
+      // far end (on M) stays on its side of the midpoints to its neighbours' so two r-m never cross (their Rs ends are fixed and ordered)
+      const prev = G.rm[i - 1], next = G.rm[i + 1];
+      const nv = { a: 'Rs', ua, b: 'MCu', ub, reach: F.rm === 'areolet' ? 0.05 : F.cells ? 0.03 : 0.05, xMin: prev ? (prev[1] + ub) / 2 + 0.005 : undefined, xMax: next ? (ub + next[1]) / 2 - 0.005 : undefined };
+      rmNv.push(nv); named.push(nv);
+    });
     for (const u of G.mcu) named.push({ a: 'MCu', ua: u, b: 'Cu', reach: 0.05 });           // recurrent veins 1m-cu, 2m-cu: discoidal cells
     named.push({ a: 'Cu', ua: G.basalU + 0.05, b: 'A', ub: G.basalU + 0.03, reach: 0.04 });   // cu-a: the first cubital cell
     if (G.anal) named.push({ a: 'A', ua: 0.16, b: 'A2', reach: 0.04 });                      // closed anal cell
@@ -3942,7 +3953,7 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
   } else named.push({ early: true, forkOn: 'ScR', u: G.basalU, spec: rsSpec });
   const grown = growVeins(g, {
     lanes, named, forks: G.forks, uOpen: G.uOpen, k: G.k, minGap: G.minGap, angle: G.angle, lean: G.lean, bowAmt: G.bow, grad: G.grad, stubProb: G.stubProb, stubLen: G.stubLen,
-    noPair: [['ScR', 'MCu'], ['R1', 'Rs']].concat(fam === 'sawfly' ? [] : [['ScR', 'Rs'], ['MCu', 'A']]), noSites: bare,   // the basal R wedge and the marginal cell never carry crossveins; the first cubital cell only in sawflies
+    noPair: [['ScR', 'MCu'], ['R1', 'Rs']].concat(fam === 'sawfly' ? [] : [['ScR', 'Rs'], ['MCu', 'A']], F.cells ? [['Rs', 'MCu'], ['MCu', 'Cu']] : []), noSites: bare,   // the basal R wedge and the marginal cell never carry crossveins; the first cubital cell only in sawflies; the submarginal and discoidal bands only their named cells
   });
   if (bare) {   // chalcid: the stigmal hook and postmarginal vein
     const p0 = plAt(stigBot, 0.7); g.stub(p0, 60 + randRange(-15, 15), w * randRange(0.16, 0.26), SW.D);
@@ -3950,7 +3961,18 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
   L.wings.push(...g.emit());
   L.wings.push(...costaEls(fore, 0, G.stig !== 'none' ? xStig : Lw * 0.5));
   const fs = grown.stats, hs = hGrown.stats;
-  meta.wingStats = { joins: fs.joins + hs.joins, dropped: fs.dropped + hs.dropped, minAngle: Math.min(fs.minAngle, hs.minAngle), maxAngle: Math.max(fs.maxAngle, hs.maxAngle) };
+  // the cell plan as drawn (#11): closed cells in the Rs-M band (submarginals) and the M-Cu band (discoidals), every
+  // crossvein of the band counted, rungs included; the Rs-M band is closed at its base only when Rs leaves from the top of
+  // the basal vein (rsAt 'basal'), the M-Cu band always (the M / Cu fork). The areolet: both ichneumonid r-m placed with
+  // no other crossvein in the band (it is the band's one closed cell), areoletLen the span between their middles. hStubs:
+  // hindwing lanes that fade out in the membrane.
+  const band = (x, y) => grown.joins.filter(j => (j[0] === x && j[1] === y) || (j[0] === y && j[1] === x));
+  const smJ = band('Rs', 'MCu'), dcJ = band('MCu', 'Cu');
+  const rmU = rmNv.filter(nv => nv.pl).map(nv => grown.joins.find(j => j[3] === nv.pl)[2]), aLo = Math.min(...rmU), aHi = Math.max(...rmU);
+  const areolet = F.rm === 'areolet' && rmU.length === 2 && smJ.length === 2;
+  meta.wingStats = { joins: fs.joins + hs.joins, dropped: fs.dropped + hs.dropped, minAngle: Math.min(fs.minAngle, hs.minAngle), maxAngle: Math.max(fs.maxAngle, hs.maxAngle),
+    submarginal: Math.max(0, smJ.length - (F.rsAt === 'basal' ? 0 : 1)), discoidal: dcJ.length, areolet, areoletLen: areolet ? aHi - aLo : 0, hStubs: hGrown.lanes.filter(l => l.stub).length };
+  meta.wingFam = fam;   // the Hymenoptera family, for tests/check.js (hymCells)
   meta.wingSig = ['hym', fam, grown.lanes.length, grown.joins.length, grown.forks, hGrown.lanes.length + hGrown.joins.length, G.stig, G.margOpen ? 1 : 0, G.anal ? 1 : 0, G.extra ? 1 : 0, G.heavy ? 1 : 0,
     Math.round(G.uOpen * 10), Math.round(G.theta / 6), Math.round(G.spread / 6), Math.round(G.tipY * 6), Math.round(G.sharp * 2), Math.round(G.bulge * 10), Math.round(G.xStig * 10), Math.round(G.xMarg * 20), Math.round(G.len * 10)].join(',');
 }
