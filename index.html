@@ -1388,8 +1388,9 @@ function growVeins(g, G) {
   // one crossvein: near end A on lane la (tangent dA); far end on lane lb near x = xb, slid within +-reach so that both
   // junction angles fall in [angLo, angHi] (R-D); dropped when no position on lb does. The lean gene prefers the costal
   // end to be the more distal one, as in the references.
-  const place = (la, A, dA, lb, xb, reach, o) => {
-    const bow = o.bow === undefined ? randRange(-0.03, 0.03) : o.bow;
+  // bestPlacement is pure (no rng, nothing drawn or counted): the best in-band far end for a crossvein of bow `bow`, or
+  // null; o.maxLen (px) ranks any position whose drawn (bowed) length is under the cap above every longer one
+  const bestPlacement = (la, A, dA, lb, xb, reach, o, bow) => {
     const h0 = atX(lb.pl, xb), ln = h0 && sAt(A) < sAt(h0.p) ? lean : -lean;
     const lo = o.ang ? o.ang[0] : angLo, hi = o.ang ? o.ang[1] : angHi;   // o.ang: a structural oblique (triangle side, bridge) with its own band
     const aT = o.angT === undefined ? angT : o.angT;   // o.angT: this crossvein's own target angle inside the band (lacewing gradates lean more than the ladders)
@@ -1403,10 +1404,14 @@ function growVeins(g, G) {
       const aA = obtuse(dA, norm(sub(pl[1], pl[0]))), aB = obtuse(h.d, norm(sub(pl[pl.length - 1], pl[pl.length - 2])));
       if (aA < lo || aA > hi || aB < lo || aB > hi) continue;
       const score = Math.abs(aA - aT) + Math.abs(aB - aT) + Math.abs(j) / 16 * 6 + (Math.sign(h.p[0] - A[0]) === ln ? 0 : 12)
-        + (o.maxLen && vlen(sub(h.p, A)) > o.maxLen ? 1000 : 0);   // o.maxLen: any in-band position under the cap beats every longer one (the Diptera r-m / bm-cu rungs, #10)
+        + (o.maxLen && polyLen(pl) > o.maxLen ? 1000 : 0);   // o.maxLen: any in-band position under the cap beats every longer one (the Diptera r-m / bm-cu rungs, #10); measured on the bowed path, as wingStats and check.js measure it
       if (!best || score < best.score) best = { score, p: h.p, pl, aA, aB };
     }
-    if (o.dry) return best;   // a trial placement (placeNamed's maxLen slide): nothing drawn, nothing counted
+    return best;
+  };
+  const polyLen = pl => { let d = 0; for (let i = 0; i + 1 < pl.length; i++) d += vlen(sub(pl[i + 1], pl[i])); return d; };
+  const place = (la, A, dA, lb, xb, reach, o) => {
+    const best = bestPlacement(la, A, dA, lb, xb, reach, o, o.bow === undefined ? randRange(-0.03, 0.03) : o.bow);
     if (!best) { stats.dropped++; return null; }
     g.poly(best.pl, o.sw); lastPl = best.pl;
     stats.joins++;
@@ -1422,18 +1427,22 @@ function growVeins(g, G) {
   // named crossveins (and the forks that hang off them, e.g. Rs leaving Sc+R at the top of the basal vein), in table
   // order; entries marked `early` are structural (they create lanes) and go before the random forks, the rest after,
   // so no lane is ever grown across an existing crossvein
+  const SLIDE_STEP = 0.01, SLIDE_N = 4;   // a capped rung's slide: 0.01 of the span a step, at most 4 steps (±0.04) either way
   const placeNamed = nv => {
     if (nv.forkOn) { const l = laneOf[nv.forkOn]; if (l) fork(l, nv.u, nv.spec); return; }
     const la = laneOf[nv.a], lb = laneOf[nv.b]; if (!la || !lb) return;
-    const reach = (nv.reach === undefined ? 0.05 : nv.reach) * Lw, opts = { sw: nv.sw || joinSw(la, lb), bow: nv.bow, ang: nv.ang, angT: nv.angT, maxLen: nv.maxLen && nv.maxLen * Lw };
-    let du = 0;   // nv.maxLen: when no position on lb gives a rung under the cap, the near end slides along la (0.01 of the span a step, at most 0.04 either way, nearest first) to where the strip is narrow enough
-    if (nv.maxLen) for (const k of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
-      const ht = atX(la.pl, (nv.ua + k * 0.01) * Lw); if (!ht) continue;
-      const bt = place(la, ht.p, ht.d, lb, ((nv.ub === undefined ? nv.ua : nv.ub) + k * 0.01) * Lw, reach, Object.assign({ dry: true }, opts));
-      if (bt && vlen(sub(bt.p, ht.p)) <= opts.maxLen) { du = k * 0.01; break; }
+    const ub = nv.ub === undefined ? nv.ua : nv.ub, reach = (nv.reach === undefined ? 0.05 : nv.reach) * Lw;
+    const bow = nv.maxLen && nv.bow === undefined ? randRange(-0.03, 0.03) : nv.bow;   // a capped rung resolves its bow before the slide, so the trials and the placement share it (the same single draw place would make; the trials are rng-free)
+    const opts = { sw: nv.sw || joinSw(la, lb), bow, ang: nv.ang, angT: nv.angT, maxLen: nv.maxLen && nv.maxLen * Lw };
+    let du = 0;   // nv.maxLen: when no position on lb gives a rung under the cap, the near end slides along la (SLIDE_STEP of the span a step, at most SLIDE_N steps either way, nearest first) to where the strip is narrow enough
+    if (nv.maxLen) for (let k = 0; k <= SLIDE_N * 2; k++) {
+      const d = (k & 1 ? -1 : 1) * Math.ceil(k / 2) * SLIDE_STEP;   // 0, -1, +1, -2, +2, ... steps
+      const ht = atX(la.pl, (nv.ua + d) * Lw); if (!ht) continue;
+      const bt = bestPlacement(la, ht.p, ht.d, lb, (ub + d) * Lw, reach, opts, bow);
+      if (bt && polyLen(bt.pl) <= opts.maxLen) { du = d; break; }
     }
     const h = atX(la.pl, (nv.ua + du) * Lw); if (!h) return;
-    const xb = ((nv.ub === undefined ? nv.ua : nv.ub) + du) * Lw;
+    const xb = (ub + du) * Lw;
     const p = place(la, h.p, h.d, lb, xb, reach, opts);
     if (p) { nv.pl = lastPl;   // the crossvein as drawn, on the caller's spec: namedW is keyed by lane pair, which bm-cu and dm-cu share
       const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um);
@@ -3434,7 +3443,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   const F = {   // ky breadth / Lw; len span factor; sc / r1 / r23 where Sc, R1, R2+3 meet the costa; fork where Rs splits; bmcu / dmcu crossvein u;
     // cu1 CuA1's margin u past dm-cu; cu2 where CuA2 meets A1 (or the margin when cup is open); mEnd where M stops before the M1 bend;
     // m1: bend (muscid M1 bent forward), fork (nematoceran M1 / M2, m3 odds of M3), three (M1-M3 to the margin); r45 odds r4+5 closes;
-    // r4 odds R4 forks off R4+5; sepAbs: strips narrower than this fraction of the span carry no sites (the basal bundle); k site spacing / strip width; uOpen; a2 / h / bmcu odds; cupOpen: CuA2 and A1 reach the margin apart
+    // r4 odds R4 forks off R4+5; sepAbs: strips narrower than this fraction of the span carry no sites (the basal bundle); k site spacing / strip width; uOpen; a2 / h / bmcu odds; mBow M's bow range (default [-0.02, 0.02]; [-0.02, 0] bows M toward Rs so r-m stays a short rung, #10); cupOpen: CuA2 and A1 reach the margin apart
     muscid:  { ky: [0.52, 0.64], up: 0.3, len: [1.05, 1.28], sc: [0.42, 0.52], r1: [0.6, 0.72], fork: [0.5, 0.6], r23: [0.82, 0.9], bmcu: [0.33, 0.4], dmcu: [0.6, 0.7], cu1: [0.05, 0.1], cu2: [0.28, 0.36], mEnd: [0.74, 0.8],
                m1: 'bend', m3: 0, r45: 0.5, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.7, 0.8], a2: 0.4, h: 0.7, bmcuP: 0.85, mBow: [-0.02, 0], stig: ['solid', 'solid', 'stipple', 'none'] },
     nemato:  { ky: [0.47, 0.56], up: 0.35, len: [1.05, 1.25], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.52, 0.62], r23: [0.82, 0.9], bmcu: [0.34, 0.42], dmcu: [0.6, 0.7], cu1: [0.05, 0.1], cu2: [0.3, 0.4], mEnd: [0.7, 0.76],

@@ -241,8 +241,8 @@ angle; they carry `maxLen` 0.05 of the span, so `placeNamed` prefers any in-band
 it and, when none exists, slides the near end along its lane (0.01 steps, at most ±0.04) to where
 the strip is narrow enough; and M bows toward Rs (`mBow` −0.02..0) in muscids, syrphids and
 tabanids, so the Rs–M strip never splays wide at r-m. `tests/check.js` (`dipRungs`) asserts every
-muscid / syrphid / tabanid plate at most 6% of the span on both, and bm-cu on every tabanid and
-asilid.
+muscid / syrphid / tabanid plate has r-m and at most 6% of the span on both (measured on the bowed path,
+the same measure as `maxLen`), and bm-cu on every tabanid and asilid, on both passes.
 
 Family parameters (ky = outline scale: breadth ≈ 0.7·ky·span, split `up` / 1 − `up` between the costal and hind
 sides, so the W/L above is the measure to compare with a reference, not ky; k = site spacing / strip width; sepAbs = narrowest strip,
@@ -579,14 +579,17 @@ the references, seeds listed per order) and what it changed:
   no dangling ends, M and Cu fade past `uOpen`, ichneumonid areolet now a small cell under the
   stigma, stems O / branches D / crossveins F. Pass.
 - Diptera (dip-eristalis, dip-asilid-photo; fly 9, 15, 29, 75): br, bm, dm, cup close; r-m and dm-cu
-  oblique; the muscid M1 bend reads as a curve. No change needed. Pass.
+  oblique; the muscid M1 bend reads as a curve. No change needed. Pass. (Superseded by #10: r-m and
+  bm-cu are now short near-square rungs, not obliques; see the Diptera section.)
 - Diptera, second audit (dip-eristalis, dip-asilid-photo, dip-limonia; fly 9, 15, 29, 75, cranefly 6,
   10) after moving to `growVeins` v2: lanes smooth, every crossvein junction 105–140° over 3000 seeds
   (`wingStats`), br / bm / cup / dm closed, r4+5 closed by a long oblique M1 in syrphids and half the
   muscids, the muscid elbow a real bend to the margin behind the apex, CuA1 turning down at dm-cu's
   foot, no rungs in the basal bundle (`minSepAbs`), tipulids with the Limonia plan plus a few extra
   cells, asilid and tabanid with R4 and M1–M3 to the margin. Named crossveins drop on under 1% of
-  wings (7% of tabanids, the broad wing, lose bm-cu). Pass.
+  wings (7% of tabanids, the broad wing, lose bm-cu). Pass. (Superseded by #10: tabanids and asilids
+  always draw bm-cu, and r-m / bm-cu are short rungs at most 6% of the span on muscids, syrphids and
+  tabanids, asserted per plate by `dipRungs`.)
 - Neuroptera (neu-nothochrysa; seeds 1, 16, 22): gradates read as one oblique line; now true zigzags;
   a branch could double back to the costal side at the apex (fixed); twigs now end on the outline. Pass.
 - Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass. (Against `eph-mayfly-1956`, since found to be a stonefly, #20; superseded by the re-derived section and #59.)
