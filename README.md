@@ -194,13 +194,15 @@ margin-terminating vein ends on an outline sample.
   (Sc+R into the stigma, R1 closing the marginal cell, Rs forking off Sc+R, an
   M+Cu stem forking at the basal vein, A) carry the family's named crossveins
   (basal vein, r-m submarginals or the ichneumonid areolet, recurrents, cu-a)
-  plus crossveins grown from inhibitory sites along each strip, every one
+  plus crossveins grown from inhibitory sites along the other strips (in apids,
+  vespids and ichneumonids the submarginal and discoidal bands hold only their
+  named cells; sawflies grow sites in every band), every one
   clipped to its two lanes and slid until it meets them at 105–140°, so no
   junction is square and nothing dangles; the apex past the last cell is open
   membrane with M and Cu fading into it. Apids three submarginals and a heavy
   basal vein, vespids a long narrow first discoidal, ichneumonids a big stigma
-  and a tiny areolet, sawflies dense with closed anal cells, chalcids bare;
-  hindwing grown the same way, with hamuli.
+  and a tiny areolet just past the stigma, sawflies dense with closed anal
+  cells, chalcids bare; hindwing grown the same way, with hamuli.
 - **Crane fly** — the same growth with the Limonia plan: narrow stalked wing, Sc
   and R1 running far out under the costa, a late Rs fork, forked M with M3, cup
   open (CuA2, A1 and A2 each to the hind margin), denser inhibitory sites so a

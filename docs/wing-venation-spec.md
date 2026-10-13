@@ -68,9 +68,10 @@ Observed:
 - The apical half has three longitudinals under R1: Rs (bounds marginal/submarginal cells),
   M (bounds submarginal/discoidal), Cu (bounds discoidal/cubital), joined by r-m and m-cu
   crossveins. Apid: three submarginals, two discoidals, two cubitals; vespid: one long narrow
-  first discoidal; ichneumonid: tiny **areolet** under the stigma, long marginal cell; sawfly:
-  three of everything plus closed anal cells; chalcid: no cells, a thick submarginal vein into
-  a small stigma with a hooked stigmal vein.
+  first discoidal; ichneumonid: tiny **areolet** just past the stigma's distal end (about half
+  the stigma's length on the diagram), long marginal cell; sawfly: three of everything plus
+  closed anal cells; chalcid: no cells, a thick submarginal vein into a small stigma with a
+  hooked stigmal vein.
 - **M+Cu** leave the base as one stem that splits at the **basal vein** (bee: strong, almost
   vertical). The large basal "R" cell is the wedge between Sc+R and M+Cu.
 - M and Cu end as stubs 10–20% of span beyond their last cell, fading into open membrane.
@@ -79,8 +80,22 @@ Observed:
 
 Rules: grown (see *Growth, not templates*). Lanes Sc+R (pinned to the stigma), R1 (from the
 stigma to the marginal node), Rs, M+Cu (deterministic fork at the basal vein), A, optional second
-cubital and anal lanes; family sets join density (sawfly dense, apid mid, vespid sparse, chalcid
-none), fork count (sawfly 1–3), `uOpen` (0.72–0.9), stub odds; stigma lens per R5.
+cubital and anal lanes; family sets the site-grown join density where sites still grow (sawfly dense
+everywhere; apid, vespid and ichneumonid only outside the submarginal and discoidal bands, which hold
+just their named cells, below; chalcid none), fork count (sawfly 1–3, the named-cell families 0),
+`uOpen` (0.72–0.9), stub odds; stigma lens per R5.
+
+Named cells (#11): in apids, vespids and ichneumonids the Rs–M band (submarginals) and the M–Cu
+band (discoidals) carry no site ladder and no random fork, only the named crossveins. Apid and
+vespid: three r-m, each given as [u on Rs, u on M] with the M end distal (the lean of hym-apis,
+SM2 narrowing toward Rs), so three closed submarginals, plus 1m-cu and 2m-cu for two discoidals.
+Ichneumonid: Rs sags toward M past the stigma and two r-m converging on Rs close the areolet just
+past the stigma's end (~0.05 of the span; hym-ichneumonidae-diagram), the band's only closed cell;
+the stigma is always solid (hym-ichneumon). Each r-m's far end slides only between the midpoints to
+its neighbours', so two r-m never cross. Vespid and ichneumonid forewing breadth 0.32–0.38 of the
+span (W/L ~0.34, against 0.22 / 0.25 before; hym-vespula, the ichneumonid diagram ~0.33). Every
+hindwing longitudinal reaches the margin. `wingStats.submarginal` / `.discoidal` / `.areolet` /
+`.hStubs` expose the plan and `tests/check.js` (hymCells) asserts it. Sawfly keeps its ladder.
 
 ### Odonata (ref: odo-dragonfly, odo-anax-ris1921, odo-damsel-ris1921)
 
