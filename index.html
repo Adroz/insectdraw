@@ -2755,6 +2755,7 @@ function layoutBody(C) {
 }
 
 // ---------- abdomen + details ----------
+const ABD_PITCH_PX = 3;   // #15: plate px between neighbouring marks inside an abdominal segment, and the abdomen's hatch pitch floor, at plate scale
 function drawAbdomen(C) {
   const { L, P, B, abdomen } = C;
   L.abdomen.push(pathEl(abdomen.path, SW.O, '#fff'));
@@ -2762,47 +2763,101 @@ function drawAbdomen(C) {
     const A = B.abd, n = A.seg, startT = A.startT, bow = A.bow;
     const ys = [];
     for (let i = 0; i <= n; i++) ys.push(abdomen.yAt(startT + (1 - startT) * i / n));
-    for (let i = 1; i < n; i++) {   // segment boundaries, optionally doubled (intersegmental membrane)
+    // Segment lines, optionally doubled (intersegmental membrane). Each segment keeps the lines drawn at its ends as
+    // marks ({ y at the rim, mid: the bowed line's y on the midline }) for the markings below.
+    const midAt = (y, hwBow) => y + 0.75 * hwBow * bow;   // a bowLine's midpoint (both control points sit at y + bow)
+    const edges = []; for (let i = 0; i < n; i++) edges.push([]);
+    for (let i = 1; i < n; i++) {
       const y = ys[i], hw = abdomen.hwAt(y);
       if (hw < 2) continue;
       L.abdomen.push(bowLine(y, hw - 0.5, hw * bow, A.sw));
-      if (A.double && hw > 5) L.abdomen.push(bowLine(y + 1.6, hw - 1.5, hw * bow, SW.F));
+      const e = { y, mid: midAt(y, hw), k: 'edge' }; edges[i - 1].push(e); edges[i].push(e);
+      if (A.double && hw > 5) { L.abdomen.push(bowLine(y + 1.6, hw - 1.5, hw * bow, SW.F)); edges[i].push({ y: y + 1.6, mid: midAt(y + 1.6, hw), k: 'edge' }); }
     }
-    const hatchSeg = (y0, y1, spacing, inset) => { spacing = floorPitch(spacing); for (let y = y0 + 3; y < y1 - 2; y += spacing) { const hw = abdomen.hwAt(y) - inset; if (hw > 2) L.abdomen.push(bowLine(y, hw, hw * bow, SW.F)); } };
-    // markings family
-    for (let i = 0; i < n; i++) {
-      const y0 = ys[i], y1 = ys[i + 1], segH = y1 - y0;
-      const banded = A.mark === 'banded' && i % A.band.period === A.band.phase;
-      const dark = A.mark === 'tipdark' && i >= n - A.tipDark;
-      if (banded || dark) hatchSeg(y0, y1, banded ? A.band.spacing : 2.6, 2);
-      else if (A.mark !== 'hairy' || segH > 10) {   // plain: fine curves parallel to the boundary (one only under stripes, or they read as a grid)
-        const k = Math.min(A.mark === 'striped' ? 1 : 3, Math.floor(segH / 4)), sp = floorPitch(3);
-        for (let j = 1; j <= k; j++) { const y = y1 - j * sp, hw = abdomen.hwAt(y) - 3; if (hw > 3 && y > y0 + 1) L.abdomen.push(bowLine(y, hw, hw * bow, SW.F)); }
+    // The markings are drawn at plate scale (#15): the genes are in body units but the plate scale runs 0.55-1.3, so one
+    // deferred element, resolved by assemblePlate once the scale is known, holds every mark inside a segment (segment
+    // lines, plain curves, the banded / tip-dark hatch, side ticks or pile) ABD_PITCH_PX plate px from its neighbours,
+    // at the rim and on the midline (the lines bow), and keeps the families apart: the ticks stop short of the plain
+    // curves, and a hatched segment draws none (they interleave at the rim into a crosshatch: the beetle's elytral apex,
+    // the damselfly's S1-S4). The spot and stripe hatch take the same pitch floor. meta.abdMarks records what was drawn
+    // for tests/check.js (abdPitch). No rng is drawn here, so nothing outside the block moves.
+    const meta = C.meta, marks = meta.abdMarks = { segs: [], pitches: [] };
+    // build(s, probe) lays the marks out at plate scale s. It runs twice: once here as the probe, at s = Infinity with
+    // the families' old overlap (no floor, ticks in every segment up to the segment end: the layout drawn before #15),
+    // only so its bb() calls give the plate fit and the abdomen's part box exactly what they were; and once by
+    // assemblePlate at the real scale, which draws (its bb() is discarded: the fit is done and every mark lies inside
+    // the outline).
+    const build = (s, probe) => {
+      const out = [], Pf = ABD_PITCH_PX / s;                 // the floor in body units
+      const fp = probe ? v => Math.max(v, pitchFloor) : floorPitch;   // floorPitch; the probe records no pitch for meta.minPitch
+      if (!probe) { marks.segs = []; marks.pitches = []; }
+      const line = (y, inset) => { const hw = abdomen.hwAt(y) - inset; return { y, hw, mid: midAt(y, hw) }; };
+      // the next line at or past y (dir +1 down, -1 up) whose midline is Pf from prev's too
+      const step = (prev, y, inset, dir) => { let c = line(y, inset); for (let g = 0; !probe && prev && prev.mid !== null && dir * (c.mid - prev.mid) < Pf && g < 400; g++) c = line(y += dir * 0.1, inset); return c; };
+      const far = (a, b) => b.y - a.y >= Pf - 1e-9 && (a.mid === null || b.mid === null || b.mid - a.mid >= Pf - 1e-9);   // a above b by the floor at the rim and on the midline
+      for (let i = 0; i < n; i++) {
+        const y0 = ys[i], y1 = ys[i + 1], segH = y1 - y0, seg = edges[i].slice();
+        const sStart = edges[i].filter(e => e.y < y0 + 2).pop() || null, sEnd = edges[i].find(e => e.y > y1 - 0.01) || null;
+        const push = (c, k) => { out.push(bowLine(c.y, c.hw, c.hw * bow, SW.F)); const m = { y: c.y, mid: c.mid, k }; seg.push(m); return m; };
+        const banded = A.mark === 'banded' && i % A.band.period === A.band.phase;
+        const dark = A.mark === 'tipdark' && i >= n - A.tipDark;
+        let firstCurve = null;
+        if (banded || dark) {   // hatched band: bowed lines across the segment
+          const sp = fp(Math.max(banded ? A.band.spacing : 2.6, Pf));
+          let prev = sStart, y = Math.max(y0 + 3, sStart ? sStart.y + Pf : -Infinity);
+          for (;;) {
+            const c = step(prev, y, 2, 1);
+            if (!(c.y < y1 - Math.max(2, Pf)) || (sEnd && !probe && !far(c, sEnd))) break;
+            if (c.hw > 2) prev = push(c, 'hatch');
+            y = c.y + sp;
+          }
+        } else if (A.mark !== 'hairy' || segH > 10) {   // plain: fine curves parallel to the boundary (one only under stripes, or they read as a grid)
+          const k = Math.min(A.mark === 'striped' ? 1 : 3, Math.floor(segH / 4)), sp = fp(Math.max(3, Pf));
+          let prev = sEnd, y = y1 - sp;
+          for (let j = 1; j <= k; j++) {
+            const c = step(prev, y, 3, -1);
+            if (!(c.y > y0 + 1) || (sStart && !probe && !far(sStart, c))) break;
+            if (c.hw > 3) prev = firstCurve = push(c, 'curve');
+            y = c.y - sp;
+          }
+        }
+        if (A.mark === 'spotted' && i % A.spot.every === 0 && i > 0 && segH > 7) {   // one hatched spot per side per segment
+          const yc = (y0 + y1) / 2, hw = abdomen.hwAt(yc), rx = Math.max(2, hw * A.spot.rx), ry = Math.min(rx, segH * 0.28);
+          if (hw * A.spot.pos + rx < hw - 1.5) {
+            const sp = fp(Math.max(2.2, Pf));
+            if (!probe) marks.pitches.push(['spot hatch', sp, 2.2]);
+            for (const sgn of [-1, 1]) {
+              const c = [sgn * hw * A.spot.pos, yc];
+              out.push(pathEl(ellipsePath(c, rx, ry, 0), SW.D, '#fff'));
+              for (let dy = -ry + Math.max(2, Pf); dy < ry - Math.max(1, Pf); dy += sp) { const w = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) * (dy / ry))) - 0.8; if (w > 0.8) out.push(lineEl([c[0] - w, c[1] + dy], [c[0] + w, c[1] + dy], SW.F)); }
+            }
+          }
+        }
+        if ((A.mark === 'hairy' || A.ticks) && (probe || !(banded || dark))) {   // side ticks (pilosity), ahead of the plain curves
+          const tk = A.mark === 'hairy' ? A.hair : A.ticks, sp = fp(Math.max(tk.spacing, Pf));
+          const yEnd = Math.min(y1 - Math.max(3, Pf), firstCurve && !probe ? firstCurve.y - Pf + 1e-9 : Infinity);
+          for (let y = Math.max(y0 + 4, sStart ? sStart.y + Pf : -Infinity); y < yEnd; y += sp) {
+            const hw = abdomen.hwAt(y);
+            if (hw > 6) { seg.push({ y, mid: null, k: 'tick' }); for (const sgn of [-1, 1]) out.push(lineEl([sgn * (hw - 1), y], [sgn * (hw - tk.len), y + 0.6], SW.F)); }
+          }
+        }
+        if (!probe) marks.segs.push(seg);
       }
-      if (A.mark === 'spotted' && i % A.spot.every === 0 && i > 0 && segH > 7) {   // one hatched spot per side per segment
-        const yc = (y0 + y1) / 2, hw = abdomen.hwAt(yc), rx = Math.max(2, hw * A.spot.rx), ry = Math.min(rx, segH * 0.28);
-        if (hw * A.spot.pos + rx < hw - 1.5) for (const sgn of [-1, 1]) {
-          const c = [sgn * hw * A.spot.pos, yc];
-          L.abdomen.push(pathEl(ellipsePath(c, rx, ry, 0), SW.D, '#fff'));
-          for (let dy = -ry + 2, sp = floorPitch(2.2); dy < ry - 1; dy += sp) { const w = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) * (dy / ry))) - 0.8; if (w > 0.8) L.abdomen.push(lineEl([c[0] - w, c[1] + dy], [c[0] + w, c[1] + dy], SW.F)); }
+      if (A.mark === 'striped') {   // longitudinal dark lines following the profile: a median line, or one / two pairs; hatched only on broad abdomens
+        const yA = ys[0] + 3, yB = ys[n] - 4, wide = abdomen.hwAt(abdomen.yAt(A.peak)) > 18, off = Math.max(2.2, Pf);
+        const ks = A.stripe.n === 1 ? [0] : A.stripe.n === 2 ? [A.stripe.k] : wide ? [A.stripe.k, A.stripe.k * 0.5] : [A.stripe.k];
+        for (const k of ks) for (const sgn of (k === 0 ? [1] : [-1, 1])) {
+          const pts = []; for (let y = yA; y <= yB; y += 6) pts.push([sgn * k * (abdomen.hwAt(y) - 2), y]);
+          if (pts.length > 2) {
+            out.push(pathEl(smoothPath(pts, false), SW.D));
+            if (A.stripe.hatch && wide) { const sp = fp(off); if (!probe) marks.pitches.push(['stripe hatch', sp, 2.2]); out.push(pathEl(smoothPath(pts.map(p => [p[0] + sgn * sp, p[1]]), false), SW.F)); }
+          }
         }
       }
-      if (A.mark === 'hairy' || A.ticks) {   // side ticks (pilosity)
-        const tk = A.mark === 'hairy' ? A.hair : A.ticks;
-        for (let y = y0 + 4, sp = floorPitch(tk.spacing); y < y1 - 3; y += sp) {
-          const hw = abdomen.hwAt(y);
-          if (hw > 6) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * (hw - 1), y], [sgn * (hw - tk.len), y + 0.6], SW.F));
-        }
-      }
-    }
-    if (A.mark === 'striped') {   // longitudinal dark lines following the profile: a median line, or one / two pairs; hatched only on broad abdomens
-      const yA = ys[0] + 3, yB = ys[n] - 4, wide = abdomen.hwAt(abdomen.yAt(A.peak)) > 18;
-      const ks = A.stripe.n === 1 ? [0] : A.stripe.n === 2 ? [A.stripe.k] : wide ? [A.stripe.k, A.stripe.k * 0.5] : [A.stripe.k];
-      for (const k of ks) for (const sgn of (k === 0 ? [1] : [-1, 1])) {
-        const pts = []; for (let y = yA; y <= yB; y += 6) pts.push([sgn * k * (abdomen.hwAt(y) - 2), y]);
-        if (pts.length > 2) { L.abdomen.push(pathEl(smoothPath(pts, false), SW.D)); if (A.stripe.hatch && wide) L.abdomen.push(pathEl(smoothPath(pts.map(p => [p[0] + sgn * 2.2, p[1]]), false), SW.F)); }
-      }
-    }
+      return out;
+    };
+    build(Infinity, true);
+    L.abdomen.push(s => { const keep = bbox; bbox = Object.assign({}, keep); const out = build(s, false); bbox = keep; return out; });
     if (A.keel && !(A.mark === 'striped' && A.stripe.n === 1)) L.abdomen.push(lineEl([0, abdomen.yTop + 4], [0, abdomen.yBot - 6], SW.F));   // dorsal keel / mid line
     // terminalia
     const tipY = abdomen.yBot;
@@ -4563,11 +4618,11 @@ function assemblePlate(C) {
   const device = replay ? { px: dev.px, strokeFloor: dev.strokeFloor, pitchFloor: dev.pitchFloor } : null;
   const strokeFloor = device ? device.strokeFloor : 0;
   meta.device = device;
-  meta.minPitch = pitchMin < Infinity ? pitchMin * s : null;
   meta.weights = { H: Math.max(SW_PX.H, strokeFloor), O: Math.max(SW_PX.O, strokeFloor), D: Math.max(SW_PX.D, strokeFloor), F: Math.max(SW_PX.F, strokeFloor) };
-  // deferred elements (growVeins' lane floor, #14) resolve now that the scale and the weights are known; they add nothing
-  // to the bbox, which already holds every point they may draw
+  // deferred elements (growVeins' lane floor, #14; the abdomen's markings, #15) resolve now that the scale and the weights
+  // are known; they add nothing to the bbox, which already holds every point they may draw
   for (const k in L) if (Array.isArray(L[k]) && L[k].some(e => typeof e === 'function')) L[k] = L[k].flatMap(e => typeof e === 'function' ? e(s, meta.weights) : [e]);
+  meta.minPitch = pitchMin < Infinity ? pitchMin * s : null;   // after the deferred elements: the abdomen's pitches go through floorPitch there
   meta.wingLanes = laneFrames;
   // legs sprout from under the body; wings are dorsal, so they lie over the body with
   // their roots on the thorax, and the tegulae cover the roots
