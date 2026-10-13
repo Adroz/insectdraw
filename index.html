@@ -813,8 +813,9 @@ function legJoints(attach, spec) {
   pts.push(add(p, mul(dirv(a), cl * 0.8)));
   return pts;
 }
+// distance from p to the segment uv
+function ptSeg(p, u, v) { const w = sub(v, u), l2 = w[0] * w[0] + w[1] * w[1]; const t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * w[0] + (p[1] - u[1]) * w[1]) / l2)) : 0; return vlen(sub(p, add(u, mul(w, t)))); }
 function segDist(a, b, c, d) {   // shortest distance between segments ab and cd
-  const ptSeg = (p, u, v) => { const w = sub(v, u), l2 = w[0] * w[0] + w[1] * w[1]; const t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * w[0] + (p[1] - u[1]) * w[1]) / l2)) : 0; return vlen(sub(p, add(u, mul(w, t)))); };
   const cross = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
   const d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
   if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) return 0;
@@ -972,11 +973,14 @@ function lepParallel(wing, deg, spacing) {
 // walk each line through the wing polygon, sampling tone(p); cls(level, odd) -> 0 skip, 1 fine stroke,
 // 2 detail stroke, 3 stipple (a row of dots along the line, staggered on alternate lines).
 // Runs of equal class become straight segments; all segments of a class are packed into one path.
-// clear(p), optional: true where the hatch keeps clear (the band beside the forewing's edge, where its outline and
-// fringe already lie over the hindwing, #13): no strokes there, and the stipple still draws each dot's jitter but
-// does not emit it, so the rng stream is the same as without the clearance.
-function lepHatch(wing, lines, tone, cls, step, mask, clear) {
-  const poly = wing.localPoly, D = ['', '', '', ''];
+// clip, optional, keeps the hatch off the other wing and the line art (#13): clip.mask, a closed outline the hatch is
+// hidden under (the forewing over the hindwing); clip.clear(p), true where no mark is drawn (right beside a line, and
+// the band beside the forewing's edge, where its outline and fringe already lie over the hindwing); clip.along(p, d),
+// true where a stroke heading d would run alongside a line already drawn there (a vein, a band edge, the outline), so
+// the two would fuse into one bar.
+// A cleared stipple dot still draws its jitter, so the rng stream is the same as without the clearance.
+function lepHatch(wing, lines, tone, cls, step, clip) {
+  const poly = wing.localPoly, D = ['', '', '', ''], mask = clip && clip.mask, clear = clip && clip.clear, along = clip && clip.along;
   const seg = (p, d, t0, t1, c, odd) => {
     if (c === 3) {   // stipple (its dots draw rng jitter, so the caller closes the hatch with rngSync)
       const step = floorPitch(3);
@@ -1011,7 +1015,7 @@ function lepHatch(wing, lines, tone, cls, step, mask, clear) {
         const end = t >= t1, tt = end ? t1 : t;
         const q = [p[0] + d[0] * tt, p[1] + d[1] * tt];
         let c = end ? 0 : cls(tone(q), ln.odd);
-        if (c && c !== 3 && clear && clear(q)) c = 0;
+        if (c && c !== 3 && ((clear && clear(q)) || (along && along(q, d)))) c = 0;
         if (c !== cur) { if (cur) seg(p, d, start, tt, cur, ln.odd); cur = c; start = tt; }
         if (end) break;
       }
@@ -1023,17 +1027,26 @@ function lepHatch(wing, lines, tone, cls, step, mask, clear) {
   if (D[3]) els.push(pathEl(D[3], SW.D));
   return els;
 }
-// true within r of the closed outline poly (any side): the band where another wing's outline and fringe already lie
-const LEP_CLEAR = 4;   // body units: the longest fringe hair (3.2) plus a gap
-function lepClear(poly, r) {
-  let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
-  for (const p of poly) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
-  return q => {
-    if (q[0] < x0 - r || q[0] > x1 + r || q[1] < y0 - r || q[1] > y1 + r) return false;
-    for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
-      const a = poly[j], b = poly[i], wx = b[0] - a[0], wy = b[1] - a[1], l2 = wx * wx + wy * wy;
-      const t = l2 ? Math.max(0, Math.min(1, ((q[0] - a[0]) * wx + (q[1] - a[1]) * wy) / l2)) : 0;
-      if (Math.hypot(q[0] - a[0] - wx * t, q[1] - a[1] - wy * t) < r) return true;
+// the scale fringe's hair lengths (body units): a plain hair, and a dark cell's hair on a chequered fringe
+const LEP_HAIR = 2.5, LEP_HAIR_DARK = 3.2;
+const LEP_CLEAR = LEP_HAIR_DARK + 0.8;   // body units: the band beside another wing's edge kept clear, its longest hair plus a gap
+const LEP_HUG = 1.0;     // body units: the hatch's gap either side of a vein, band edge or cross-line (the engraver's hatch stops short of the line)
+const LEP_HUG_X = 2.0;   // body units: the cross set's gap either side of a vein (where veins converge, a lattice between them fuses)
+const LEP_ALONG = 0.9;   // a hatch stroke within ~25 degrees of a line's heading (|cos| >= this) runs alongside it
+// near(q, d): true within r of one of the polylines (closed: each closes back on its first point; any side). With
+// `along` (a cosine), only where the nearby segment heads within acos(along) of d, so a stroke that crosses a vein
+// keeps its ink and only one that runs alongside it is cleared
+function lepNear(polys, r, closed, along) {
+  const segs = [];
+  for (const pl of polys) for (let i = closed ? 0 : 1, j = closed ? pl.length - 1 : 0; i < pl.length; j = i++) {
+    const a = pl[j], b = pl[i], l = vlen(sub(b, a));
+    if (l > 1e-9) segs.push({ a, b, d: [(b[0] - a[0]) / l, (b[1] - a[1]) / l], x0: Math.min(a[0], b[0]) - r, x1: Math.max(a[0], b[0]) + r, y0: Math.min(a[1], b[1]) - r, y1: Math.max(a[1], b[1]) + r });
+  }
+  return (q, d) => {
+    for (const s of segs) {
+      if (q[0] < s.x0 || q[0] > s.x1 || q[1] < s.y0 || q[1] > s.y1) continue;
+      if (along && Math.abs(s.d[0] * d[0] + s.d[1] * d[1]) < along) continue;
+      if (ptSeg(q, s.a, s.b) < r) return true;
     }
     return false;
   };
@@ -1053,8 +1066,8 @@ function lepFringe(wing, S, filter, chequered) {
         const out = dot(n, sub(p, [cx, cy])) > 0 ? n : mul(n, -1);
         const dir = norm(add(out, mul(tn, 0.3)));
         const dark = chequered && S.cellAt(Math.atan2(p[1] - S.O[1], p[0] - S.O[0])) % 2 === 1;
-        els.push(lineEl(wing.T(p), wing.T(add(p, mul(dir, dark ? 3.2 : 2.5))), SW.F));
-        if (dark && step / 2 >= pitchFloor) { const q = add(p, mul(tn, step / 2)); els.push(lineEl(wing.T(q), wing.T(add(q, mul(dir, 3.2))), SW.F)); }   // the doubled hair only where its half step clears the device floor
+        els.push(lineEl(wing.T(p), wing.T(add(p, mul(dir, dark ? LEP_HAIR_DARK : LEP_HAIR))), SW.F));
+        if (dark && step / 2 >= pitchFloor) { const q = add(p, mul(tn, step / 2)); els.push(lineEl(wing.T(q), wing.T(add(q, mul(dir, LEP_HAIR_DARK))), SW.F)); }   // the doubled hair only where its half step clears the device floor
       }
       acc += step;
     }
@@ -3258,9 +3271,11 @@ function wingsLepidoptera(C) {   // (type === 'moth')
   const fB = [W * 0.01, H * 0.02], fU = [W * G.fU[0], -H * G.fU[1]], fD = [W * G.fD[0], H * G.fD[1]];
   // with a tail, the margin targets are sampled from the outline without the tail lobe (its dense samples would otherwise
   // pull several veins into it) and exactly one vein runs to the tail tip, as on lep-papilio
-  // the tail lobe (hindwing local) from `from` x W along it: the vein targets drop it from 0.02, the fringe from the root back
+  // the tail lobe (hindwing local) from `from` x W along it (negative: behind its root). The vein targets drop it from
+  // TAIL_VEINS_FROM; the hindwing hatch and fringe keep clear of it from TAIL_CLEAR_FROM, where its two outlines meet the margin
+  const TAIL_VEINS_FROM = 0.02, TAIL_CLEAR_FROM = -0.03;
   const inTail = (p, from) => { if (!G.tail) return false; const d = sub(p, tailRoot); const along = dot(d, tailDir), across = Math.abs(dot(d, perp(tailDir))); return along > W * from && across < W * 0.05; };
-  const hTail = G.tail ? { poly: hind.localPoly.filter(p => !inTail(p, 0.02)), tip: nearestOutlinePoint(hind.localPoly, tailTip) } : null;
+  const hTail = G.tail ? { poly: hind.localPoly.filter(p => !inTail(p, TAIL_VEINS_FROM)), tip: nearestOutlinePoint(hind.localPoly, tailTip) } : null;
   const hVeins = lepVeins(hind, hB, hU, hD, G.nRh, W * 0.42 * hk, W * 0.28 * hk, W * 0.45 * hk, 1, 0.05, true, hTail);
   const nR = G.nR;
   const fVeins = lepVeins(fore, fB, fU, fD, nR, W * G.scX, W * G.aX, W * Math.min(0.62, G.tornusX - 0.06), G.stalk, G.stemL, false);
@@ -3440,34 +3455,49 @@ function wingsLepidoptera(C) {   // (type === 'moth')
   }
   // draw order: white outline -> hatching (fan with the veins, cross set parallel to the margin for the darks)
   // -> band edges -> costa + veins -> cross-lines/stigmata outlines -> fringe
-  const nearHind = lepClear(hind.localPoly, LEP_CLEAR), overHind = q => hind.inside(q) || nearHind(q);   // hindwing local
+  const nearHind = lepNear([hind.localPoly], LEP_CLEAR, true), overHind = q => hind.inside(q) || nearHind(q);   // hindwing local
   function drawLepWing(wing, S, veins, o, hindW) {
     const toneAt = lepTone(S, o.ground, o.elems, o.spots), mask = hindW ? fore.localPoly.map(p => hind.inv(fore.T(p))) : null;   // forewing outline in hindwing-local coordinates
-    const tone = meta.lepTone ||= [];   // the tone layers (white outline, hatch, fringe) on their own, for the density gate in tests/check.js (#13)
-    const push = els => { L.wings.push(...els); tone.push(...els); };
-    push([pathEl(wing.path, SW.O, '#fff')]);
+    // the wings as the density gate in tests/check.js measures them (#13): meta.lepInk, every element in draw order, and
+    // meta.lepArt, the line art alone (outline, costa, veins, band edges, cross-lines, spot rings), without the tone
+    // layers (hatch, stipple, fringe)
+    const ink = meta.lepInk ||= [], lineArt = meta.lepArt ||= [];
+    const art = els => { L.wings.push(...els); ink.push(...els); lineArt.push(...els); };
+    const tone = els => { L.wings.push(...els); ink.push(...els); };
+    art([pathEl(wing.path, SW.O, '#fff')]);
     // light = stipple or fine lines, mid = fine lines, dark = heavier lines. Where the cross set lies over the fan (the
-    // darks) the fan drops every other line, so the two families together stay under ~45% ink in any 9 x 9 px window
-    // at 600 px: the tone deepens by the cross set's spacing, not by stacking a second full family (#13)
+    // darks) the fan drops every other line, so the tone deepens by the cross set's hatch pitch, not by stacking a
+    // second full family: the darkest 9 x 9 px window of the tone layers alone at 600 px is typically 0.40-0.50 ink, not
+    // a guaranteed bound; the lepInk gate in tests/check.js holds what reaches the panel (#13)
     const clsFan = (lv, odd) => lv <= 0 ? 0 : lv === 1 ? (Q.hatch.stipple ? 3 : 1) : lv === 2 ? 1 : odd ? 0 : 2;
     const clsX = lv => lv < 3 ? 0 : lv === 3 ? 1 : 2;                                        // cross-hatch only in the darks
     // the hindwing hatch keeps LEP_CLEAR clear of the forewing's edge, where the forewing outline and fringe lie over it,
     // of the mirror line, where the two hindwings' inner margins meet over the abdomen, and of the tail's root, where the
-    // tail's two outlines meet the margin (#13)
-    const nearFore = mask ? lepClear(mask, LEP_CLEAR) : null;
-    const clear = mask ? p => nearFore(p) || wing.T(p)[0] < LEP_CLEAR || inTail(p, -0.03) : null;
-    push(lepHatch(wing, lepFan(wing, [hindW ? Q.hatch.focusH : Q.hatch.focusF, H * 0.05], Q.hatch.spacing), toneAt, clsFan, 1.2, mask, clear));
-    push(lepHatch(wing, lepParallel(wing, hindW ? Q.hatch.crossH : Q.hatch.crossF, Q.hatch.xSpacing), toneAt, clsX, 1.2, mask, clear));
+    // tail's two outlines meet the margin. On both wings the hatch stops LEP_HUG short of the line art (costa, veins,
+    // band edges, cross-lines), and a stroke that would run alongside a line or the outline within half a hatch pitch is
+    // dropped: the line stands in for it, where the two would otherwise fuse into a bar (#13)
+    const nearFore = mask ? lepNear([mask], LEP_CLEAR, true) : null;
+    const costa = hindW ? [] : [leadingEdge(wing, 0, W * 0.9)], drawn = [...costa, ...veins, ...o.fine, ...o.det];
+    const hug = lepNear(drawn, LEP_HUG, false);
+    const off = mask ? p => nearFore(p) || wing.T(p)[0] < LEP_CLEAR || inTail(p, TAIL_CLEAR_FROM) : () => false;
+    const clear = p => hug(p) || off(p);
+    const along = lepNear([...drawn, [...wing.localPoly, wing.localPoly[0]]], Q.hatch.spacing / 2, false, LEP_ALONG);
+    // the cross set stops LEP_HUG_X short of the veins, and the costal cell (a narrow strip between the heavy costa and
+    // Sc / R1) takes the fan, never the cross set
+    const nearCosta = lepNear(costa, LEP_CLEAR, false), hugX = lepNear(veins, LEP_HUG_X, false);
+    tone(lepHatch(wing, lepFan(wing, [hindW ? Q.hatch.focusH : Q.hatch.focusF, H * 0.05], Q.hatch.spacing), toneAt, clsFan, 1.2, { mask, clear, along }));
+    tone(lepHatch(wing, lepParallel(wing, hindW ? Q.hatch.crossH : Q.hatch.crossF, Q.hatch.xSpacing), toneAt, clsX, 1.2, { mask, clear: p => clear(p) || nearCosta(p) || hugX(p), along }));
     rngSync();   // the stipple hatch draws one jitter per dot and a device plate has fewer rows
-    for (const pl of o.fine) L.wings.push(pathEl(smoothPath(pl.map(wing.T), false, 1), SW.F));
-    if (!hindW) L.wings.push(...costaEls(wing, 0, W * 0.9));
-    for (const v of veins) L.wings.push(emitLocalPolyline(wing, v, v.sw || SW.D));
-    for (const pl of o.det) L.wings.push(pathEl(smoothPath(pl.map(wing.T), false, 1), SW.D));
-    L.wings.push(...o.after);
+    art(o.fine.map(pl => pathEl(smoothPath(pl.map(wing.T), false, 1), SW.F)));
+    if (!hindW) art(costaEls(wing, 0, W * 0.9));
+    art(veins.map(v => emitLocalPolyline(wing, v, v.sw || SW.D)));
+    art(o.det.map(pl => pathEl(smoothPath(pl.map(wing.T), false, 1), SW.D)));
+    art(o.after);
     const a0 = S.bounds[0] + 0.3 * (S.bounds[1] - S.bounds[0]);
     // no hindwing fringe on a tail (its two outlines are already a dark stroke at 600 px) nor beside the forewing's
-    // edge, where the forewing's outline lies; no forewing fringe over the hindwing or within LEP_CLEAR of its edge (#13)
-    push(lepFringe(wing, S, p => p[0] > W * 0.08 && Math.atan2(p[1] - S.O[1], p[0] - S.O[0]) > a0 && (hindW ? !clear(p) : !overHind(hind.inv(fore.T(p)))), o.chequered));
+    // edge, where the forewing's outline lies; no forewing fringe over the hindwing or within LEP_CLEAR of its edge, nor
+    // along the costa, where the heavy costa, Sc and R1 already crowd (#13)
+    tone(lepFringe(wing, S, p => p[0] > W * 0.08 && Math.atan2(p[1] - S.O[1], p[0] - S.O[0]) > a0 && (hindW ? !off(p) : !overHind(hind.inv(fore.T(p))) && !nearCosta(p)), o.chequered));
   }
   drawLepWing(hind, SH, hVeins, lepPattern(SH, hind, true), true);
   drawLepWing(fore, SF, fVeins, lepPattern(SF, fore, false), false);
@@ -4284,9 +4314,10 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
 function assemblePlate(C) {
   const { seed, dev, replay, type, L, meta, P, B } = C;
   meta.layers = L;
-  const mirrored = (k, pairs) => '<g>' + L[k].join('') + '</g><g>' + (pairs   // pairs: optional per-pair rotation about a pivot applied before the mirror
+  const mirrorEls = (els, pairs) => '<g>' + els.join('') + '</g><g>' + (pairs   // pairs: optional per-pair rotation about a pivot applied before the mirror
     ? pairs.map(pr => '<g transform="scale(-1,1) rotate(' + fmt(pr.skew) + ' ' + fmt(pr.pivot[0]) + ' ' + fmt(pr.pivot[1]) + ')">' + pr.els.join('') + '</g>').join('')
-    : '<g transform="scale(-1,1)">' + L[k].join('') + '</g>') + '</g>';
+    : '<g transform="scale(-1,1)">' + els.join('') + '</g>') + '</g>';
+  const mirrored = (k, pairs) => mirrorEls(L[k], pairs);
   const single = k => '<g>' + L[k].join('') + '</g>';
   // legs sprout from under the body; wings are dorsal, so they lie over the body with
   // their roots on the thorax, and the tegulae cover the roots
@@ -4329,12 +4360,15 @@ function assemblePlate(C) {
     (subtitle ? '<text x="300" y="587" text-anchor="middle" font-family="Georgia, \'Times New Roman\', serif" font-size="11" font-variant="small-caps" letter-spacing="1.5" fill="#000">' +
     esc(nm.common) + '</text>' : '');
 
-  let svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">' +
+  const head = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 600" width="600" height="600">' +
     '<rect width="600" height="600" fill="#fff"/>' +
-    '<g transform="translate(' + fmt(tx) + ' ' + fmt(ty) + ') scale(' + (Math.round(s * 1000) / 1000) + ')" stroke="#000" stroke-linecap="round" stroke-linejoin="round" fill="none">' +
-    order.join('') + '</g>' + caption + '</svg>';
+    '<g transform="translate(' + fmt(tx) + ' ' + fmt(ty) + ') scale(' + (Math.round(s * 1000) / 1000) + ')" stroke="#000" stroke-linecap="round" stroke-linejoin="round" fill="none">';
   const sw = v => String(Math.round(v / s * 1000) / 1000);
-  svg = svg.replace(/SW_H/g, sw(meta.weights.H)).replace(/SW_O/g, sw(meta.weights.O)).replace(/SW_D/g, sw(meta.weights.D)).replace(/SW_F/g, sw(meta.weights.F));
+  const tokens = t => t.replace(/SW_H/g, sw(meta.weights.H)).replace(/SW_O/g, sw(meta.weights.O)).replace(/SW_D/g, sw(meta.weights.D)).replace(/SW_F/g, sw(meta.weights.F));
+  const svg = tokens(head + order.join('') + '</g>' + caption + '</svg>');
+  // a lepidopteran plate's wings alone (meta.lepInk) and their line art alone (meta.lepArt), placed, weighted and
+  // mirrored exactly as on the plate, for the density gate in tests/check.js (#13)
+  if (meta.lepInk) { meta.lepInkSvg = tokens(head + mirrorEls(meta.lepInk) + '</g></svg>'); meta.lepArtSvg = tokens(head + mirrorEls(meta.lepArt) + '</g></svg>'); }
   return { svg, meta };
 }
 

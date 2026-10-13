@@ -62,10 +62,13 @@ contract for changes.
   filters or `url()` references in the SVG. `tests/check.js` fails on any of these.
 - Minimum stroke 0.5 px after the plate scale; use the `SW.H/O/D/F` tokens, never literal widths.
 - Hatching spacing never below ~1.8 px or e-ink fills in.
-- Dark tones come from spacing, never from stacking full hatch families: a lepidopteran plate's tone layers
-  (`meta.lepTone`: white outline, fan and cross hatch, stipple, fringe) stay under 55% ink in every 9×9 px window at
-  600 px (`lepInk` in `tests/check.js` rasterises every lep plate, #13). Where the cross set lies over the fan the fan
-  drops every other line; the hindwing hatch and fringe keep `LEP_CLEAR` off the forewing's edge.
+- Dark tones come from hatch pitch, never from stacking full hatch families. On a lepidopteran plate no 9×9 px window
+  of the wings reaches 55% ink at 600 px with the tone layers (hatch, stipple, fringe) putting a quarter of it there
+  (`lepInk` in `tests/check.js` rasterises every lep plate's `meta.lepInkSvg` against its line art alone,
+  `meta.lepArtSvg`, #13). Where the cross set lies over the fan the fan drops every other line; the hatch stops
+  `LEP_HUG` short of the veins, band edges and cross-lines and never runs alongside one; the hindwing hatch and
+  fringe keep `LEP_CLEAR` off the forewing's edge. A window the line art makes solid on its own (the costa beside Sc
+  and R1, a vein fork) is converging line art (#67; #14 for the other orders), counted in the report, not failed.
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px
@@ -166,7 +169,8 @@ node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chrom
 node tests/perceptual.js 60 --type wasp       # perceptual uniqueness report (about a minute for every type): min thumbnail difference vs the order's floor; not a gate
 ```
 
-`tests/check.js` is a table of named checks: `CHECKS` run per seed as `(meta, svg, fail, ctx)` (`ctx.dev` is the
+`tests/check.js` is a table of named checks: `CHECKS` run per seed as `(meta, svg, fail, ctx)` (a check that returns
+a promise, as the rasterising `lepInk` does, is awaited; `ctx.dev` is the
 device plate, drawn on first use; `ctx.sampled` is true every 50th seed and gates the slow extras, which the report
 counts so a short range cannot pass them by silence), `PRE` / `POST` once per run, and `--only` selects by name. A
 new invariant is one named entry of a few lines with its failure message, never a block appended to a loop.
