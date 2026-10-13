@@ -1,6 +1,6 @@
 # Wing venation: what the references show and how we generate it
 
-Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera), all eight grown by `growVeins` v2 since the same day, and audited at 4x against the references; see Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
+Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera), all eight grown by `growVeins` v2 since the same day, and audited at 4x against the references, except Ephemeroptera, whose audit was against a stonefly; its rules were re-derived from a real mayfly on 2026-10-13 (#20) and the implementation catches up in #59. See Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
 are in `ref/` with sources and licences in `ref/README.md`. `research-lepidoptera-wings.md`
 still covers lepidopteran *patterns* (tone, hatching); this document covers veins and cells
 for every order.
@@ -324,12 +324,14 @@ hindwing on the right at twice that magnification, 0.5 mm ≈ 61 px).
 Observed (forewing unless stated):
 
 1. **Outline.** Length about 11 mm, length : greatest width about 2.5. The costa is nearly straight from
-   the base to x ≈ 630 and then turns down into a blunt, rounded apex at about (663, 171), roughly half the
-   wing's depth below the costal line; nothing projects beyond the costa's tangent (the frayed tip at
-   (640, 90) is damage, not anatomy). The hind margin runs nearly straight from the apex back to the
-   tornus, deepest at x ≈ 310 (about 45% of the length), then curves up to a narrow base. It is a
-   triangle whose apex is the rounded distal corner set about half the depth below the costa, not a dome
-   and not a point at the costal (top) corner.
+   the base to x ≈ 630, where C, Sc and R1 converge and end together at the apex, about (663, 95): the
+   front-distal (costal, top) corner. Behind the apex the outer margin is torn in this specimen (see 13):
+   the Rs and M branches at x 600–640, y 100–160 stop with no margin line, and the thread reaching about
+   (667, 170) is a loose fibre beyond the end of the intact hind margin, not a corner. Read from the
+   intact parts, the outer margin slopes back and down from the apex to the hind margin, which runs nearly
+   straight to the tornus, deepest at x ≈ 310 (about 45% of the length), then curves up to a narrow base.
+   It is a triangle with the apex at the costal corner and the outer margin sloping back to the tornus,
+   not a dome.
 2. **Costal field.** C, Sc and R1 run together, nearly parallel and close (each strip about 0.05 of the
    wing's width) from the base to the apex. Sc meets the costa just before the apex; R1 reaches the apex.
 3. **Costal crossveins thin out basally, crowd apically.** In the C–Sc strip the rungs are sparse and
@@ -371,8 +373,10 @@ Observed (forewing unless stated):
     behind it 7–10 longitudinals radiate from the base, the rear ones short and curved, with sparse
     one-row ladders between them.
 13. **Not visible here.** The base of the costa is torn in this specimen, so the costal (humeral) brace
-    cannot be checked against it; families without hindwings (Baetidae in part, Caenidae) are not shown
-    either. Both stay as unverified notes, not rules.
+    cannot be checked against it. The forewing's outer margin between the apex (663, 95) and the end of
+    the intact hind margin (about (640, 160)) is torn too, so its exact curvature and where the vein ends
+    meet it are inferred, not measured. Families without hindwings (Baetidae in part, Caenidae) are not
+    shown either. All three stay as unverified notes, not rules.
 
 Which current rules survive (the implementation is still the one written against the stonefly; the
 changes are filed as #59; outline and root items overlap #21):
@@ -382,7 +386,7 @@ changes are filed as #59; outline and root items overlap #21):
 | Ladder regime everywhere, one-row ladders to the margin, `uOpen` 1.0, no mesh | survives; add the marginal polygons | 9, 10 |
 | Sc and R1 pre-built under the costa, Sc ending on the costa near the apex, R1 at the apex, both heavy | survives | 2, 11 |
 | Costal ladder on its own step (`costStep` 0.022–0.034), densest of all | changes: sparse basally, dense and forked over the apical third (stigmatic area) | 3 |
-| Triangular forewing "with the apex at the top corner" | changes: the apex is the rounded front-distal corner, about half the depth below the costal line; costa nearly straight; tornus at about 45% | 1 |
+| Triangular forewing "with the apex at the top corner" | survives: the apex is the costal corner where C, Sc and R1 end; keep the costa nearly straight and slope the outer margin back to the tornus at about 45% | 1 |
 | 7–13 fan lanes as rays from the root to targets spaced along the hind margin | changes: a few basal stems that fork across the basal half; 12–16 ends with the intercalaries | 4, 6 |
 | Fan lanes bent by a share of the costa's convexity and undulating (`und`) | survives as smooth curves; keep `und` small, no visible zigzag | 5 |
 | Intercalaries between alternate pairs from `u0i` 0.4–0.5 to the margin | survives; add short marginal intercalaries along the hind margin and the cubital veinlets | 7, 8 |
@@ -392,7 +396,8 @@ changes are filed as #59; outline and root items overlap #21):
 | Hindwing small and rounded, 3 fan lanes, 1.6× coarser cell, `hindL` 0.22–0.36, present with odds 0.8 | survives in size (measured 0.33); changes in shape (costal process near the base) and in vein count (7–10) | 12, 13 |
 | "1A–5A", "9–15 longitudinals" | dropped: read off the stonefly | — |
 
-Current implementation (unchanged by #20): grown by `growVeins` v2, the ladder regime everywhere. The forewing is a triangle with the apex at
+Current implementation (unchanged by #20; where the table above says "changes", this paragraph describes
+what #59 replaces, not the reference): grown by `growVeins` v2, the ladder regime everywhere. The forewing is a triangle with the apex at
 the top corner (a domed outline sent Rs diving away from R1 and no rung could bridge them). Lanes: C and
 the trailing edge as `noDraw` walls; Sc and R1 as pre-built offsets under the costa (`sub` 0.035–0.055 of
 the chord each, Sc ending on the costa at 0.9, R1 at the apex, O / D); 7–13 fan lanes (`nV` − 2: Rs, M,
@@ -562,7 +567,7 @@ the references, seeds listed per order) and what it changed:
   wings (7% of tabanids, the broad wing, lose bm-cu). Pass.
 - Neuroptera (neu-nothochrysa; seeds 1, 16, 22): gradates read as one oblique line; now true zigzags;
   a branch could double back to the costal side at the apex (fixed); twigs now end on the outline. Pass.
-- Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass.
+- Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass. (Against `eph-mayfly-1956`, since found to be a stonefly, #20; superseded by the re-derived section and #59.)
 - Odonata, second audit (odo-anax-ris1921, odo-damsel-ris1921; dragonfly 18, 27, 49, damselfly 30, 41)
   after moving the secondaries onto `growVeins` v2: R1 used to end on the costa at 62% span and the
   damselfly's fan overlapped itself in the petiole (both fixed); rungs now lean 105–140° (mean
