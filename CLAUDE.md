@@ -62,6 +62,10 @@ contract for changes.
   filters or `url()` references in the SVG. `tests/check.js` fails on any of these.
 - Minimum stroke 0.5 px after the plate scale; use the `SW.H/O/D/F` tokens, never literal widths.
 - Hatching spacing never below ~1.8 px or e-ink fills in.
+- Dark tones come from spacing, never from stacking full hatch families: a lepidopteran plate's tone layers
+  (`meta.lepTone`: white outline, fan and cross hatch, stipple, fringe) stay under 55% ink in every 9×9 px window at
+  600 px (`lepInk` in `tests/check.js` rasterises every lep plate, #13). Where the cross set lies over the fan the fan
+  drops every other line; the hindwing hatch and fringe keep `LEP_CLEAR` off the forewing's edge.
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px

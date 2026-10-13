@@ -6,7 +6,7 @@
 // N (default 3000) checks seeds 1..N; --seeds A-B checks that range instead (the two are exclusive). --only runs just
 // the named checks (a name from PRE, CHECKS or POST below; an unknown or empty list exits 2 and lists them, so a
 // selection can never pass by running nothing). The invariants are a table of named check functions: CHECKS run per
-// seed as (meta, svg, fail, ctx), where fail(msg) records a failure for that seed, ctx.seed is the seed, ctx.sampled
+// seed as (meta, svg, fail, ctx) (a check that returns a promise, as lepInk does, is awaited), where fail(msg) records a failure for that seed, ctx.seed is the seed, ctx.sampled
 // is true on every SAMPLE-th seed (the gate of the slow extras: part crops, the 800 px device plate) and ctx.dev is
 // the device plate at DEV px, drawn once on first use (so a check that never reads it costs nothing). PRE and POST
 // run once as (fail), before and after the seed loop, where fail(msg, type) records a seed-0 finding under the
@@ -14,6 +14,7 @@
 // the failures are recorded and reported in.
 'use strict';
 const { loadEngine, engineContract } = require('./engine');
+const raster = require('./raster');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
@@ -39,6 +40,12 @@ const HYM_AREOLET = ['ichneumonid'];   // families that always close an areolet
 const HYM_AREOLET_MAX = 0.08;   // the areolet is tiny: its two r-m at most this far apart (fraction of the span; ~0.06 on the diagram)
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
+// #13: the lepidopteran tone layers (white outline, fan and cross hatch, stipple, fringe; meta.lepTone) rasterised alone at
+// 600 px, antialiased ink averaged over every 9 x 9 px window: a window at LEP_INK_MAX or more reads as a black blotch on
+// the 1-bit panel. Measured this way on the full plate at 147bbee, the ticket's evidence seeds gave 1067-1570 px of such
+// windows per moth and 6617 on butterfly 66 (the audit's 1444-1575 and 7038, on Chromium's raster).
+const LEP_INK_MAX = 0.55, LEP_WIN = 9;
+const lepInk = {};   // variant -> { n, max, seed } over the run, for the report (POST.lepInk)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -70,6 +77,25 @@ const ptSegDist = (p, u, v) => { const wx = v[0] - u[0], wy = v[1] - u[1], l2 = 
 const segDist = (a, b, c, d) => segsCross(a, b, c, d) ? 0 : Math.min(ptSegDist(a, c, d), ptSegDist(b, c, d), ptSegDist(c, a, b), ptSegDist(d, a, b));   // shortest distance between segments ab and cd
 // a point in body coordinates to plate coordinates, after the plate scale and fit
 const toPlate = (meta, p) => [300 + p[0] * meta.scale, meta.fitted.minY + (p[1] - meta.bbox.minY) * meta.scale];
+// the plate's tone layers alone, under the plate's own transform and stroke weights, mirrored as the wings are
+const lepToneSvg = (meta, svg) => {
+  const head = svg.match(/^[\s\S]*?<g transform="translate\([^"]*\) scale\([^"]*\)"[^>]*>/), els = meta.lepTone.join(''), s = meta.scale, W = meta.weights;
+  const sw = v => String(Math.round(v / s * 1000) / 1000);   // the engine's token substitution
+  return (head[0] + '<g>' + els + '</g><g><g transform="scale(-1,1)">' + els + '</g></g></g></svg>')
+    .replace(/SW_H/g, sw(W.H)).replace(/SW_O/g, sw(W.O)).replace(/SW_D/g, sw(W.D)).replace(/SW_F/g, sw(W.F));
+};
+// the densest LEP_WIN x LEP_WIN window of a 600 px raster: mean ink (1 - grey) and its centre
+const inkWindowMax = async svg => {
+  const { data, info } = await raster.grey(svg, 600).raw().toBuffer({ resolveWithObject: true });
+  const w = info.width, h = info.height, ch = info.channels, k = LEP_WIN, I = new Float64Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) { let row = 0; for (let x = 0; x < w; x++) { row += (255 - data[(y * w + x) * ch]) / 255; I[(y + 1) * (w + 1) + x + 1] = I[y * (w + 1) + x + 1] + row; } }
+  let max = 0, at = [0, 0];
+  for (let y = 0; y + k <= h; y++) for (let x = 0; x + k <= w; x++) {
+    const v = (I[(y + k) * (w + 1) + x + k] - I[y * (w + 1) + x + k] - I[(y + k) * (w + 1) + x] + I[y * (w + 1) + x]) / (k * k);
+    if (v > max) { max = v; at = [x + (k >> 1), y + (k >> 1)]; }
+  }
+  return { max, at };
+};
 const texts = s => (s.match(/<text\b/g) || []).length;
 const capSize = svg => +(svg.match(/<text[^>]*font-size="([\d.]+)"/) || [])[1];   // the caption is the first <text> of the plate
 // one leg set (right side as drawn, or the left side = each pair rotated about its coxa by its skew before mirroring):
@@ -412,6 +438,17 @@ const CHECKS = {
     dangling(meta.layers, '');
     dangling(dev.meta.layers, 'device plate: ');
   },
+  // #13: no lepidopteran plate's tone layers reach LEP_INK_MAX ink in any 9 x 9 px window at 600 px (darks keep their tone
+  // by spacing, not by stacking a second full hatch family; the fringe keeps off the other wing and the tail). Every lep
+  // plate is rasterised (sharp, ~30 ms each), not a sample, so a blotch on any seed fails the gate.
+  async lepInk(meta, svg, fail, { seed }) {
+    if (meta.type !== 'moth') return;
+    if (!meta.lepTone || !meta.lepTone.length) return fail('no tone layers (meta.lepTone) on a lepidopteran plate');
+    const { max, at } = await inkWindowMax(lepToneSvg(meta, svg));
+    const o = lepInk[meta.variant] ||= { n: 0, max: 0, seed: 0 };
+    o.n++; if (max > o.max) { o.max = max; o.seed = seed; }
+    if (max >= LEP_INK_MAX) fail('lep tone layers solid at 1 bit: a ' + LEP_WIN + 'x' + LEP_WIN + ' window at ' + max.toFixed(3) + ' ink (max ' + LEP_INK_MAX + ') centred at ' + at.join(',') + ' px');
+  },
 };
 
 // ---- whole-run checks after the seed loop: (fail) => void, fail(msg, type) records a seed-0 finding ----
@@ -467,6 +504,10 @@ const POST = {
     console.log('Hymenoptera cell plans asserted on:', fams.map(f => f + ' ' + (hymSeen[f] || 0)).join(', ') +
       (missing.length && total < HYM_MIN ? '; too few Hymenoptera plates (' + total + ' < ' + HYM_MIN + ') to require ' + missing.join(', ') : ''));
   },
+  // the report for CHECKS.lepInk: plates rasterised per variant and the densest window seen
+  lepInk() {
+    console.log('lep tone ink (densest ' + LEP_WIN + 'x' + LEP_WIN + ' window, max ' + LEP_INK_MAX + '):', Object.keys(lepInk).map(v => v + ' ' + lepInk[v].max.toFixed(3) + ' (seed ' + lepInk[v].seed + ', n ' + lepInk[v].n + ')').join('; ') || 'no lepidopteran plate in the range');
+  },
   signatures(fail) {
     sigRule(wingSigs, 'wing', 0.5, fail);
     sigRule(bodySigs, 'body', 0.98, fail);
@@ -513,7 +554,7 @@ function parseArgs(argv) {
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
-function run() {
+async function run() {
   let args;
   try { args = parseArgs(process.argv.slice(2)); } catch (e) { console.error(e.message); process.exit(2); }
   const { from, to, only } = args, count = to - from + 1;
@@ -531,7 +572,7 @@ function run() {
     const sampled = seed % SAMPLE === 0; if (sampled) sampledCount++;
     let devPlate = null;
     const ctx = { seed, sampled, get dev() { return devPlate ||= E.generateInsectDetailed(seed, { devicePx: DEV }); } };
-    for (const name of checks) CHECKS[name](meta, svg, fail, ctx);
+    for (const name of checks) { const r = CHECKS[name](meta, svg, fail, ctx); if (r && r.then) await r; }   // lepInk rasterises (async)
   }
   for (const name of post) POST[name](onceFail(name));
 
@@ -557,4 +598,4 @@ function run() {
   console.log('OK');
 }
 
-run();
+run().catch(e => { console.error(e); process.exit(1); });
