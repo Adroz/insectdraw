@@ -1402,9 +1402,11 @@ function growVeins(g, G) {
       const pl = bowVein(A, h.p, bow, 6);
       const aA = obtuse(dA, norm(sub(pl[1], pl[0]))), aB = obtuse(h.d, norm(sub(pl[pl.length - 1], pl[pl.length - 2])));
       if (aA < lo || aA > hi || aB < lo || aB > hi) continue;
-      const score = Math.abs(aA - aT) + Math.abs(aB - aT) + Math.abs(j) / 16 * 6 + (Math.sign(h.p[0] - A[0]) === ln ? 0 : 12);
+      const score = Math.abs(aA - aT) + Math.abs(aB - aT) + Math.abs(j) / 16 * 6 + (Math.sign(h.p[0] - A[0]) === ln ? 0 : 12)
+        + (o.maxLen && vlen(sub(h.p, A)) > o.maxLen ? 1000 : 0);   // o.maxLen: any in-band position under the cap beats every longer one (the Diptera r-m / bm-cu rungs, #10)
       if (!best || score < best.score) best = { score, p: h.p, pl, aA, aB };
     }
+    if (o.dry) return best;   // a trial placement (placeNamed's maxLen slide): nothing drawn, nothing counted
     if (!best) { stats.dropped++; return null; }
     g.poly(best.pl, o.sw); lastPl = best.pl;
     stats.joins++;
@@ -1423,9 +1425,16 @@ function growVeins(g, G) {
   const placeNamed = nv => {
     if (nv.forkOn) { const l = laneOf[nv.forkOn]; if (l) fork(l, nv.u, nv.spec); return; }
     const la = laneOf[nv.a], lb = laneOf[nv.b]; if (!la || !lb) return;
-    const h = atX(la.pl, nv.ua * Lw); if (!h) return;
-    const xb = (nv.ub === undefined ? nv.ua : nv.ub) * Lw;
-    const p = place(la, h.p, h.d, lb, xb, (nv.reach === undefined ? 0.05 : nv.reach) * Lw, { sw: nv.sw || joinSw(la, lb), bow: nv.bow, ang: nv.ang, angT: nv.angT });
+    const reach = (nv.reach === undefined ? 0.05 : nv.reach) * Lw, opts = { sw: nv.sw || joinSw(la, lb), bow: nv.bow, ang: nv.ang, angT: nv.angT, maxLen: nv.maxLen && nv.maxLen * Lw };
+    let du = 0;   // nv.maxLen: when no position on lb gives a rung under the cap, the near end slides along la (0.01 of the span a step, at most 0.04 either way, nearest first) to where the strip is narrow enough
+    if (nv.maxLen) for (const k of [0, -1, 1, -2, 2, -3, 3, -4, 4]) {
+      const ht = atX(la.pl, (nv.ua + k * 0.01) * Lw); if (!ht) continue;
+      const bt = place(la, ht.p, ht.d, lb, ((nv.ub === undefined ? nv.ua : nv.ub) + k * 0.01) * Lw, reach, Object.assign({ dry: true }, opts));
+      if (bt && vlen(sub(bt.p, ht.p)) <= opts.maxLen) { du = k * 0.01; break; }
+    }
+    const h = atX(la.pl, (nv.ua + du) * Lw); if (!h) return;
+    const xb = ((nv.ub === undefined ? nv.ua : nv.ub) + du) * Lw;
+    const p = place(la, h.p, h.d, lb, xb, reach, opts);
     if (p) { nv.pl = lastPl;   // the crossvein as drawn, on the caller's spec: namedW is keyed by lane pair, which bm-cu and dm-cu share
       const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um);
       const wEntry = { u: um, pl: lastPl, from: la.id }; (namedW[pairKey(la, lb)] ||= []).push(wEntry); (namedW[pairKey(lb, la)] ||= []).push(wEntry); }
@@ -3427,15 +3436,15 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
     // m1: bend (muscid M1 bent forward), fork (nematoceran M1 / M2, m3 odds of M3), three (M1-M3 to the margin); r45 odds r4+5 closes;
     // r4 odds R4 forks off R4+5; sepAbs: strips narrower than this fraction of the span carry no sites (the basal bundle); k site spacing / strip width; uOpen; a2 / h / bmcu odds; cupOpen: CuA2 and A1 reach the margin apart
     muscid:  { ky: [0.52, 0.64], up: 0.3, len: [1.05, 1.28], sc: [0.42, 0.52], r1: [0.6, 0.72], fork: [0.5, 0.6], r23: [0.82, 0.9], bmcu: [0.33, 0.4], dmcu: [0.6, 0.7], cu1: [0.05, 0.1], cu2: [0.28, 0.36], mEnd: [0.74, 0.8],
-               m1: 'bend', m3: 0, r45: 0.5, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.7, 0.8], a2: 0.4, h: 0.7, bmcuP: 0.85, stig: ['solid', 'solid', 'stipple', 'none'] },
+               m1: 'bend', m3: 0, r45: 0.5, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.7, 0.8], a2: 0.4, h: 0.7, bmcuP: 0.85, mBow: [-0.02, 0], stig: ['solid', 'solid', 'stipple', 'none'] },
     nemato:  { ky: [0.47, 0.56], up: 0.35, len: [1.05, 1.25], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.52, 0.62], r23: [0.82, 0.9], bmcu: [0.34, 0.42], dmcu: [0.6, 0.7], cu1: [0.05, 0.1], cu2: [0.3, 0.4], mEnd: [0.7, 0.76],
                m1: 'fork', m3: 0.5, r45: 0, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.72, 0.8], a2: 0.5, h: 0.7, bmcuP: 0.8, stig: ['solid', 'stipple', 'none', 'none'] },
     syrphid: { ky: [0.53, 0.63], up: 0.3, len: [1.08, 1.28], sc: [0.45, 0.55], r1: [0.6, 0.7], fork: [0.48, 0.58], r23: [0.8, 0.88], bmcu: [0.34, 0.4], dmcu: [0.62, 0.7], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
-               m1: 'bend', m3: 0, r45: 1, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.72, 0.8], a2: 0.5, h: 0.8, bmcuP: 1, stig: ['solid', 'solid', 'stipple'] },
+               m1: 'bend', m3: 0, r45: 1, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.72, 0.8], a2: 0.5, h: 0.8, bmcuP: 1, mBow: [-0.02, 0], stig: ['solid', 'solid', 'stipple'] },
     tabanid: { ky: [0.53, 0.63], up: 0.3, len: [1.05, 1.2], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.5, 0.58], r23: [0.82, 0.88], bmcu: [0.34, 0.4], dmcu: [0.6, 0.68], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
-               m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 3.5], uOpen: [0.74, 0.8], a2: 0.6, h: 0.8, bmcuP: 0.9, stig: ['solid', 'stipple', 'none'] },
+               m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 3.5], uOpen: [0.74, 0.8], a2: 0.6, h: 0.8, bmcuP: 1, mBow: [-0.02, 0], stig: ['solid', 'stipple', 'none'] },
     asilid:  { ky: [0.40, 0.48], up: 0.38, len: [1.2, 1.35], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.5, 0.6], r23: [0.84, 0.9], bmcu: [0.34, 0.4], dmcu: [0.6, 0.68], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
-               m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.74, 0.8], a2: 0.3, h: 0.7, bmcuP: 0.8, stig: ['solid', 'solid', 'none'] },
+               m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.74, 0.8], a2: 0.3, h: 0.7, bmcuP: 1, stig: ['solid', 'solid', 'none'] },
     tipulid: { ky: [0.38, 0.46], up: 0.47, pk: 0.08, sharp: 0.3, len: [0.95, 1.05], sc: [0.6, 0.7], r1: [0.76, 0.84], fork: [0.62, 0.72], r23: [0.88, 0.94], bmcu: [0.42, 0.52], dmcu: [0.62, 0.72], cu1: [0.04, 0.08], cu2: [0.54, 0.62], mEnd: [0.8, 0.86],
                m1: 'fork', m3: 0.8, r45: 0, r4: 0, sepAbs: 0.055, k: [1.6, 2.4], uOpen: [0.88, 0.92], a2: 1, h: 0.8, bmcuP: 0.8, stig: ['solid', 'stipple', 'none'], cupOpen: true },
   }[fam];
@@ -3490,7 +3499,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
     { id: 'Sc', u0: 0.02, s0: 0.2, s1: 0.03, end: 'scE', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.06, -0.02) },                  // Sc hugs the costa and meets it
     { id: 'R1', u0: 0.02, s0: 0.3, s1: 0.03, end: 'r1E', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: randRange(0.03, 0.07),                     // R stem (O) then R1 rising to the costa
       fork: { id: 'Rs', u: randRange(0.17, 0.23), s1: 0.3, end: closed45 ? 'r45J' : 'r45E', sw: wO, noFork: false, stub: false, ctrl: 2, bow: randRange(-0.01, 0.03) } },   // Rs: stem (O) to its fork, then R4+5 to its end (r45E)
-    { id: 'M', u0: 0.02, s0: 0.36, s1: 0.4, end: bend ? 'mE' : 'mF', sw: wO, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.02, 0.02) },          // M through r-m, bm-cu, dm-cu, flat to where M1 begins
+    { id: 'M', u0: 0.02, s0: 0.36, s1: 0.4, end: bend ? 'mE' : 'mF', sw: wO, noFork: true, stub: false, ctrl: 2, bow: rr(F.mBow || [-0.02, 0.02]) },          // M through r-m, bm-cu, dm-cu, flat to where M1 begins
     { id: 'CuA1', u0: 0.02, s0: 0.43, s1: 0.74, end: 'cuK', sw: wO, noFork: true, stub: false, ctrl: 2, ease: 'in', bow: randRange(-0.03, 0) },                     // CuA1 under bm and dm
     { id: 'CuA1b', start: 'cuK', s1: 0.97, end: 'cu1E', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.08, -0.04) },      // then down to the hind margin, convex toward the apex
     { id: 'CuA2', u0: 0.02, s0: 0.64, s1: F.cupOpen ? 0.97 : 0.84, end: F.cupOpen ? 'cu2E' : 'cupJ', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: F.cupOpen ? randRange(-0.08, -0.04) : randRange(-0.14, -0.1) },   // CuA2 runs out then bends back onto A1
@@ -3512,7 +3521,8 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   ];
   if (G.r4) named.push({ early: true, forkOn: 'Rs', u: E.r4, spec: { id: 'R4', end: 'r4E', s1: 0.03, sw: SW.D, stub: false, ctrl: 1, bow: randRange(-0.03, -0.01) } });   // tabanid / asilid: R4 forks off R4+5
   if (G.m3) named.push({ early: true, forkOn: 'M', u: E.dmcu + 0.02, spec: { id: 'M3', end: 'm3E', s1: 0.97, sw: SW.D, stub: false, ctrl: 1, bow: randRange(0, 0.03) } });   // M3 off the dm cell's distal corner
-  const rmNv = { a: 'Rs', ua: E.rm, b: 'M', reach: 0.07, sw: SW.D, bow: randRange(-0.02, 0.02) }, bmcuNv = { a: 'M', ua: E.bmcu, b: 'CuA1', reach: 0.09, sw: SW.D, bow: 0 };
+  const RUNG_ANG = 106, RUNG_MAX = 0.05;   // r-m and bm-cu are short near-square rungs (dip-eristalis ~5% of the span), not obliques: they aim at the floor of the R-D band (105) instead of the lean gene's angle, and any slide position under RUNG_MAX of the span wins (#10)
+  const rmNv = { a: 'Rs', ua: E.rm, b: 'M', reach: 0.07, sw: SW.D, bow: randRange(-0.02, 0.02), angT: RUNG_ANG, maxLen: RUNG_MAX }, bmcuNv = { a: 'M', ua: E.bmcu, b: 'CuA1', reach: 0.09, sw: SW.D, bow: 0, angT: RUNG_ANG, maxLen: RUNG_MAX };
   named.push(rmNv);                                                                                                // r-m: closes br against bm / dm
   if (G.bmcu) { bmcuNv.bow = randRange(-0.02, 0.02); named.push(bmcuNv); }                                         // bm-cu: closes bm
   named.push({ a: 'M', ua: E.dmcu, b: 'CuA1', reach: 0.08, sw: SW.D, bow: G.dmBow });                             // dm-cu: closes dm, bowed toward the apex

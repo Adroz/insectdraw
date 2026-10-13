@@ -188,7 +188,8 @@ Observed:
   **dm** (discal medial, closed by dm-cu), **r4+5** (closed when M1 meets R4+5). Asilid: discal
   cell `dc` with M1, M2, M3 all reaching the margin; crane fly: the same plan plus a discal
   cell and many more cells (Limonia).
-- Corners are obtuse; dm-cu is bowed; bm-cu and r-m are short and oblique.
+- Corners are obtuse; dm-cu is bowed; bm-cu and r-m are short near-square rungs (about 5% of the span on
+  dip-eristalis), not long obliques chained into a zigzag with dm-cu (#10).
 - Small dark **pterostigma** on the costa at Sc's end. **Vena spuria** in syrphids.
 - Alula and calypter lobes at the base.
 
@@ -217,7 +218,8 @@ in brackets where they differ):
 
 Named crossveins, all through `place` so their junction angles are enforced and counted: **h**
 Sc–R1 at u 0.1–0.17 (odds 0.7–0.8); **r-m** Rs–M just basal of the Rs fork (fork − 0.03..0.1, never
-below 0.4); **bm-cu** M–CuA1 at u 0.33–0.42 [0.42–0.52] (odds 0.8–1); **dm-cu** M–CuA1 at u 0.6–0.7
+below 0.4); **bm-cu** M–CuA1 at u 0.33–0.42 [0.42–0.52] (odds 0.8–0.85, always in syrphids, tabanids and
+asilids: Tabanidae and Asilidae always close bm, #10); **dm-cu** M–CuA1 at u 0.6–0.7
 [0.62–0.72], bowed toward the apex. The cup closure and the r4+5 closure are lane junctions (three
 lanes sharing a node) rather than crossveins: M1 meets R4+5 at ~150°, a fusion of longitudinals,
 outside R-D's band for a crossvein. Crossvein bows stay within ±0.06: a bow rotates both end
@@ -234,6 +236,13 @@ tabanid 0.41, nemato 0.37, asilid 0.31, tipulid 0.30 against the references' 0.4
 0.35. M and CuA1 were pulled up to the narrower chord so r-m and bm-cu are 3–4% of the span (were
 16–18%). `tests/check.js` (`dipAspect`) asserts each median within 0.05 of its reference, the crane
 fly at most 0.35, and r-m / bm-cu medians at most 5% of the span (`wingStats.rm` / `.bmcu`).
+Short rungs (#10): r-m and bm-cu aim at 106°, the floor of the R-D band, instead of the lean gene's
+angle; they carry `maxLen` 0.05 of the span, so `placeNamed` prefers any in-band slide position under
+it and, when none exists, slides the near end along its lane (0.01 steps, at most ±0.04) to where
+the strip is narrow enough; and M bows toward Rs (`mBow` −0.02..0) in muscids, syrphids and
+tabanids, so the Rs–M strip never splays wide at r-m. `tests/check.js` (`dipRungs`) asserts every
+muscid / syrphid / tabanid plate at most 6% of the span on both, and bm-cu on every tabanid and
+asilid.
 
 Family parameters (ky = outline scale: breadth ≈ 0.7·ky·span, split `up` / 1 − `up` between the costal and hind
 sides, so the W/L above is the measure to compare with a reference, not ky; k = site spacing / strip width; sepAbs = narrowest strip,

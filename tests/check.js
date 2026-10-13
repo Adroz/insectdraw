@@ -28,6 +28,8 @@ let elTotal = 0;
 const dipStats = {};   // Diptera family (meta.wingFam) -> { type, wl, rm, bmcu } per plate (CHECKS.dipAspect), asserted by POST.dipAspect
 const DIP_REF = { muscid: 0.40, syrphid: 0.40, tabanid: 0.40, nemato: 0.35, asilid: 0.30, tipulid: 0.30 };   // reference forewing W/L per family (#9)
 const DIP_MIN = 15;   // plates a family needs before its median is asserted
+const DIP_RUNG_MAX = { muscid: 0.06, syrphid: 0.06, tabanid: 0.06 };   // per-plate cap on r-m and bm-cu, fraction of the span (#10)
+const DIP_BMCU_ALWAYS = ['tabanid', 'asilid'];   // families whose bm cell is always closed by bm-cu (#10)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -342,6 +344,14 @@ const CHECKS = {
     if (typeof s.rm !== 'number') return fail('Diptera wingStats has no r-m length');
     if (s.rm > 0) o.rm.push(s.rm);
     if (s.bmcu > 0) o.bmcu.push(s.bmcu);
+  },
+  // Diptera short rungs (#10): Tabanidae and Asilidae always close bm with bm-cu, and on the muscid / syrphid / tabanid
+  // plan r-m and bm-cu are short rungs on every plate, never a long oblique (dip-eristalis: ~5.5% of the span)
+  dipRungs(meta, svg, fail) {
+    if (meta.type !== 'fly' || !meta.wingFam) return;
+    const s = meta.wingStats || {}, fam = meta.wingFam, cap = DIP_RUNG_MAX[fam];
+    if (DIP_BMCU_ALWAYS.includes(fam) && !(s.bmcu > 0)) fail('Diptera ' + fam + ' wing has no bm-cu (bm left open)');
+    if (cap && (s.rm > cap || s.bmcu > cap)) fail('Diptera ' + fam + ' crossvein too long: r-m ' + (s.rm || 0).toFixed(3) + ', bm-cu ' + (s.bmcu || 0).toFixed(3) + ' of the span (max ' + cap + ')');
   },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {
