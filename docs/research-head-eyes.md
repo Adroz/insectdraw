@@ -185,6 +185,10 @@ front-to-back extent (our `headH`).
   sits upper-left on both eyes. The engine draws both eyes individually in the unmirrored
   `thoraxHead` layer with the same highlight offset, so the plate keeps that upper-left lighting;
   the gene is the offset and radius of the unworked patch, not its side.
+- Exception, the bee (#12): the popular plates of *Apis* and *Bombus* work the honeycomb over the
+  whole eye, so a bee's lattice (`full`) leaves no unworked patch and runs out to 0.94 of the
+  outline (0.88 otherwise). The highlight genes are still rolled for a bee (a stipple bee uses
+  them, and dropping the draws would shift every later roll), but on a full lattice they draw nothing.
 - Hairs: a bumblebee's eye carries hairs between the facets and the head a fringe; a fly's
   face has bristles (frontal, orbital, mystax). Short ticks around the eye rim or over the
   face read as pile without a fill.
@@ -222,6 +226,8 @@ Common rules:
   `1.8 / p5scale(type)`; stipple dots at the same pitch on a staggered grid, denser (two rows
   closer) toward the lower-inner edge, none in the highlight; plain = outline + a highlight
   crescent line. Highlight centre `[-0.42, -0.42]` ± 0.1 of the radii, radius 0.3–0.42.
+  `full` (bee, `latticeFull` in the head entry): the tone runs out to 0.94 of the outline and a
+  lattice covers the highlight too, so the highlight genes have no effect on a lattice bee.
 - **Vertex**: `flat` 0/1 clips the rear arc of a round head to a straight line (bees, scarabs);
   `genal swelling` 0–0.15 widens the outline below the eyes (round and triangular heads).
 - **Markings**: frontal stripe 0/1 (a median line down the frons), hatched vertex 0/1 (3–5 fine

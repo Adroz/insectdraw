@@ -306,7 +306,8 @@ femur, a corbicula and flat basitarsus on the bee hind leg, and engraver's
 hatching on the far side of each femur and tibia. Compound eyes are a
 hexagonal ommatidia lattice clipped to an order-specific outline (holoptic
 fly, dorsally meeting dragonfly, dumbbell damselfly, kidney bee, notched
-beetle) with a white highlight. Antennae are drawn from the type table and
+beetle) with a white highlight, except the bee's, whose honeycomb is worked over
+the whole eye as in the popular *Apis* and *Bombus* plates. Antennae are drawn from the type table and
 proportions in `docs/research-antennae.md`: filiform, moniliform, serrate,
 pectinate / bipectinate, plumose, clubbed, lamellate, geniculate (scape,
 pedicel, flagellum), aristate, stylate and setaceous, each rising from a drawn
