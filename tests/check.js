@@ -25,7 +25,7 @@ const typeCount = {};
 const wingSigs = {};   // type -> Map(structural wing signature -> count)
 const bodySigs = {};   // type -> Map(structural body signature -> count)
 let elTotal = 0;
-const dipStats = {};   // Diptera family (meta.wingFam) -> { type, wl, rm, bmcu } per plate (CHECKS.dipAspect), asserted by POST.dipAspect
+const dipStats = {};   // Diptera family (meta.fam) -> { type, wl, rm, bmcu } per plate (CHECKS.dipAspect), asserted by POST.dipAspect
 const DIP_REF = { muscid: 0.40, syrphid: 0.40, tabanid: 0.40, nemato: 0.35, asilid: 0.30, tipulid: 0.30 };   // reference forewing W/L per family (#9)
 const DIP_MIN = 15;   // plates a family needs before its median is asserted
 // #10, stated here from the references rather than read from the engine's family table, so a wrong table fails the gate
@@ -33,10 +33,12 @@ const DIP_RUNG_FAMS = ['muscid', 'syrphid', 'tabanid'];   // the short-rung plan
 const DIP_RUNG_MAX = 0.06;   // per-plate cap on r-m and bm-cu, fraction of the span
 const DIP_BMCU_ALWAYS = ['tabanid', 'asilid'];   // families whose bm cell is always closed by bm-cu
 // #11, stated from the references (hym-apis: marginal + SM1-SM3 + ME1-ME2; Vespidae the same plan; hym-ichneumonidae-diagram:
-// the areolet, the small cell between 2r-m and the first r-m under the stigma), not read from the engine's family table
+// the areolet, the small cell between 2r-m and the first r-m just past the stigma's distal end), not read from the engine's family table
 const HYM_CELLS = { apid: { sub: 3, disc: 2 }, vespid: { sub: 3, disc: 2 } };   // closed submarginal / discoidal cells per family
 const HYM_AREOLET = ['ichneumonid'];   // families that always close an areolet
 const HYM_AREOLET_MAX = 0.08;   // the areolet is tiny: its two r-m at most this far apart (fraction of the span; ~0.06 on the diagram)
+const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
+const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -345,8 +347,8 @@ const CHECKS = {
   // drawn); the medians are asserted per family in POST.dipAspect
   dipAspect(meta, svg, fail) {
     if (meta.type !== 'fly' && meta.type !== 'cranefly') return;
-    if (!meta.wingFam) return fail('Diptera plate has no meta.wingFam');
-    const s = meta.wingStats || {}, fam = meta.wingFam, o = dipStats[fam] ||= { type: meta.type, wl: [], rm: [], bmcu: [] };
+    if (!meta.fam) return fail('Diptera plate has no meta.fam');
+    const s = meta.wingStats || {}, fam = meta.fam, o = dipStats[fam] ||= { type: meta.type, wl: [], rm: [], bmcu: [] };
     o.wl.push(pcaAspect(meta.wingOutlines[0]));
     if (typeof s.rm !== 'number') return fail('Diptera wingStats has no r-m length');
     if (s.rm > 0) o.rm.push(s.rm);
@@ -355,8 +357,8 @@ const CHECKS = {
   // Diptera short rungs (#10): Tabanidae and Asilidae always close bm with bm-cu, and on the muscid / syrphid / tabanid
   // plan r-m and bm-cu are short rungs on every plate, never a long oblique (dip-eristalis: ~5.5% of the span)
   dipRungs(meta, svg, fail, { dev }) {
-    if (meta.type !== 'fly' || !meta.wingFam) return;
-    const fam = meta.wingFam, rungs = DIP_RUNG_FAMS.includes(fam);
+    if (meta.type !== 'fly' || !meta.fam) return;
+    const fam = meta.fam, rungs = DIP_RUNG_FAMS.includes(fam);
     const one = (s, what) => {
       if (!s) return fail(what + 'Diptera ' + fam + ' wing has no wingStats');
       if (rungs && !(s.rm > 0)) fail(what + 'Diptera ' + fam + ' wing has no r-m (br left open)');
@@ -372,8 +374,9 @@ const CHECKS = {
   // every family)
   hymCells(meta, svg, fail, { dev }) {
     if (meta.type !== 'bee' && meta.type !== 'wasp') return;
-    if (!meta.wingFam) return fail('Hymenoptera plate has no meta.wingFam');
-    const fam = meta.wingFam, want = HYM_CELLS[fam];
+    if (!meta.fam) return fail('Hymenoptera plate has no meta.fam');
+    const fam = meta.fam, want = HYM_CELLS[fam];
+    hymSeen[fam] = (hymSeen[fam] || 0) + 1;
     const one = (s, what) => {
       if (!s || typeof s.submarginal !== 'number' || typeof s.discoidal !== 'number') return fail(what + 'Hymenoptera wingStats has no submarginal / discoidal count');
       if (want && (s.submarginal !== want.sub || s.discoidal !== want.disc)) fail(what + 'Hymenoptera ' + fam + ' cell plan: ' + s.submarginal + ' submarginal / ' + s.discoidal + ' discoidal cells (want ' + want.sub + ' / ' + want.disc + ')');
@@ -454,6 +457,15 @@ const POST = {
     }
     console.log('Diptera W/L medians:', Object.keys(dipStats).map(f => f + ' ' + median(dipStats[f].wl).toFixed(3) + ' (n ' + dipStats[f].wl.length + ', r-m ' + median(dipStats[f].rm).toFixed(3) + ', bm-cu ' + median(dipStats[f].bmcu).toFixed(3) + ')').join('; ') +
       (skipped.length ? '; too few plates to assert (< ' + DIP_MIN + '): ' + skipped.join(', ') : ''));
+  },
+  // hymCells asserts a family only on its own plates, so a family the engine stops producing (a rename) would pass by
+  // silence: every named family needs a plate once the run has HYM_MIN Hymenoptera plates; a shorter run reports it.
+  hymCells(fail) {
+    const total = Object.values(hymSeen).reduce((a, b) => a + b, 0), fams = [...Object.keys(HYM_CELLS), ...HYM_AREOLET];
+    const missing = fams.filter(f => !hymSeen[f]);
+    if (missing.length && total >= HYM_MIN) fail('no Hymenoptera plate of family ' + missing.join(', ') + ' in ' + total + ' Hymenoptera plates: the cell-plan assertions for it never ran');
+    console.log('Hymenoptera cell plans asserted on:', fams.map(f => f + ' ' + (hymSeen[f] || 0)).join(', ') +
+      (missing.length && total < HYM_MIN ? '; too few Hymenoptera plates (' + total + ' < ' + HYM_MIN + ') to require ' + missing.join(', ') : ''));
   },
   signatures(fail) {
     sigRule(wingSigs, 'wing', 0.5, fail);
