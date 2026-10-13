@@ -219,7 +219,8 @@ function plYAt(pl, x) {           // polyline monotonic in x
 // ---------- element emitters ----------
 function pathEl(d, sw, fill) { return '<path d="' + d + '" fill="' + (fill || 'none') + '" stroke-width="' + sw + '"/>'; }
 function lineEl(a, b, sw) { bb(a); bb(b); return '<line x1="' + fmt(a[0]) + '" y1="' + fmt(a[1]) + '" x2="' + fmt(b[0]) + '" y2="' + fmt(b[1]) + '" stroke-width="' + sw + '"/>'; }
-function polylineEl(pts, sw) { pts.forEach(bb); return '<polyline points="' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' ') + '" fill="none" stroke-width="' + sw + '"/>'; }
+function polylineEl(pts, sw) { pts.forEach(bb); return polylineStr(pts, sw); }
+function polylineStr(pts, sw) { return '<polyline points="' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' ') + '" fill="none" stroke-width="' + sw + '"/>'; }   // the element alone, no bbox (a deferred element resolved after the fit)
 function polygonEl(pts, sw, fill) { pts.forEach(bb); return '<path d="M' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' L') + ' Z" fill="' + (fill || 'none') + '" stroke-width="' + sw + '"/>'; }
 function circleEl(c, r, sw, fill) { bb([c[0] - r, c[1] - r]); bb([c[0] + r, c[1] + r]); return '<circle cx="' + fmt(c[0]) + '" cy="' + fmt(c[1]) + '" r="' + fmt(r) + '" fill="' + (fill || 'none') + '" stroke-width="' + sw + '"/>'; }
 function bowLine(y, hw, bow, sw) {
@@ -813,8 +814,9 @@ function legJoints(attach, spec) {
   pts.push(add(p, mul(dirv(a), cl * 0.8)));
   return pts;
 }
-// distance from p to the segment uv
-function ptSeg(p, u, v) { const w = sub(v, u), l2 = w[0] * w[0] + w[1] * w[1]; const t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * w[0] + (p[1] - u[1]) * w[1]) / l2)) : 0; return vlen(sub(p, add(u, mul(w, t)))); }
+// the point of the segment uv nearest p, and the distance from p to the segment
+function segFoot(p, u, v) { const w = sub(v, u), l2 = w[0] * w[0] + w[1] * w[1]; const t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * w[0] + (p[1] - u[1]) * w[1]) / l2)) : 0; return add(u, mul(w, t)); }
+function ptSeg(p, u, v) { return vlen(sub(p, segFoot(p, u, v))); }
 function segDist(a, b, c, d) {   // shortest distance between segments ab and cd
   const cross = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
   const d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
@@ -1262,6 +1264,9 @@ function wingGraph(wing, Lw) {
     cross(veinA, ta, veinB, tb, o) { o = o || {}; const b = tb === undefined ? ta + (o.tilt === undefined ? randRange(-0.04, 0.04) : o.tilt) : tb; g.edge(g.on(veinA, ta), g.on(veinB, Math.max(0, Math.min(1, b))), o); },
     // a ready-made local polyline (growVeins lanes and crossveins), emitted as is
     poly(pl, sw) { if (pl.length > 1) extra.push(emitLocalPolyline(wing, pl, sw)); },
+    // a deferred element: a function (plate scale, stroke weights in plate px) -> element strings, resolved by assemblePlate
+    // once the fit is known (growVeins' lane floor, #14); whatever it draws must already be in the bbox
+    defer(fn) { extra.push(fn); },
     // vein running from a node into open membrane and fading: drawn at a lighter weight, bowed
     stub(id, dirDeg, len, sw) { const p = Array.isArray(id) ? id : g.at(id), d = dirv(dirDeg), q = add(p, mul(d, len)); extra.push(emitLocalPolyline(wing, vein([p, add(lerpP(p, q, 0.5), mul(perp(d), len * randRange(-0.06, 0.06))), q]), sw || SW.F)); },
     // ladder regime: n rungs between two chains over t in [t0, t1], each tilted by `tilt` (in t)
@@ -1330,6 +1335,205 @@ function wingGraph(wing, Lw) {
 // Mesh orders (Odonata) pass pre-built primaries as lanes (`pl`), wall lanes that are not drawn (`noDraw`: the costa and
 // the trailing edge), an absolute cell size (`cell`), excluded intervals (`gaps`) and `rows2`, which switches each strip
 // segment between a one-row ladder and rows of Voronoi cells by width / cell (Hoffmann 2018); see the strip loop.
+// ---- the lane floor (#14): converging lanes never fuse into a black bar on e-ink ----
+// Lanes a pixel or two apart at plate scale fill in at 1 bit, as C / Sc / R1 did along a mayfly or odonate costa, Sc / R1
+// / Rs at a lacewing apex and the damselfly petiole's lanes. growVeins collects its lanes and crossveins and draws them
+// through one deferred element, resolved by assemblePlate once the plate scale is known (every point it may draw is
+// already in the bbox, so the fit never depends on it, and it draws no rng, so the stream never depends on the scale).
+// Lanes are taken strongest first (walls, then `rank` or stroke weight, then table order), each against the ones already
+// final. Two lanes need laneGapPx between their centre-lines: LANE_FLOOR_PX plus a margin, or LANE_DENSITY x their mean
+// stroke weight where that is more (heavy pairs need more paper to stay apart; a wall stands for the heavy costa or the
+// outline, so LANE_DENSITY_WALL). Where a lane runs closer than that to a final lane, and the run is not all within
+// LANE_JOIN_PX of a junction of the lane (a point where it touches any final lane: a fork, an end on a neighbour; 1 px
+// inside tests/check.js's own 6 px, so sampling differences cannot fail the check), it
+// gives way, from where the gap closes until it opens LANE_HYST times past the floor: a run at its end becomes a Y-merge
+// into the other lane, at its root a fork from it, in mid-course a kiss, each a quadratic arc meeting the other lane at
+// about 35 degrees. A kept sliver under LANE_SCRAP_PX (a pocket, leaving a lane and coming back to it, under three times
+// that) gives way too. A crossvein end on a stretch that gave way moves onto the lane it merged into (an antenodal whose
+// Sc merged into the costa stays as a C-R1 crossvein); one whose two ends land on one lane is dropped. A lane rooted on
+// such a stretch is carried onto that lane by a short connector. The drawn lanes go on meta.wingLanes (body
+// coordinates, one entry per growVeins wing, with the counts of crossveins dropped and moved), where tests/check.js
+// (laneSep) asserts its own floor; meta.wingStats stays the growth's.
+const LANE_FLOOR_PX = 1.8, LANE_MARGIN_PX = 0.2, LANE_DENSITY = 2.2, LANE_DENSITY_WALL = 2.6, LANE_JOIN_PX = 5, LANE_TOUCH_PX = 0.3, LANE_SCRAP_PX = 20, LANE_HYST = 1.12;
+const SW_KEY = Object.fromEntries(Object.entries(SW).map(([k, v]) => [v, k]));   // SW token -> its key in the stroke weights (W.H ...)
+const laneGapPx = (wa, wb, wall) => Math.max(LANE_FLOOR_PX + LANE_MARGIN_PX, (wall ? LANE_DENSITY_WALL : LANE_DENSITY) * (wa + wb) / 2);   // the centre-line gap two lanes of these weights need
+let laneFrames = [];   // the resolved lanes of every growVeins wing on the current plate (meta.wingLanes), reset per plate in drawPlate
+function laneFloor(wing, lanes, items, s, W) {
+  const pxOf = sw => W[SW_KEY[sw]], h = 0.5 / s, R = LANE_JOIN_PX / s, tol = LANE_TOUCH_PX / s;
+  const segD = (p, a, b) => { const q = segFoot(p, a, b); return [vlen(sub(p, q)), q]; };
+  const nearestSample = (S, p) => { let bi = 0, bd = Infinity; for (let i = 0; i < S.length; i++) { const d = vlen(sub(S[i], p)); if (d < bd) { bd = d; bi = i; } } return [bi, bd]; };
+  // every drawn lane as one path of samples at most h apart, with the stroke weight of the piece each sample is on
+  const path = new Map();
+  for (const it of items) if (it.lane) {
+    const P = path.get(it.lane) || { pts: [], w: [], sw: [] };
+    const pl = it.pl, w = pxOf(it.sw);
+    for (let i = 0; i < pl.length; i++) {
+      if (i === 0 && P.pts.length && vlen(sub(P.pts[P.pts.length - 1], pl[0])) < 1e-6) continue;
+      if (P.pts.length) { const a = P.pts[P.pts.length - 1], n = Math.ceil(vlen(sub(pl[i], a)) / h); for (let k = 1; k < n; k++) { P.pts.push(lerpP(a, pl[i], k / n)); P.w.push(w); P.sw.push(it.sw); } }
+      P.pts.push(pl[i]); P.w.push(w); P.sw.push(it.sw);
+    }
+    path.set(it.lane, P);
+  }
+  const rankOf = l => l.rank !== undefined ? l.rank : swLevel(l.sw);   // a lane's `rank` is on swLevel's scale (0 fine .. 3 heavy)
+  const order = lanes.filter(l => l.noDraw).concat(lanes.filter(l => !l.noDraw && path.has(l)).map((l, i) => ({ l, i })).sort((p, q) => rankOf(q.l) - rankOf(p.l) || p.i - q.i).map(x => x.l));
+  // the final lanes in a grid of cell `cs` (the widest floor), so a sample only looks at the segments around it
+  const cs = laneGapPx(W.H, W.H, true) / s, grid = new Map(), fin = new Map();   // fin: lane -> final pieces [{ pts, w }]
+  const key = (i, j) => i * 100003 + j;
+  const addFinal = (l, pieces) => {
+    fin.set(l, pieces);
+    for (const pc of pieces) for (let i = 0; i + 1 < pc.pts.length; i++) {
+      const a = pc.pts[i], b = pc.pts[i + 1];
+      for (let gx = Math.floor(Math.min(a[0], b[0]) / cs); gx <= Math.floor(Math.max(a[0], b[0]) / cs); gx++)
+        for (let gy = Math.floor(Math.min(a[1], b[1]) / cs); gy <= Math.floor(Math.max(a[1], b[1]) / cs); gy++) { const k = key(gx, gy); let c = grid.get(k); if (!c) grid.set(k, c = []); c.push({ l, a, b, w: pc.w[i] }); }
+    }
+  };
+  const nearOn = (m, p) => { let best = null; for (const pc of fin.get(m)) for (let i = 0; i + 1 < pc.pts.length; i++) { const [d, q] = segD(p, pc.pts[i], pc.pts[i + 1]); if (!best || d < best[0]) best = [d, q]; } return best ? best[1] : p; };
+  const result = new Map();   // lane -> { pieces: [{ pts, sw }], cut: Uint8Array } for the lanes that gave way somewhere
+  const ends = new Map();     // lane -> { start, end }: whether the lane gave way at its root / its end (returned to the caller)
+  for (const l of order) {
+    if (l.noDraw) { addFinal(l, [{ pts: l.pl, w: l.pl.map(() => W.H) }]); continue; }
+    const P = path.get(l), S = P.pts, n = S.length;
+    const dm = new Map();   // final lane -> { d: distance per sample, w: its stroke weight there }
+    for (let i = 0; i < n; i++) {
+      const gx = Math.floor(S[i][0] / cs), gy = Math.floor(S[i][1] / cs);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) {
+        const c = grid.get(key(gx + dx, gy + dy)); if (!c) continue;
+        for (const e of c) {
+          const d = segD(S[i], e.a, e.b)[0];
+          let r = dm.get(e.l); if (!r) dm.set(e.l, r = { d: new Float64Array(n).fill(Infinity), w: new Float64Array(n) });
+          if (d < r.d[i]) { r.d[i] = d; r.w[i] = e.w; }
+        }
+      }
+    }
+    const cutBy = new Array(n).fill(null);   // the run (and the lane) a sample gives way to
+    // the lane's junctions: where it touches any final lane (a fork, an end on a neighbour, a node three lanes share)
+    const touch = []; for (let i = 0; i < n; i++) for (const r of dm.values()) if (r.d[i] < tol) { touch.push(S[i]); break; }
+    for (const [m, r] of dm) {
+      for (let i = 0; i < n; i++) {
+        const close = k => r.d[k] < laneGapPx(P.w[k], r.w[k], m.noDraw) / s;
+        if (!close(i)) continue;
+        let j = i; while (j + 1 < n && close(j + 1)) j++;
+        let bad = false;
+        for (let k = i; k <= j && !bad; k++) if (touch.every(t => vlen(sub(S[k], t)) > R)) bad = true;
+        if (bad) {   // a lane that gave way rejoins only where the gap opens LANE_HYST times past the floor, so one hugging its neighbour at about the floor merges once instead of in a row of pockets
+          let at = i; for (let k = i; k <= j; k++) if (r.d[k] < r.d[at]) at = k;
+          let i0 = i, i1 = j; const far = k => r.d[k] < LANE_HYST * laneGapPx(P.w[k], r.w[k], m.noDraw) / s;
+          while (i0 > 0 && far(i0 - 1)) i0--; while (i1 < n - 1 && far(i1 + 1)) i1++;
+          const run = { m, i0, i1, at }; for (let k = i0; k <= i1; k++) if (!cutBy[k]) cutBy[k] = run;
+          j = Math.max(j, i1);
+        }
+        i = j;
+      }
+    }
+    if (!cutBy.some(Boolean)) { addFinal(l, [{ pts: S, w: P.w }]); continue; }
+    // kept runs, each with a connector onto the lane it gave way to at either cut end. A kept stretch shorter than
+    // LANE_SCRAP_PX next to a cut is given up too (a sliver between two merges reads as a kink, not a vein), and a pocket
+    // (the lane leaving a neighbour and coming back to it) shorter than three times that (a row of them reads as beads)
+    const k1 = Math.ceil(1.5 * laneGapPx(W.D, W.D) / s / h), pieces = [], cut = new Uint8Array(n), scrap = LANE_SCRAP_PX / s / h;
+    for (let i = 0; i < n; i++) if (cutBy[i]) cut[i] = 1;
+    for (let a = 0; a < n; a++) {
+      if (cut[a]) continue;
+      let b = a; while (b + 1 < n && !cut[b + 1]) b++;
+      const pocket = a > 0 && b < n - 1 && cutBy[a - 1].m === cutBy[b + 1].m;   // the lane leaves its neighbour and comes back to it
+      if (b - a < (pocket ? 3 * scrap : scrap) && (a > 0 || b < n - 1)) for (let k = a; k <= b; k++) { cut[k] = 1; cutBy[k] = a > 0 ? cutBy[a - 1] : cutBy[b + 1]; }
+      a = b;
+    }
+    const span = i => { let i0 = i, i1 = i; while (i0 > 0 && cut[i0 - 1]) i0--; while (i1 < n - 1 && cut[i1 + 1]) i1++; return [i0, i1]; };   // the cut interval holding sample i
+    const clampAt = (r, i0, i1) => Math.max(i0, Math.min(i1, r.at));
+    const bez = (p0, c, q, m) => { const o = []; for (let k = 0; k <= m; k++) { const t = k / m, u = 1 - t; o.push([u * u * p0[0] + 2 * u * t * c[0] + t * t * q[0], u * u * p0[1] + 2 * u * t * c[1] + t * t * q[1]]); } return o; };
+    for (let a = 0; a < n; a++) {
+      if (cut[a]) continue;
+      let b = a; while (b + 1 < n && !cut[b + 1]) b++;
+      let pts = S.slice(a, b + 1), w = P.w.slice(a, b + 1), sw = P.sw.slice(a, b + 1);
+      // the connector meets the other lane about 1.5 floors on from where the gap closed (behind, for a lane rising from
+      // it), so it joins or leaves at roughly 35 degrees; a short kiss meets it at its closest point. The lane bends into
+      // it along a quadratic arc over its last (first) k samples, so the turn is a curve, not a kink
+      const kb = Math.min(k1, Math.floor((b - a) / ((a > 0 && b < n - 1) ? 2 : 1)));
+      if (a > 0) {
+        const r = cutBy[a - 1], [i0] = span(a - 1), T = S[i0 === 0 ? Math.max(0, a - 1 - k1) : Math.max(clampAt(r, i0, a - 1), a - 1 - k1)];
+        const arc = bez(nearOn(r.m, T), pts[0], pts[kb], kb + 2);
+        pts = arc.concat(pts.slice(kb + 1)); w = new Array(arc.length).fill(w[0]).concat(w.slice(kb + 1)); sw = new Array(arc.length).fill(sw[0]).concat(sw.slice(kb + 1));
+      }
+      if (b < n - 1) {
+        const r = cutBy[b + 1], [, i1] = span(b + 1), T = S[i1 === n - 1 ? Math.min(n - 1, b + 1 + k1) : Math.min(clampAt(r, b + 1, i1), b + 1 + k1)];
+        const L0 = pts.length - 1, arc = bez(pts[L0 - kb], pts[L0], nearOn(r.m, T), kb + 2);
+        pts = pts.slice(0, L0 - kb).concat(arc); w = w.slice(0, L0 - kb).concat(new Array(arc.length).fill(w[L0])); sw = sw.slice(0, L0 - kb).concat(new Array(arc.length).fill(sw[L0]));
+      }
+      if (pts.length > 1) pieces.push({ pts, w, sw });
+      a = b;
+    }
+    ends.set(l, { start: !!cut[0], end: !!cut[n - 1] });
+    result.set(l, { pieces, cut, cutBy, S });
+    addFinal(l, pieces);
+  }
+  // a crossvein end on a stretch of lane that gave way moves onto the lane it merged into (an antenodal C-Sc-R1 whose Sc
+  // merged into the costa keeps its Sc-R1 piece as a C-R1 crossvein); one whose two ends land on the same lane, or that
+  // shrinks under the floor, is dropped
+  const anchor = (l, p, avoid) => {   // avoid: a lane the point must not be carried onto (the fork itself, whose parent gave way to it)
+    for (let k = 0; k < 4; k++) {
+      const r = l && result.get(l); if (!r) break;
+      const [bi] = nearestSample(r.S, p);
+      if (!r.cut[bi]) break;
+      let m = r.cutBy[bi].m;
+      if (m === avoid) { let md = Infinity; m = null; for (const q of fin.keys()) { if (q === avoid || q === l || !fin.get(q).length) continue; const d = vlen(sub(nearOn(q, p), p)); if (d < md) { md = d; m = q; } } if (!m) break; }
+      l = m; p = nearOn(l, p);
+    }
+    return { l, p };
+  };
+  // a lane rooted on (or ending on) a stretch of another lane that gave way, a fork whose parent merged into a neighbour
+  // there, follows it the same way: a short connector carries its root (end) onto the lane that stretch merged into
+  const carry = new Map();   // lane -> [{ pts, sw }]
+  for (const c of order) {
+    if (c.noDraw || !fin.has(c) || !fin.get(c).length) continue;
+    const pcs = fin.get(c), its = items.filter(it => it.lane === c);
+    for (const atEnd of [false, true]) {
+      const ce = ends.get(c); if (ce && (atEnd ? ce.end : ce.start)) continue;
+      const pc = atEnd ? pcs[pcs.length - 1] : pcs[0], P0 = atEnd ? pc.pts[pc.pts.length - 1] : pc.pts[0];
+      for (const [p, r] of result) {
+        if (p === c) continue;
+        const [bi, bd] = nearestSample(r.S, P0);
+        if (bd > tol || !r.cut[bi]) continue;
+        const A0 = anchor(p, P0, c), gap = vlen(sub(A0.p, P0));
+        if (gap > 2 * cs) break;   // the lane it merged into is not beside this point (a parent that gave way far from here): leave the root as it is
+        // aim the connector back along the lane's own course (forward, at its end), so it meets the other lane at about
+        // 35 degrees instead of square
+        const q = atEnd ? pc.pts[Math.max(0, pc.pts.length - 4)] : pc.pts[Math.min(pc.pts.length - 1, 3)], t = vlen(sub(P0, q)) > 1e-9 ? norm(sub(P0, q)) : [0, 0];
+        const A = A0.l && A0.l !== p ? nearOn(A0.l, add(P0, mul(t, 1.5 * gap))) : A0.p;
+        if (gap > 1e-6) {
+          const sw = result.has(c) ? (atEnd ? pc.sw[pc.sw.length - 1] : pc.sw[0]) : (atEnd ? its[its.length - 1] : its[0]).sw;
+          (carry.get(c) || carry.set(c, []).get(c)).push({ pts: atEnd ? [P0, A] : [A, P0], sw });
+        }
+        break;
+      }
+    }
+  }
+  const out = [], done = new Set(), frame = { lanes: [], dropped: 0, droppedNamed: 0, moved: 0 };
+  const el = (pts, sw) => polylineStr(pts.map(wing.T), sw);
+  for (const it of items) {
+    if (it.lane) {
+      const r = result.get(it.lane), first = !done.has(it.lane);
+      done.add(it.lane);
+      if (!r) out.push(el(it.pl, it.sw));
+      else if (first) for (const pc of r.pieces) { let a = 0; for (let i = 1; i < pc.pts.length; i++) if (i === pc.pts.length - 1 || pc.sw[i] !== pc.sw[a]) { out.push(el(pc.pts.slice(a, i + 1), pc.sw[a])); a = i; } }   // split where the stroke weight steps (stem, stub)
+      if (first) for (const cn of carry.get(it.lane) || []) out.push(el(cn.pts, cn.sw));
+      continue;
+    }
+    let pl = it.pl;
+    if (it.ends) {
+      const n1 = pl.length - 1, A = anchor(it.ends[0], pl[0]), B = anchor(it.ends[1], pl[n1]);
+      if (A.l !== it.ends[0] || B.l !== it.ends[1]) {
+        if ((A.l && A.l === B.l) || vlen(sub(A.p, B.p)) < LANE_FLOOR_PX / s) { frame.dropped++; if (it.named) frame.droppedNamed++; continue; }
+        const dA = sub(A.p, pl[0]), dB = sub(B.p, pl[n1]);
+        pl = pl.map((q, i) => add(q, lerpP(dA, dB, n1 ? i / n1 : 0)));
+        frame.moved++;
+      }
+    }
+    out.push(el(pl, it.sw));
+  }
+  for (const l of lanes) if (fin.has(l)) frame.lanes.push({ id: l.id, wall: !!l.noDraw, pieces: fin.get(l).map(pc => ({ pts: pc.pts.map(wing.T), w: pc.w })).concat((carry.get(l) || []).map(cn => ({ pts: cn.pts.map(wing.T), w: cn.pts.map(() => pxOf(cn.sw)) }))) });
+  laneFrames.push(frame);
+  return { els: out, ends };
+}
 const SW_LV = [SW.F, SW.D, SW.O, SW.H];
 const swLevel = sw => Math.max(0, SW_LV.indexOf(sw));
 const swBelow = sw => SW_LV[Math.max(0, swLevel(sw) - 1)];
@@ -1341,6 +1545,10 @@ function growVeins(g, G) {
   const bowAmt = G.bowAmt === undefined ? 0.02 : G.bowAmt, stubLen = G.stubLen === undefined ? 0.08 : G.stubLen;
   const stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
   const joins = [], lanes = [], laneOf = {};
+  // #14: every lane and crossvein goes through drawPl; with the lane floor on (G.laneFloor !== false) they are collected and
+  // drawn by one deferred element that holds lanes apart at plate scale (laneFloor), else emitted at once as before
+  const floorOn = G.laneFloor !== false, items = [];
+  const drawPl = (pl, sw, it) => { if (!floorOn) return g.poly(pl, sw); if (pl.length < 2) return; for (const p of pl) bb(wing.T(p)); items.push(Object.assign({ pl, sw }, it)); };
   let forks = 0, lastPl = null;   // lastPl: the polyline of the crossvein `place` last drew (a wall for the multi-row regime)
   const sAt = p => { const r = wing.yRange(p[0]); return r && r[1] > r[0] ? (p[1] - r[0]) / (r[1] - r[0]) : 0.5; };
   const chord = u => { const r = wing.yRange(u * Lw); return r ? Math.max(1, r[1] - r[0]) : 1; };
@@ -1450,7 +1658,7 @@ function growVeins(g, G) {
   const place = (la, A, dA, lb, xb, reach, o) => {
     const best = bestPlacement(la, A, dA, lb, xb, reach, o, o.bow === undefined ? randRange(-0.03, 0.03) : o.bow);
     if (!best) { stats.dropped++; return null; }
-    g.poly(best.pl, o.sw); lastPl = best.pl;
+    drawPl(best.pl, o.sw, { ends: [la, lb], named: !!o.named }); lastPl = best.pl;
     stats.joins++;
     if (!o.ang) { stats.rungs++; stats.angSum += best.aA + best.aB; stats.minAngle = Math.min(stats.minAngle, best.aA, best.aB); stats.maxAngle = Math.max(stats.maxAngle, best.aA, best.aB); }
     const uA = A[0] / Lw, uB = best.p[0] / Lw;
@@ -1470,7 +1678,7 @@ function growVeins(g, G) {
     const la = laneOf[nv.a], lb = laneOf[nv.b]; if (!la || !lb) return;
     const ub = nv.ub === undefined ? nv.ua : nv.ub, reach = (nv.reach === undefined ? 0.05 : nv.reach) * Lw;
     const bow = nv.maxLen && nv.bow === undefined ? randRange(-0.03, 0.03) : nv.bow;   // a capped rung resolves its bow before the slide, so the trials and the placement share it (the same single draw place would make; the trials are rng-free)
-    const opts = { sw: nv.sw || joinSw(la, lb), bow, ang: nv.ang, angT: nv.angT, maxLen: nv.maxLen && nv.maxLen * Lw, xMin: nv.xMin === undefined ? undefined : nv.xMin * Lw, xMax: nv.xMax === undefined ? undefined : nv.xMax * Lw };   // nv.xMin / xMax (span fractions): the far end's slide stays between its neighbours' (the hymenopteran r-m, #11)
+    const opts = { named: true, sw: nv.sw || joinSw(la, lb), bow, ang: nv.ang, angT: nv.angT, maxLen: nv.maxLen && nv.maxLen * Lw, xMin: nv.xMin === undefined ? undefined : nv.xMin * Lw, xMax: nv.xMax === undefined ? undefined : nv.xMax * Lw };   // nv.xMin / xMax (span fractions): the far end's slide stays between its neighbours' (the hymenopteran r-m, #11)
     let du = 0;   // nv.maxLen: when no position on lb gives a rung under the cap, the near end slides along la (SLIDE_STEP of the span a step, at most SLIDE_N steps either way, nearest first) to where the strip is narrow enough
     if (nv.maxLen) for (let k = 0; k <= SLIDE_N * 2; k++) {
       const d = (k & 1 ? -1 : 1) * Math.ceil(k / 2) * SLIDE_STEP;   // 0, -1, +1, -2, +2, ... steps
@@ -1620,11 +1828,12 @@ function growVeins(g, G) {
       let n = 0;
       for (const e of voronoiEdges(sites, ring)) {
         if (onBoundary(lerpP(e[0], e[1], 0.5))) continue;   // a piece of the region's boundary, already a vein
-        const seg = [e[0], e[1]];
+        const seg = [e[0], e[1]], endL = [null, null];
         for (let end = 0; end < 2; end++) {   // an end on a primary: slide it along the primary toward the junction band
           const P = seg[end], Q = seg[1 - end];
           const l = distLane(P, a.pl) < 0.3 ? a : distLane(P, b.pl) < 0.3 ? b : null;
           if (!l || distPl(P, p0) < 0.3 || (p1 && distPl(P, p1) < 0.3)) continue;
+          endL[end] = l;
           const h = atX(l.pl, P[0]); if (!h) continue;
           const c = cell(P[0] / Lw);
           let bestP = P, bestA = obtuse(h.d, norm(sub(Q, P)));
@@ -1640,7 +1849,7 @@ function growVeins(g, G) {
           }
           seg[end] = bestP; l.junc.push(bestP[0]);
         }
-        g.poly(seg, swJ); n++;
+        drawPl(seg, swJ, { ends: endL }); n++;
       }
       if (!n) return false;
       stats.joins += n; stats.multi++; joins.push([a.id, b.id, (A0[0] + (w1 ? w1.pl[0][0] : a.x1)) / 2 / Lw]);
@@ -1683,15 +1892,20 @@ function growVeins(g, G) {
     cuts.push(xEnd);
     for (let i = 0; i + 1 < cuts.length; i++) {
       const sw = (xF !== null && cuts[i + 1] <= xF + 0.01) ? (l.swStem || swAbove(l.sw)) : (xS !== null && cuts[i] >= xS - 0.01) ? SW.F : l.sw;
-      g.poly(cutX(l.pl, cuts[i], cuts[i + 1]), sw);
+      drawPl(cutX(l.pl, cuts[i], cuts[i + 1]), sw, { lane: l });
     }
   }
+  // floor(s, W): the resolved lane floor ({ els, ends }), computed once however many deferred elements ask for it, so an
+  // order's element that reads the cut ends (the lacewing's end twigs) does not depend on its place in the layer
+  let memo = null;
+  const floor = floorOn && items.length ? (s, W) => (memo && memo.s === s && memo.W === W ? memo : (memo = { s, W, r: laneFloor(wing, lanes, items, s, W) })).r : null;
+  if (floor) g.defer((s, W) => floor(s, W).els);
   stats.pairRungs = pairRungs;
   // every crossvein per lane pair, named and site-grown alike, keyed both ways ('Rs|MCu' and 'MCu|Rs'): a band's crossvein count
   const pairJoins = {}; for (const j of joins) { pairJoins[j[0] + '|' + j[1]] = (pairJoins[j[0] + '|' + j[1]] || 0) + 1; if (j[0] !== j[1]) pairJoins[j[1] + '|' + j[0]] = pairJoins[j[0] + '|' + j[1]]; }
   stats.pairJoins = pairJoins;
   rngSync();   // a mesh order's site count follows the cell size, so a device plate's draws inside the growth differ from the default's
-  return { lanes, joins, forks, stats };
+  return { lanes, joins, forks, stats, floor };
 }
 
 // ============================================================
@@ -1799,6 +2013,8 @@ function insectName(seed, type, variant) {
 //     block and the tegula; required when the block roots at wingRoots (absent on the elytra and the orthopteran tegmen).
 //   tegula (optional): the order draws a tegula over the forewing root: rx range, optional hairs count range.
 //   legThick (optional, default 1): leg thickness factor on top of body size (slender-legged orders < 1).
+//   laneFloor (optional, default true): false opts the order's wings out of growVeins' lane floor (#14) and
+//     tests/check.js laneSep: the beetle (no lanes) and the moth (its own vein drawing; #67).
 //   wings: the wing section function (hoisted declarations below; the elytra and the orthopteran tegmen draw into
 //     `covers`).
 //   names: tails: genus tails with grammatical gender (m/f/n) so epithets can agree; common: the common-name nouns
@@ -1839,6 +2055,7 @@ const ORDERS = {
     headScaleP5: 1.3,
     wingRoots: [],
     legThick: 1.15,
+    laneFloor: false,
     wings: wingsElytra,
     names: {
       tails: [['cera', 'f'], ['soma', 'n'], ['notus', 'm'], ['derus', 'm'], ['morpha', 'f'], ['gnathus', 'm'], ['cephala', 'f'], ['pus', 'm'],
@@ -1878,6 +2095,7 @@ const ORDERS = {
     wingRootX: 0.5,
     tegula: { rx: [5, 7], hairs: [3, 5] },
     legThick: 0.85,
+    laneFloor: false,
     wings: wingsLepidoptera,
     names: {
       tails: [['ptera', 'f'], ['phora', 'f'], ['noctua', 'f'], ['phila', 'f'], ['mera', 'f'], ['chroa', 'f'], ['stigma', 'n'], ['psyche', 'f'],
@@ -2470,7 +2688,7 @@ function drawPlate(seed, opts, dev) {
   pitchFloor = replay ? dev.pitchFloor / dev.scale : 0;             // body units: the device floor is set after pass 1's scale
   pitchMin = Infinity; syncRec = dev && dev.record || null; syncPlay = dev && dev.replay || null; syncI = 0;
   const freshBox = () => ({ minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
-  bbox = freshBox(); wingPolys = [];
+  bbox = freshBox(); wingPolys = []; laneFrames = [];
   const picked = pick(TYPES);                                  // always drawn, so forcing a type never shifts the stream
   const type = opts && opts.type && TYPES.includes(opts.type) ? opts.type : picked;
   const order = ORDERS[type];                                  // the registry entry every section reads
@@ -3236,7 +3454,7 @@ function wingsLepidoptera(C) {   // (type === 'moth')
       { a: 'M1', ua: dc1[0] / W + 0.001, b: 'M2', ub: dc2[0] / W + r * 0.5, reach: r, sw: wBr, bow: 0, ang: [90, 152] },
       { a: 'M2', ua: dc2[0] / W + 0.001, b: 'CB', ub: D[0] / W - 0.006, reach: 0.012, sw: wBr, bow: 0 },
     ];
-    const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 0.55, angle: randRange(116, 130), lean: -1, stubProb: 0, bowAmt: 0, noSites: true });
+    const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 0.55, angle: randRange(116, 130), lean: -1, stubProb: 0, bowAmt: 0, noSites: true, laneFloor: order.laneFloor });   // the lep wing draws its own veins from the lanes (the registry opts it out of the lane floor: #67's there)
     const laneOf = {}; for (const l of grown.lanes) laneOf[l.id] = l;
     // the dcv as one polyline from its placed pieces, each re-rooted where the previous one landed (a piece the angle
     // rule could not place falls back to a straight segment between its nodes, so the cell always closes); M1 / M2
@@ -3667,9 +3885,10 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
     for (let q = 0; q <= nS; q++) {
       const u = lerp(0.03, 0.94, q / nS), x = X(u), top = topAt(wing, x), c = chordAt(x);
       const fc = 0.025 + G.costal * Math.pow(Math.sin(Math.PI * (u - 0.03) / 0.91), 0.7);
-      costaPl.push([x, top + 0.3]); scPl.push([x, top + c * fc]); r1Pl.push([x, top + c * (fc + G.sub)]);
+      costaPl.push([x, top + 0.3]); scPl.push([x, top + c * (fc + G.sub * ss((u - 0.8) / 0.14))]); r1Pl.push([x, top + c * (fc + G.sub)]);   // Sc drifts down onto R1 from 0.8 and fuses with it near the apex (#14, ref neu-nothochrysa), instead of running into the costa beside it
     }
-    scPl.push(nearestOutlinePoint(poly, [X(0.965), topAt(wing, X(0.965))]));
+    for (let q = 1; q < 8; q++) { const x = lerp(costaPl[nS][0], apex[0], q / 8); costaPl.push([x, topAt(wing, x, 0.3)]); }   // the wall runs on to the apex, where Sc, R1 and Rs meet the costa, so the lane floor (#14) sees them converge on it
+    costaPl.push(apex);
     r1Pl.push(nearestOutlinePoint(poly, [X(0.978), topAt(wing, X(0.978))]));
     // Rs: rooted on R1 at rsFork, running one cell under it (an absolute gap, so the R1-Rs strip is a one-row ladder
     // to the tip as in the references) and blending into the apex over the last 15%
@@ -3695,7 +3914,7 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
     const wR = G.heavy ? SW.O : SW.D;   // R-G: Sc O, R1 / Rs D (O when heavy; R1 before the Rs root is one level up), branches D, Cu F
     const lanes = [
       { id: 'C', pl: costaPl, sw: SW.D, noDraw: true, noFork: true, stub: false },
-      { id: 'Sc', pl: scPl, sw: SW.O, noFork: true, stub: false },
+      { id: 'Sc', pl: scPl, sw: SW.O, noFork: true, stub: false, rank: swLevel(SW.F) },   // rank at the fine level: the lane floor takes Sc last, so it is Sc that merges into R1 where they meet, not R1 into Sc
       { id: 'R1', pl: r1Pl, sw: wR, noFork: true, stub: false },
       { id: 'Rs', pl: rsPl, parent: 'R1', sw: wR, stub: false },
       { id: 'M', u0: 0.02, s0: 0.36, s1: 0.97, end: g.margin('mE', G.mX, 'bot'), sw: SW.D, stub: false, ctrl: 2, ease: 'mid', bow: randRange(-0.12, -0.06) },
@@ -3713,10 +3932,10 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
     for (const g0 of G.grad) { let t = g0; for (let i = 0; i < nB; i++) { named.push({ a: 'B' + i, ua: lerp(uf[i], ut[i], t), b: i + 1 < nB ? 'B' + (i + 1) : 'Rs', ub: lerp(uf[i + 1], ut[i + 1], Math.max(0.08, t - G.zig)), reach: 0.03, sw: SW.D, bow: 0, angT: G.gradAng }); t = Math.min(0.9, t + G.drift); } }
     for (let q = 0; q < G.nmc; q++) named.push({ a: 'M', ua: lerp(0.25, 0.85, (q + 0.5) / G.nmc) * G.cuX, b: 'Cu', reach: 0.03, sw: SW.F });   // m-cu rungs
     const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.05, angle: G.angle, lean: G.lean, bowAmt: 0.02, grad: 0.15, stubProb: 0, stubLen: 0.08,
-      noPair: [['C', 'Sc'], ['Sc', 'R1'], ['M', 'Cu']], pairK: [['R1', 'Rs', G.kR1Rs]] });   // the costal ladder and the m-cu rungs are named; the subcostal field is empty; the R1-Rs strip is sparse
+      noPair: [['C', 'Sc'], ['Sc', 'R1'], ['M', 'Cu'], ['C', 'R1'], ['C', 'Rs']], pairK: [['R1', 'Rs', G.kR1Rs]] });   // the costal ladder and the m-cu rungs are named; the subcostal field is empty; the R1-Rs strip is sparse
     L.wings.push(...g.emit());
     L.wings.push(...costaEls(wing, X(0), X(0.96)));
-    for (const l of grown.lanes) if (l.id[0] === 'B' || l.id === 'Rs' || l.id === 'M' || l.id === 'Mf' || l.id === 'Cu') L.wings.push(...twigEnd(wing, l.pl, l.id === 'Cu' || l.id === 'M' ? 2 : G.twig));   // end-twigging on the outline
+    for (const l of grown.lanes) if (l.id[0] === 'B' || l.id === 'Rs' || l.id === 'M' || l.id === 'Mf' || l.id === 'Cu') { const tw = twigEnd(wing, l.pl, l.id === 'Cu' || l.id === 'M' ? 2 : G.twig); L.wings.push((s, W) => grown.floor && grown.floor(s, W).ends.get(l)?.end ? [] : tw); }   // end-twigging on the outline; none where the lane floor (#14) ended the lane on a neighbour before the margin
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum;
     if (!d.hind) foreGrown = grown;
@@ -4144,9 +4363,14 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     };
     veins.push(fanVein(0, 4.5, fanTargets[0], 1, G.wig * 0.5, G.und, 1.7));   // R2
     for (let i = 2; i <= nV; i++) { const f = (i - 2) / Math.max(1, nV - 2); veins.push(fanVein(lerp(0.2, 0.95, f), null, fanTargets[i - 1], G.pow0 * lerp(2.5, 1, f) * jitter(0.07), G.wig, G.und, i * 1.7)); }
-    if (dam) {   // petiole: the veins run to its end as two fused stems, Sc+R+M above and Cu+A below
-      const r0 = wing.yRange(2) || [0, 0];
-      L.wings.push(emitLocalPolyline(wing, bowVein([2, r0[0] + 1], veins[1][0], 0.03, 6), SW.O), emitLocalPolyline(wing, bowVein([2, r0[1] - 1], veins[veins.length - 1][0], -0.03, 6), SW.O));
+    // petiole: the veins run to its end as two fused stems, Sc+R+M above and Cu+A below. They are lanes (#14), so the lane
+    // floor draws them only where the stalk has room beside its two edges (walls PC / PT, the outline 0.3 inside it, up
+    // to the petiole's end); out of the strips (noJoin), with no bow roll
+    const petiole = [];
+    if (dam) {
+      const r0 = wing.yRange(2) || [0, 0], edge = side => { const pl = []; for (let k = 0; k <= 24; k++) { const x = lerp(1, x0, k / 24); pl.push([x, side ? botAt(wing, x, 0.3) : topAt(wing, x, 0.3)]); } return pl; };
+      petiole.push({ id: 'PC', pl: edge(0), sw: SW.D, noDraw: true, noJoin: true, noFork: true, stub: false, bow: 0 }, { id: 'PT', pl: edge(1), sw: SW.D, noDraw: true, noJoin: true, noFork: true, stub: false, bow: 0 },
+        { id: 'P1', pl: bowVein([2, r0[0] + 1], veins[1][0], 0.03, 6), sw: SW.O, noJoin: true, noFork: true, stub: false, bow: 0 }, { id: 'P2', pl: bowVein([2, r0[1] - 1], veins[veins.length - 1][0], -0.03, 6), sw: SW.O, noJoin: true, noFork: true, stub: false, bow: 0 });
     }
     // wall lanes: the costa and the trailing edge, 0.3 inside the outline, ending at the apex; drawn by the outline, not here
     const costaPl = [], edgePl = [], nW = 60;
@@ -4156,7 +4380,7 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     const lanes = [{ id: 'C', pl: costaPl, sw: SW.D, noDraw: true, noFork: true, stub: false }, { id: 'Sc', pl: veins[0], sw: G.heavy ? SW.O : SW.D, noFork: true, stub: false },
       { id: 'R1', pl: veins[1], sw: SW.O, noFork: true, stub: false }];
     for (let i = 1; i <= nV; i++) lanes.push({ id: vId(i), pl: veins[i + 1], sw: G.heavy && i < 2 ? SW.O : SW.D, noFork: true, stub: false });
-    lanes.push({ id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false });
+    lanes.push({ id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false }, ...petiole);
     const g = wingGraph(wing, Lw), named = [], gaps = [];
     // antenodal crossveins: aligned C-Sc-R1 pairs from the base to the nodus, the first two heavier (primary antenodals)
     let kA = 0;
@@ -4319,9 +4543,6 @@ function assemblePlate(C) {
     : '<g transform="scale(-1,1)">' + els.join('') + '</g>') + '</g>';
   const mirrored = (k, pairs) => mirrorEls(L[k], pairs);
   const single = k => '<g>' + L[k].join('') + '</g>';
-  // legs sprout from under the body; wings are dorsal, so they lie over the body with
-  // their roots on the thorax, and the tegulae cover the roots
-  const order = [mirrored('legs', L.legPairs), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('wings'), mirrored('tegulae'), mirrored('antennae')];
 
   // symmetric bbox (right half generated, left mirrored); a device plate keeps pass 1's fit, so its scale is the
   // default plate's (a coarser pile or fringe moves the outermost hair by a fraction of a px, never past the margin)
@@ -4344,6 +4565,13 @@ function assemblePlate(C) {
   meta.device = device;
   meta.minPitch = pitchMin < Infinity ? pitchMin * s : null;
   meta.weights = { H: Math.max(SW_PX.H, strokeFloor), O: Math.max(SW_PX.O, strokeFloor), D: Math.max(SW_PX.D, strokeFloor), F: Math.max(SW_PX.F, strokeFloor) };
+  // deferred elements (growVeins' lane floor, #14) resolve now that the scale and the weights are known; they add nothing
+  // to the bbox, which already holds every point they may draw
+  for (const k in L) if (Array.isArray(L[k]) && L[k].some(e => typeof e === 'function')) L[k] = L[k].flatMap(e => typeof e === 'function' ? e(s, meta.weights) : [e]);
+  meta.wingLanes = laneFrames;
+  // legs sprout from under the body; wings are dorsal, so they lie over the body with
+  // their roots on the thorax, and the tegulae cover the roots
+  const order = [mirrored('legs', L.legPairs), single('abdomen'), mirrored('covers'), single('thoraxHead'), mirrored('wings'), mirrored('tegulae'), mirrored('antennae')];
 
   // plate caption: italic binomial and a letter-spaced small-caps common name; the common name (11 px) is dropped on a
   // device plate where it would fall under DEVICE.subtitleMinPx device px (devicePx < 546 at 10)

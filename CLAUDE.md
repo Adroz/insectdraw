@@ -68,7 +68,12 @@ contract for changes.
   `meta.lepArtSvg`, #13). Where the cross set lies over the fan the fan drops every other line; the hatch stops
   `LEP_HUG` short of the veins, band edges and cross-lines and never runs alongside one; the hindwing hatch and
   fringe keep `LEP_CLEAR` off the forewing's edge. A window the line art makes solid on its own (the costa beside Sc
-  and R1, a vein fork) is converging line art (#67; #14 for the other orders), counted in the report, not failed.
+  and R1, a vein fork) is converging line art (#67), counted in the report, not failed.
+- Lanes never fuse into a bar (#14): on every `growVeins` order the registry does not opt out (`laneFloor: false`: the moth, #67), lanes and crossveins are drawn by one
+  deferred element resolved at the plate scale (`laneFloor`, see the spec's Growth section), which merges a lane into
+  its neighbour where they converge under the floor; `meta.wingLanes` carries the drawn lanes and `laneSep` in
+  `tests/check.js` asserts no two centre-lines within 1.8 px away from a junction. New lanes go through `growVeins`
+  (a wall the outline draws is a `noDraw` lane), never straight into `L.wings`, or the floor cannot see them.
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px
@@ -159,7 +164,7 @@ contract for changes.
 ## Verify before claiming done
 
 ```
-node tests/check.js 3000                 # invariants + determinism + wing uniqueness (about 13 min)
+node tests/check.js 3000                 # invariants + determinism + wing uniqueness + lane floor (about 35 min; laneSep runs on the default and the device plate)
 node tests/check.js 300 --only antennae  # just the named checks (a,b,...), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists them
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster

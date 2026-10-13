@@ -127,7 +127,9 @@ Rules (implemented 2026-10-02 on `growVeins` v2, after Hoffmann et al. 2018; see
   by a power curve that is steeper for the upper veins. Targets: R1 at the outline sample before
   the apex, the fan evenly by arc length from the apex back along the hind margin to 42% span.
   Undulation genes (`und`, `period`, `wig`) as before; no primary has a kink. A damselfly's fan
-  leaves the end of the petiole from two fused stems (Sc+R+M above, Cu+A below).
+  leaves the end of the petiole from two fused stems (Sc+R+M above, Cu+A below), lanes `P1` / `P2`
+  beside walls `PC` / `PT` (the petiole's edges), so the lane floor (#14) draws them only where the
+  stalk has room for them beside its outline.
 - **Wall lanes**: the costa and the trailing edge, 0.3 inside the outline and ending at the apex,
   are lanes that are never drawn (`noDraw`), so the costal strips and the anal field are strips
   like any other and every cell closes against a vein or the margin.
@@ -330,8 +332,8 @@ Rules: grown by `growVeins` v2. Lane plan:
 
 | lane | built as | notes |
 |---|---|---|
-| C | wall lane 0.3 inside the costa, `noDraw` | the outline draws it |
-| Sc | pre-built offset under the costa: depth 0.025 + `costal` (0.07–0.11) × sin^0.7 of the span, ending on the costa at 0.965 | O |
+| C | wall lane 0.3 inside the costa, `noDraw`, on to the apex (#14) | the outline draws it |
+| Sc | pre-built offset under the costa: depth 0.025 + `costal` (0.07–0.11) × sin^0.7 of the span, drifting down onto R1 from 0.8 and fusing with it near the apex (`rank` 0, so the lane floor merges Sc into R1, not R1 into Sc; #14) | O |
 | R1 | the same offset plus `sub` (0.04–0.06 of the chord), ending on the costa at 0.978 | D (O when heavy) |
 | Rs | pre-built: rooted on R1 at `rsFork` (0.07–0.12) through `parent` (the root is a junction on both), one cell under R1 (`rsGap` × the Sc–R1 gap, absolute) to the apex | D / O |
 | B0..Bn | forks off Rs at u from rsFork + 0.12 to `rsEnd` (0.78–0.88), aimed at outline nodes along the hind margin from M's end to just short of the apex, trailing edge first; one bowed arc each (`bowB` 0.03–0.09, leaving Rs at a shallow angle) | D; 8–14 (5–11 on the hindwing) |
@@ -344,8 +346,10 @@ leaning toward the apex (20–35 rungs); the **intramedian cell** as two Rs–M 
 aimed at branch i+1 at t − `zig` (7–12%), with its own target angle `gradAng` 108–116° (`angT`) so it
 leans more than the ladders and the series reads as a staircase, the next rung leaving branch i+1 at t
 again (`drift`); 1–4 **m-cu** rungs. Sites (`k` 1.4–2.2, `minSep` 0.05) fill the R1–Rs strip and the
-outer parts of the inter-branch strips; `uOpen` 1.0; the subcostal strip and M–Cu are `noPair`. Every
-branch, Rs, M and Cu end-twig on the outline. 137 joins per plate, 3 dropped, mean angle 117°.
+outer parts of the inter-branch strips; `uOpen` 1.0; the subcostal strip, M–Cu, C–R1 and C–Rs are
+`noPair` (the costa's only crossveins are the named costal ladder). Every branch, Rs, M and Cu
+end-twigs on the outline, except a lane the lane floor (#14) ended on a neighbour before the margin
+(its end gave way: `floor(s, W).ends`), which has no margin end to twig. 137 joins per plate, 3 dropped, mean angle 117°.
 
 ### Ephemeroptera (ref: eph-ameletus-li2021)
 
@@ -520,8 +524,29 @@ to its `deflect` step:
   crossveins `SW.F`; a lane that forks is one level above its branch before the fork (capped at O);
   a crossvein is one level below its lighter lane. The basal vein is O in bees, D in wasps.
 - **Density gradient** (R-H): site spacing shrinks toward the tip and trailing edge by `grad`.
+- **Lane floor** (#14, e-ink): converging lanes must not fuse into a bar at 1 bit (C / Sc / R1 along a
+  mayfly or odonate costa, the grasshopper tegmen's costa, Sc / R1 / Rs at a lacewing apex, the
+  damselfly petiole). Lanes and crossveins go out through one deferred element that `assemblePlate`
+  resolves once the plate scale is known (`laneFloor`; no rng, so the stream never depends on the
+  scale). Lanes are taken strongest first (walls, then `rank` or weight, then table order); where one
+  runs closer to a final lane than max(1.8 + 0.2, 2.2 × mean weight) plate px (2.6 × against a wall,
+  which stands for the heavy costa or the outline), and the run is not all within 5 px of a junction
+  of the lane, it gives way: a run at its end becomes a Y-merge into the other lane, at its root a
+  fork from it, in mid-course a kiss, each a quadratic arc meeting the other lane at about 35°. It
+  rejoins only where the gap opens 1.12× past the floor; a kept sliver under 20 px (a pocket under
+  60 px) is given up too. A crossvein end on a stretch that gave way moves onto the lane it merged
+  into (an antenodal whose Sc merged into the costa stays as C–R1), or is dropped when both ends land
+  on one lane; a fork rooted on such a stretch is carried onto that lane by a short connector. The
+  drawn lanes go on `meta.wingLanes` (body coordinates, one entry per wing, with the crossveins
+  dropped and moved), where `tests/check.js` (`laneSep`) asserts no two lane centre-lines closer than
+  1.8 px away from a junction (6 px), on the default and the device plate. `meta.wingStats` stays the
+  growth's count. An order opts out on its registry entry (`laneFloor: false`, read by the wing block
+  and by `laneSep`): Lepidoptera (#67 owns the lep costa) and the beetle (no lanes). `growVeins`
+  returns the resolver as `floor(s, W)` (memoised; `{ els, ends }`, `ends` saying per lane whether its
+  root or its end gave way), so an element that depends on a cut (the lacewing end twigs) asks it
+  instead of relying on its place in the layer.
 
-`growVeins` returns `{ lanes, joins, forks, stats }`; `stats = { joins, dropped, minAngle, maxAngle,
+`growVeins` returns `{ lanes, joins, forks, stats, floor }`; `stats = { joins, dropped, minAngle, maxAngle,
 rungs, angSum, ladders, multi }` is exposed as `meta.wingStats` by every winged order (an order may add its own
 fields: Diptera adds `rm` / `bmcu`, the drawn r-m and bm-cu lengths as span fractions) and asserted by
 `tests/check.js` (the 105–140 band on slide-placed rungs; mesh edges and structural obliques with their
