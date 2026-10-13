@@ -25,6 +25,18 @@ const typeCount = {};
 const wingSigs = {};   // type -> Map(structural wing signature -> count)
 const bodySigs = {};   // type -> Map(structural body signature -> count)
 let elTotal = 0;
+const dipStats = {};   // Diptera family -> { wl, rm, bmcu } per plate (CHECKS.dipAspect), asserted by POST.dipAspect
+const DIP_REF = { muscid: 0.40, syrphid: 0.40, tabanid: 0.40, nemato: 0.35, asilid: 0.30, tipulid: 0.30 };   // reference forewing W/L per family (#9)
+const DIP_MIN = 15;   // plates a family needs before its median is asserted
+const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
+// breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
+const pcaAspect = poly => {
+  let mx = 0, my = 0; for (const p of poly) { mx += p[0]; my += p[1]; } mx /= poly.length; my /= poly.length;
+  let sxx = 0, syy = 0, sxy = 0; for (const p of poly) { const dx = p[0] - mx, dy = p[1] - my; sxx += dx * dx; syy += dy * dy; sxy += dx * dy; }
+  const a = 0.5 * Math.atan2(2 * sxy, sxx - syy), u = [Math.cos(a), Math.sin(a)], v = [-u[1], u[0]];
+  const ext = d => { const pr = poly.map(p => p[0] * d[0] + p[1] * d[1]); return Math.max(...pr) - Math.min(...pr); };
+  return ext(v) / ext(u);
+};
 
 // ---- geometry helpers shared by the checks ----
 const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
@@ -319,6 +331,17 @@ const CHECKS = {
   // cell still closes, so the drop-count test does not apply to it.
   // The same rules run on the device plate's own stats (meta.device.wingStats, pass 2's): the pitch floor may thin a
   // ladder or a mesh, but never past the research minimums, and never into a bad junction or a dangling piece.
+  // Diptera wing outline (#9): collects each fly / crane fly forewing's breadth over length (PCA of the outline, so the
+  // posture and the root do not count) and its r-m and bm-cu lengths as fractions of the span (wingStats.rm / .bmcu, as
+  // drawn); the medians are asserted per family in POST.dipAspect
+  dipAspect(meta, svg, fail) {
+    if (meta.type !== 'fly' && meta.type !== 'cranefly') return;
+    const s = meta.wingStats || {}, fam = meta.wingSig.split(',')[1], o = dipStats[fam] ||= { wl: [], rm: [], bmcu: [] };
+    o.wl.push(pcaAspect(meta.wingOutlines[0]));
+    if (typeof s.rm !== 'number') return fail('Diptera wingStats has no r-m length');
+    if (s.rm > 0) o.rm.push(s.rm);
+    if (s.bmcu > 0) o.bmcu.push(s.bmcu);
+  },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {
       if (!s) return fail(what + 'no wingStats on a grown wing');
@@ -373,6 +396,24 @@ const sigRule = (sigs, what, distinctFloor, fail) => {
   }
 };
 const POST = {
+  // Diptera wing outline (#9): the median forewing W/L per family within 0.05 of its reference (dip-eristalis 0.40 for
+  // the muscid / syrphid / tabanid plan, dip-asilid-photo 0.30, dip-limonia 0.30, and no crane fly median above 0.35;
+  // the nematoceran flies have no reference image and take 0.35, between the brachycerans and the crane fly), and the
+  // median r-m and bm-cu at most 5% of the span (3-5.5% on the three references; 16-18% before #9). A family needs
+  // DIP_MIN plates for its median to mean anything, so a short run reports what it skipped instead of passing silently.
+  dipAspect(fail) {
+    const skipped = [];
+    for (const fam in DIP_REF) {
+      const o = dipStats[fam], ref = DIP_REF[fam];
+      if (!o || o.wl.length < DIP_MIN) { skipped.push(fam + ' (' + (o ? o.wl.length : 0) + ')'); continue; }
+      const wl = median(o.wl), rm = o.rm.length ? median(o.rm) : 1, bmcu = o.bmcu.length ? median(o.bmcu) : 1, t = fam === 'tipulid' ? 'cranefly' : 'fly';
+      if (Math.abs(wl - ref) > 0.05) fail('Diptera ' + fam + ' forewing W/L median ' + wl.toFixed(3) + ' is not within 0.05 of the reference ' + ref, t);
+      if (fam === 'tipulid' && wl > 0.35) fail('crane fly forewing W/L median ' + wl.toFixed(3) + ' above 0.35', t);
+      if (rm > 0.05 || bmcu > 0.05) fail('Diptera ' + fam + ' crossveins too long: r-m ' + rm.toFixed(3) + ', bm-cu ' + bmcu.toFixed(3) + ' of the span (max 0.05)', t);
+    }
+    console.log('Diptera W/L medians:', Object.keys(dipStats).map(f => f + ' ' + median(dipStats[f].wl).toFixed(3) + ' (n ' + dipStats[f].wl.length + ', r-m ' + median(dipStats[f].rm).toFixed(3) + ', bm-cu ' + median(dipStats[f].bmcu).toFixed(3) + ')').join('; ') +
+      (skipped.length ? '; too few plates to assert (< ' + DIP_MIN + '): ' + skipped.join(', ') : ''));
+  },
   signatures(fail) {
     sigRule(wingSigs, 'wing', 0.5, fail);
     sigRule(bodySigs, 'body', 0.98, fail);
