@@ -53,6 +53,13 @@ const LEP_INK_MAX = 0.55, LEP_TONE_SHARE = 0.25, LEP_WIN = 9;
 const lepInk = {};   // variant -> { n, share, seed, art } over the run, for the report (POST.lepInk)
 let lepRun = 0;      // plates lepInk saw (any type), so POST.lepInk can tell a lost variant from a short run
 const LEP_MIN = 40;  // lepidopteran plates a run needs before a variant with no plate fails (~0.6^40: no butterfly by chance)
+// #14: no two lane centre-lines of a growVeins wing (meta.wingLanes: the drawn lanes and the wall lanes the outline draws, body
+// coordinates, one entry per wing) closer than LANE_FLOOR plate px, except within LANE_JOIN px of a junction of the lane, a
+// point where it touches another lane (a fork, an end on a neighbour, a node three lanes share), so a Y passes and a bar
+// does not; stated here rather than read from the engine. Moth wings are
+// #67's (lepInk); the beetle has no lanes.
+const LANE_FLOOR = 1.8, LANE_JOIN = 6, LANE_TOUCH = 0.3, LANE_STEP = 0.5;
+const laneRun = {};   // type -> { n, worst, seed } over the run: the closest non-junction approach, for the report
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -112,6 +119,32 @@ const checkLegSet = (meta, sets, label, fail) => {
     for (let k = 2; k + 1 < A.length && !hit; k++) for (let m = 2; m + 1 < Bp.length; m++) if (segsCross(A[k], A[k + 1], Bp[m], Bp[m + 1])) { hit = true; break; }
     if (hit) fail(meta.legs[a].pair + ' and ' + meta.legs[b].pair + label + ' legs cross');
   }
+};
+
+// the closest approach (plate px, looked for out to twice the floor) of two lanes of one wing frame away from their
+// junctions: { d, a, b }, or null when none comes that close
+const laneGap = (frame, scale) => {
+  const lanes = frame.lanes.map(l => l.pieces.map(pc => pc.pts.map(p => [p[0] * scale, p[1] * scale])));
+  const cs = 2 * LANE_FLOOR, grid = new Map(), key = (i, j) => i * 100003 + j;
+  lanes.forEach((pcs, li) => { for (const pts of pcs) for (let i = 0; i + 1 < pts.length; i++) { const a = pts[i], b = pts[i + 1];
+    for (let gx = Math.floor(Math.min(a[0], b[0]) / cs); gx <= Math.floor(Math.max(a[0], b[0]) / cs); gx++) for (let gy = Math.floor(Math.min(a[1], b[1]) / cs); gy <= Math.floor(Math.max(a[1], b[1]) / cs); gy++) { const k = key(gx, gy); (grid.get(k) || grid.set(k, []).get(k)).push([li, a, b]); } } });
+  let worst = null;
+  lanes.forEach((pcs, li) => {
+    if (frame.lanes[li].wall) return;   // a wall lane is the outline; its distance to a drawn lane is measured from the drawn side
+    const S = [];   // samples at most LANE_STEP apart
+    for (const pts of pcs) for (let i = 0; i + 1 < pts.length; i++) { const a = pts[i], b = pts[i + 1], n = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / LANE_STEP)); for (let k = 0; k <= n; k++) S.push([a[0] + (b[0] - a[0]) * k / n, a[1] + (b[1] - a[1]) * k / n]); }
+    const near = new Map(), touch = [];   // other lane -> distance per sample; the lane's junctions
+    S.forEach((p, i) => { const gx = Math.floor(p[0] / cs), gy = Math.floor(p[1] / cs);
+      for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) for (const [lj, a, b] of grid.get(key(gx + dx, gy + dy)) || []) {
+        if (lj === li) continue;
+        const d = ptSegDist(p, a, b); let r = near.get(lj); if (!r) near.set(lj, r = new Float64Array(S.length).fill(Infinity)); if (d < r[i]) r[i] = d;
+      } });
+    S.forEach((p, i) => { for (const r of near.values()) if (r[i] < LANE_TOUCH) { touch.push(p); break; } });
+    for (const [lj, r] of near) {
+      S.forEach((p, i) => { if (r[i] < cs && (!worst || r[i] < worst.d) && touch.every(t => Math.hypot(p[0] - t[0], p[1] - t[1]) > LANE_JOIN)) worst = { d: r[i], a: frame.lanes[li].id, b: frame.lanes[lj].id }; });
+    }
+  });
+  return worst;
 };
 
 // ---- whole-run checks before the seed loop: (fail) => void, fail(msg, type) records a seed-0 finding ----
@@ -434,6 +467,22 @@ const CHECKS = {
     dangling(meta.layers, '');
     dangling(dev.meta.layers, 'device plate: ');
   },
+  // #14: lanes keep LANE_FLOOR px apart at plate scale away from their junctions (laneGap), on the default plate and on the
+  // device plate (heavier strokes, the same centre-lines' floor); every growVeins type but the moth (#67)
+  laneSep(meta, svg, fail, { seed, dev }) {
+    if (meta.type === 'moth' || meta.type === 'beetle') return;
+    const o = laneRun[meta.type] ||= { n: 0, worst: Infinity, seed: 0 };
+    o.n++;
+    for (const [m, what] of [[meta, ''], [dev.meta, 'device plate: ']]) {
+      if (!m.wingLanes || !m.wingLanes.length) { fail(what + 'no lane polylines on meta.wingLanes'); continue; }
+      m.wingLanes.forEach((fr, i) => {
+        const w = laneGap(fr, m.scale);
+        if (!w) return;
+        if (!what && w.d < o.worst) { o.worst = w.d; o.seed = seed; }
+        if (w.d < LANE_FLOOR) fail(what + 'lanes fuse: ' + w.a + ' and ' + w.b + ' ' + w.d.toFixed(2) + ' px apart away from a junction (wing ' + i + ', floor ' + LANE_FLOOR + ')');
+      });
+    }
+  },
   // #13: no lepidopteran wing window reaches LEP_INK_MAX ink at 600 px with the tone layers putting LEP_TONE_SHARE or more
   // of it there (darks keep their tone by hatch pitch, not by stacking a second full family; the hatch keeps off the line
   // art and the other wing; the fringe keeps off the other wing, the costa and the tail). Every lep plate is rasterised
@@ -518,6 +567,10 @@ const POST = {
     console.log('lep wing ink (largest tone share of a solid ' + LEP_WIN + 'x' + LEP_WIN + ' window, max ' + LEP_TONE_SHARE + '; plates solid from line art alone):',
       ['moth', 'butterfly'].map(v => lepInk[v] ? v + ' ' + lepInk[v].share.toFixed(3) + ' (seed ' + lepInk[v].seed + ', n ' + lepInk[v].n + ', line art ' + lepInk[v].art + ')' : v + ' none').join('; ') +
       (missing.length && total < LEP_MIN ? '; too few lepidopteran plates (' + total + ' < ' + LEP_MIN + ') to require ' + missing.join(', ') : ''));
+  },
+  // the report for CHECKS.laneSep: plates per type and the closest non-junction approach seen
+  laneSep() {
+    console.log('lane floor (closest non-junction approach of two lanes, px; floor ' + LANE_FLOOR + '):', Object.keys(laneRun).map(t => t + ' ' + (laneRun[t].worst === Infinity ? '> ' + 2 * LANE_FLOOR : laneRun[t].worst.toFixed(2) + ' (seed ' + laneRun[t].seed + ')') + ' n ' + laneRun[t].n).join('; '));
   },
   signatures(fail) {
     sigRule(wingSigs, 'wing', 0.5, fail);
