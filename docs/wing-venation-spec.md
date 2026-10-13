@@ -346,8 +346,10 @@ leaning toward the apex (20–35 rungs); the **intramedian cell** as two Rs–M 
 aimed at branch i+1 at t − `zig` (7–12%), with its own target angle `gradAng` 108–116° (`angT`) so it
 leans more than the ladders and the series reads as a staircase, the next rung leaving branch i+1 at t
 again (`drift`); 1–4 **m-cu** rungs. Sites (`k` 1.4–2.2, `minSep` 0.05) fill the R1–Rs strip and the
-outer parts of the inter-branch strips; `uOpen` 1.0; the subcostal strip and M–Cu are `noPair`. Every
-branch, Rs, M and Cu end-twig on the outline. 137 joins per plate, 3 dropped, mean angle 117°.
+outer parts of the inter-branch strips; `uOpen` 1.0; the subcostal strip, M–Cu, C–R1 and C–Rs are
+`noPair` (the costa's only crossveins are the named costal ladder). Every branch, Rs, M and Cu
+end-twigs on the outline, except a lane the lane floor (#14) ended on a neighbour before the margin
+(its end gave way: `floor(s, W).ends`), which has no margin end to twig. 137 joins per plate, 3 dropped, mean angle 117°.
 
 ### Ephemeroptera (ref: eph-ameletus-li2021)
 
@@ -538,9 +540,13 @@ to its `deflect` step:
   drawn lanes go on `meta.wingLanes` (body coordinates, one entry per wing, with the crossveins
   dropped and moved), where `tests/check.js` (`laneSep`) asserts no two lane centre-lines closer than
   1.8 px away from a junction (6 px), on the default and the device plate. `meta.wingStats` stays the
-  growth's count. Lepidoptera opt out (`laneFloor: false`; #67 owns the lep costa).
+  growth's count. An order opts out on its registry entry (`laneFloor: false`, read by the wing block
+  and by `laneSep`): Lepidoptera (#67 owns the lep costa) and the beetle (no lanes). `growVeins`
+  returns the resolver as `floor(s, W)` (memoised; `{ els, ends }`, `ends` saying per lane whether its
+  root or its end gave way), so an element that depends on a cut (the lacewing end twigs) asks it
+  instead of relying on its place in the layer.
 
-`growVeins` returns `{ lanes, joins, forks, stats }`; `stats = { joins, dropped, minAngle, maxAngle,
+`growVeins` returns `{ lanes, joins, forks, stats, floor }`; `stats = { joins, dropped, minAngle, maxAngle,
 rungs, angSum, ladders, multi }` is exposed as `meta.wingStats` by every winged order (an order may add its own
 fields: Diptera adds `rm` / `bmcu`, the drawn r-m and bm-cu lengths as span fractions) and asserted by
 `tests/check.js` (the 105–140 band on slide-placed rungs; mesh edges and structural obliques with their

@@ -814,8 +814,9 @@ function legJoints(attach, spec) {
   pts.push(add(p, mul(dirv(a), cl * 0.8)));
   return pts;
 }
-// distance from p to the segment uv
-function ptSeg(p, u, v) { const w = sub(v, u), l2 = w[0] * w[0] + w[1] * w[1]; const t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * w[0] + (p[1] - u[1]) * w[1]) / l2)) : 0; return vlen(sub(p, add(u, mul(w, t)))); }
+// the point of the segment uv nearest p, and the distance from p to the segment
+function segFoot(p, u, v) { const w = sub(v, u), l2 = w[0] * w[0] + w[1] * w[1]; const t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * w[0] + (p[1] - u[1]) * w[1]) / l2)) : 0; return add(u, mul(w, t)); }
+function ptSeg(p, u, v) { return vlen(sub(p, segFoot(p, u, v))); }
 function segDist(a, b, c, d) {   // shortest distance between segments ab and cd
   const cross = (o, p, q) => (p[0] - o[0]) * (q[1] - o[1]) - (p[1] - o[1]) * (q[0] - o[0]);
   const d1 = cross(c, d, a), d2 = cross(c, d, b), d3 = cross(a, b, c), d4 = cross(a, b, d);
@@ -1343,7 +1344,8 @@ function wingGraph(wing, Lw) {
 // final. Two lanes need laneGapPx between their centre-lines: LANE_FLOOR_PX plus a margin, or LANE_DENSITY x their mean
 // stroke weight where that is more (heavy pairs need more paper to stay apart; a wall stands for the heavy costa or the
 // outline, so LANE_DENSITY_WALL). Where a lane runs closer than that to a final lane, and the run is not all within
-// LANE_JOIN_PX of a junction of the lane (a point where it touches any final lane: a fork, an end on a neighbour), it
+// LANE_JOIN_PX of a junction of the lane (a point where it touches any final lane: a fork, an end on a neighbour; 1 px
+// inside tests/check.js's own 6 px, so sampling differences cannot fail the check), it
 // gives way, from where the gap closes until it opens LANE_HYST times past the floor: a run at its end becomes a Y-merge
 // into the other lane, at its root a fork from it, in mid-course a kiss, each a quadratic arc meeting the other lane at
 // about 35 degrees. A kept sliver under LANE_SCRAP_PX (a pocket, leaving a lane and coming back to it, under three times
@@ -1352,12 +1354,14 @@ function wingGraph(wing, Lw) {
 // such a stretch is carried onto that lane by a short connector. The drawn lanes go on meta.wingLanes (body
 // coordinates, one entry per growVeins wing, with the counts of crossveins dropped and moved), where tests/check.js
 // (laneSep) asserts its own floor; meta.wingStats stays the growth's.
-const LANE_FLOOR_PX = 1.8, LANE_MARGIN_PX = 0.2, LANE_DENSITY = 2.2, LANE_DENSITY_WALL = 2.6, LANE_JOIN_PX = 6, LANE_TOUCH_PX = 0.3, LANE_SCRAP_PX = 20, LANE_HYST = 1.12;
+const LANE_FLOOR_PX = 1.8, LANE_MARGIN_PX = 0.2, LANE_DENSITY = 2.2, LANE_DENSITY_WALL = 2.6, LANE_JOIN_PX = 5, LANE_TOUCH_PX = 0.3, LANE_SCRAP_PX = 20, LANE_HYST = 1.12;
+const SW_KEY = Object.fromEntries(Object.entries(SW).map(([k, v]) => [v, k]));   // SW token -> its key in the stroke weights (W.H ...)
 const laneGapPx = (wa, wb, wall) => Math.max(LANE_FLOOR_PX + LANE_MARGIN_PX, (wall ? LANE_DENSITY_WALL : LANE_DENSITY) * (wa + wb) / 2);   // the centre-line gap two lanes of these weights need
 let laneFrames = [];   // the resolved lanes of every growVeins wing on the current plate (meta.wingLanes), reset per plate in drawPlate
 function laneFloor(wing, lanes, items, s, W) {
-  const pxOf = sw => W[String(sw).slice(3)], h = 0.5 / s, R = (LANE_JOIN_PX - 1) / s, tol = LANE_TOUCH_PX / s;
-  const segD = (p, a, b) => { const w = sub(b, a), l2 = w[0] * w[0] + w[1] * w[1], t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * w[0] + (p[1] - a[1]) * w[1]) / l2)) : 0; return [vlen(sub(p, add(a, mul(w, t)))), add(a, mul(w, t))]; };
+  const pxOf = sw => W[SW_KEY[sw]], h = 0.5 / s, R = LANE_JOIN_PX / s, tol = LANE_TOUCH_PX / s;
+  const segD = (p, a, b) => { const q = segFoot(p, a, b); return [vlen(sub(p, q)), q]; };
+  const nearestSample = (S, p) => { let bi = 0, bd = Infinity; for (let i = 0; i < S.length; i++) { const d = vlen(sub(S[i], p)); if (d < bd) { bd = d; bi = i; } } return [bi, bd]; };
   // every drawn lane as one path of samples at most h apart, with the stroke weight of the piece each sample is on
   const path = new Map();
   for (const it of items) if (it.lane) {
@@ -1370,7 +1374,7 @@ function laneFloor(wing, lanes, items, s, W) {
     }
     path.set(it.lane, P);
   }
-  const rankOf = l => l.rank !== undefined ? l.rank : swLevel(l.sw);
+  const rankOf = l => l.rank !== undefined ? l.rank : swLevel(l.sw);   // a lane's `rank` is on swLevel's scale (0 fine .. 3 heavy)
   const order = lanes.filter(l => l.noDraw).concat(lanes.filter(l => !l.noDraw && path.has(l)).map((l, i) => ({ l, i })).sort((p, q) => rankOf(q.l) - rankOf(p.l) || p.i - q.i).map(x => x.l));
   // the final lanes in a grid of cell `cs` (the widest floor), so a sample only looks at the segments around it
   const cs = laneGapPx(W.H, W.H, true) / s, grid = new Map(), fin = new Map();   // fin: lane -> final pieces [{ pts, w }]
@@ -1385,6 +1389,7 @@ function laneFloor(wing, lanes, items, s, W) {
   };
   const nearOn = (m, p) => { let best = null; for (const pc of fin.get(m)) for (let i = 0; i + 1 < pc.pts.length; i++) { const [d, q] = segD(p, pc.pts[i], pc.pts[i + 1]); if (!best || d < best[0]) best = [d, q]; } return best ? best[1] : p; };
   const result = new Map();   // lane -> { pieces: [{ pts, sw }], cut: Uint8Array } for the lanes that gave way somewhere
+  const ends = new Map();     // lane -> { start, end }: whether the lane gave way at its root / its end (returned to the caller)
   for (const l of order) {
     if (l.noDraw) { addFinal(l, [{ pts: l.pl, w: l.pl.map(() => W.H) }]); continue; }
     const P = path.get(l), S = P.pts, n = S.length;
@@ -1457,7 +1462,7 @@ function laneFloor(wing, lanes, items, s, W) {
       if (pts.length > 1) pieces.push({ pts, w, sw });
       a = b;
     }
-    l.startCut = !!cut[0]; l.endCut = !!cut[n - 1];
+    ends.set(l, { start: !!cut[0], end: !!cut[n - 1] });
     result.set(l, { pieces, cut, cutBy, S });
     addFinal(l, pieces);
   }
@@ -1467,7 +1472,7 @@ function laneFloor(wing, lanes, items, s, W) {
   const anchor = (l, p, avoid) => {   // avoid: a lane the point must not be carried onto (the fork itself, whose parent gave way to it)
     for (let k = 0; k < 4; k++) {
       const r = l && result.get(l); if (!r) break;
-      let bi = 0, bd = Infinity; for (let i = 0; i < r.S.length; i++) { const d = vlen(sub(r.S[i], p)); if (d < bd) { bd = d; bi = i; } }
+      const [bi] = nearestSample(r.S, p);
       if (!r.cut[bi]) break;
       let m = r.cutBy[bi].m;
       if (m === avoid) { let md = Infinity; m = null; for (const q of fin.keys()) { if (q === avoid || q === l || !fin.get(q).length) continue; const d = vlen(sub(nearOn(q, p), p)); if (d < md) { md = d; m = q; } } if (!m) break; }
@@ -1482,11 +1487,11 @@ function laneFloor(wing, lanes, items, s, W) {
     if (c.noDraw || !fin.has(c) || !fin.get(c).length) continue;
     const pcs = fin.get(c), its = items.filter(it => it.lane === c);
     for (const atEnd of [false, true]) {
-      if (atEnd ? c.endCut : c.startCut) continue;
+      const ce = ends.get(c); if (ce && (atEnd ? ce.end : ce.start)) continue;
       const pc = atEnd ? pcs[pcs.length - 1] : pcs[0], P0 = atEnd ? pc.pts[pc.pts.length - 1] : pc.pts[0];
       for (const [p, r] of result) {
         if (p === c) continue;
-        let bi = 0, bd = Infinity; for (let i = 0; i < r.S.length; i++) { const d = vlen(sub(r.S[i], P0)); if (d < bd) { bd = d; bi = i; } }
+        const [bi, bd] = nearestSample(r.S, P0);
         if (bd > tol || !r.cut[bi]) continue;
         const A0 = anchor(p, P0, c), gap = vlen(sub(A0.p, P0));
         if (gap > 2 * cs) break;   // the lane it merged into is not beside this point (a parent that gave way far from here): leave the root as it is
@@ -1527,7 +1532,7 @@ function laneFloor(wing, lanes, items, s, W) {
   }
   for (const l of lanes) if (fin.has(l)) frame.lanes.push({ id: l.id, wall: !!l.noDraw, pieces: fin.get(l).map(pc => ({ pts: pc.pts.map(wing.T), w: pc.w })).concat((carry.get(l) || []).map(cn => ({ pts: cn.pts.map(wing.T), w: cn.pts.map(() => pxOf(cn.sw)) }))) });
   laneFrames.push(frame);
-  return out;
+  return { els: out, ends };
 }
 const SW_LV = [SW.F, SW.D, SW.O, SW.H];
 const swLevel = sw => Math.max(0, SW_LV.indexOf(sw));
@@ -1890,13 +1895,17 @@ function growVeins(g, G) {
       drawPl(cutX(l.pl, cuts[i], cuts[i + 1]), sw, { lane: l });
     }
   }
-  if (floorOn && items.length) g.defer((s, W) => laneFloor(wing, lanes, items, s, W));
+  // floor(s, W): the resolved lane floor ({ els, ends }), computed once however many deferred elements ask for it, so an
+  // order's element that reads the cut ends (the lacewing's end twigs) does not depend on its place in the layer
+  let memo = null;
+  const floor = floorOn && items.length ? (s, W) => (memo && memo.s === s && memo.W === W ? memo : (memo = { s, W, r: laneFloor(wing, lanes, items, s, W) })).r : null;
+  if (floor) g.defer((s, W) => floor(s, W).els);
   stats.pairRungs = pairRungs;
   // every crossvein per lane pair, named and site-grown alike, keyed both ways ('Rs|MCu' and 'MCu|Rs'): a band's crossvein count
   const pairJoins = {}; for (const j of joins) { pairJoins[j[0] + '|' + j[1]] = (pairJoins[j[0] + '|' + j[1]] || 0) + 1; if (j[0] !== j[1]) pairJoins[j[1] + '|' + j[0]] = pairJoins[j[0] + '|' + j[1]]; }
   stats.pairJoins = pairJoins;
   rngSync();   // a mesh order's site count follows the cell size, so a device plate's draws inside the growth differ from the default's
-  return { lanes, joins, forks, stats };
+  return { lanes, joins, forks, stats, floor };
 }
 
 // ============================================================
@@ -2004,6 +2013,8 @@ function insectName(seed, type, variant) {
 //     block and the tegula; required when the block roots at wingRoots (absent on the elytra and the orthopteran tegmen).
 //   tegula (optional): the order draws a tegula over the forewing root: rx range, optional hairs count range.
 //   legThick (optional, default 1): leg thickness factor on top of body size (slender-legged orders < 1).
+//   laneFloor (optional, default true): false opts the order's wings out of growVeins' lane floor (#14) and
+//     tests/check.js laneSep: the beetle (no lanes) and the moth (its own vein drawing; #67).
 //   wings: the wing section function (hoisted declarations below; the elytra and the orthopteran tegmen draw into
 //     `covers`).
 //   names: tails: genus tails with grammatical gender (m/f/n) so epithets can agree; common: the common-name nouns
@@ -2044,6 +2055,7 @@ const ORDERS = {
     headScaleP5: 1.3,
     wingRoots: [],
     legThick: 1.15,
+    laneFloor: false,
     wings: wingsElytra,
     names: {
       tails: [['cera', 'f'], ['soma', 'n'], ['notus', 'm'], ['derus', 'm'], ['morpha', 'f'], ['gnathus', 'm'], ['cephala', 'f'], ['pus', 'm'],
@@ -2083,6 +2095,7 @@ const ORDERS = {
     wingRootX: 0.5,
     tegula: { rx: [5, 7], hairs: [3, 5] },
     legThick: 0.85,
+    laneFloor: false,
     wings: wingsLepidoptera,
     names: {
       tails: [['ptera', 'f'], ['phora', 'f'], ['noctua', 'f'], ['phila', 'f'], ['mera', 'f'], ['chroa', 'f'], ['stigma', 'n'], ['psyche', 'f'],
@@ -3441,7 +3454,7 @@ function wingsLepidoptera(C) {   // (type === 'moth')
       { a: 'M1', ua: dc1[0] / W + 0.001, b: 'M2', ub: dc2[0] / W + r * 0.5, reach: r, sw: wBr, bow: 0, ang: [90, 152] },
       { a: 'M2', ua: dc2[0] / W + 0.001, b: 'CB', ub: D[0] / W - 0.006, reach: 0.012, sw: wBr, bow: 0 },
     ];
-    const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 0.55, angle: randRange(116, 130), lean: -1, stubProb: 0, bowAmt: 0, noSites: true, laneFloor: false });   // the lep wing draws its own veins from the lanes (the lane floor is #67's there)
+    const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 0.55, angle: randRange(116, 130), lean: -1, stubProb: 0, bowAmt: 0, noSites: true, laneFloor: order.laneFloor });   // the lep wing draws its own veins from the lanes (the registry opts it out of the lane floor: #67's there)
     const laneOf = {}; for (const l of grown.lanes) laneOf[l.id] = l;
     // the dcv as one polyline from its placed pieces, each re-rooted where the previous one landed (a piece the angle
     // rule could not place falls back to a straight segment between its nodes, so the cell always closes); M1 / M2
@@ -3901,7 +3914,7 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
     const wR = G.heavy ? SW.O : SW.D;   // R-G: Sc O, R1 / Rs D (O when heavy; R1 before the Rs root is one level up), branches D, Cu F
     const lanes = [
       { id: 'C', pl: costaPl, sw: SW.D, noDraw: true, noFork: true, stub: false },
-      { id: 'Sc', pl: scPl, sw: SW.O, noFork: true, stub: false, rank: 0 },   // rank 0: the lane floor takes Sc last, so it is Sc that merges into R1 where they meet, not R1 into Sc
+      { id: 'Sc', pl: scPl, sw: SW.O, noFork: true, stub: false, rank: swLevel(SW.F) },   // rank at the fine level: the lane floor takes Sc last, so it is Sc that merges into R1 where they meet, not R1 into Sc
       { id: 'R1', pl: r1Pl, sw: wR, noFork: true, stub: false },
       { id: 'Rs', pl: rsPl, parent: 'R1', sw: wR, stub: false },
       { id: 'M', u0: 0.02, s0: 0.36, s1: 0.97, end: g.margin('mE', G.mX, 'bot'), sw: SW.D, stub: false, ctrl: 2, ease: 'mid', bow: randRange(-0.12, -0.06) },
@@ -3922,7 +3935,7 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
       noPair: [['C', 'Sc'], ['Sc', 'R1'], ['M', 'Cu'], ['C', 'R1'], ['C', 'Rs']], pairK: [['R1', 'Rs', G.kR1Rs]] });   // the costal ladder and the m-cu rungs are named; the subcostal field is empty; the R1-Rs strip is sparse
     L.wings.push(...g.emit());
     L.wings.push(...costaEls(wing, X(0), X(0.96)));
-    for (const l of grown.lanes) if (l.id[0] === 'B' || l.id === 'Rs' || l.id === 'M' || l.id === 'Mf' || l.id === 'Cu') { const tw = twigEnd(wing, l.pl, l.id === 'Cu' || l.id === 'M' ? 2 : G.twig); L.wings.push(() => l.endCut ? [] : tw); }   // end-twigging on the outline; none where the lane floor (#14) ended the lane on a neighbour before the margin
+    for (const l of grown.lanes) if (l.id[0] === 'B' || l.id === 'Rs' || l.id === 'M' || l.id === 'Mf' || l.id === 'Cu') { const tw = twigEnd(wing, l.pl, l.id === 'Cu' || l.id === 'M' ? 2 : G.twig); L.wings.push((s, W) => grown.floor && grown.floor(s, W).ends.get(l)?.end ? [] : tw); }   // end-twigging on the outline; none where the lane floor (#14) ended the lane on a neighbour before the margin
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum;
     if (!d.hind) foreGrown = grown;

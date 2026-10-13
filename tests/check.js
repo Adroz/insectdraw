@@ -56,8 +56,8 @@ const LEP_MIN = 40;  // lepidopteran plates a run needs before a variant with no
 // #14: no two lane centre-lines of a growVeins wing (meta.wingLanes: the drawn lanes and the wall lanes the outline draws, body
 // coordinates, one entry per wing) closer than LANE_FLOOR plate px, except within LANE_JOIN px of a junction of the lane, a
 // point where it touches another lane (a fork, an end on a neighbour, a node three lanes share), so a Y passes and a bar
-// does not; stated here rather than read from the engine. Moth wings are
-// #67's (lepInk); the beetle has no lanes.
+// does not; the numbers are stated here rather than read from the engine. Which orders it covers is the registry's
+// (ORDERS[type].laneFloor === false opts one out: the moth's wings are #67's, lepInk; the beetle has no lanes).
 const LANE_FLOOR = 1.8, LANE_JOIN = 6, LANE_TOUCH = 0.3, LANE_STEP = 0.5;
 const laneRun = {};   // type -> { n, worst, seed } over the run: the closest non-junction approach, for the report
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
@@ -186,6 +186,7 @@ const PRE = {
       if (o.tegula && (!range2(o.tegula.rx) || (o.tegula.hairs !== undefined && !range2(o.tegula.hairs)))) f('tegula is not { rx: [min, max], hairs?: [min, max] }: ' + JSON.stringify(o.tegula));
       if (o.tegula && o.wingRootX === undefined) f('tegula without a wingRootX to sit at');
       if (o.legThick !== undefined && !(typeof o.legThick === 'number' && o.legThick > 0)) f('legThick is not a positive factor: ' + o.legThick);
+      if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
       if (typeof o.wings !== 'function') f('wings is not a function');
       const nb = namesBad(o.names); if (nb) f('names: ' + nb);
       for (const v of Object.keys(o.variantNames || {})) { const vb = namesBad(o.variantNames[v]); if (vb) f('variantNames.' + v + ': ' + vb); }
@@ -468,9 +469,12 @@ const CHECKS = {
     dangling(dev.meta.layers, 'device plate: ');
   },
   // #14: lanes keep LANE_FLOOR px apart at plate scale away from their junctions (laneGap), on the default plate and on the
-  // device plate (heavier strokes, the same centre-lines' floor); every growVeins type but the moth (#67)
+  // device plate (heavier strokes, the same centre-lines' floor); every order the registry does not opt out (ORDERS[type].laneFloor === false: the beetle, the moth, #67)
   laneSep(meta, svg, fail, { seed, dev }) {
-    if (meta.type === 'moth' || meta.type === 'beetle') return;
+    if (E.ORDERS[meta.type].laneFloor === false) {   // the registry opts the order out (the beetle, the moth: #67); it must then draw no floored lanes
+      if (meta.wingLanes && meta.wingLanes.length) fail('lanes on meta.wingLanes for an order the registry opts out of the lane floor');
+      return;
+    }
     const o = laneRun[meta.type] ||= { n: 0, worst: Infinity, seed: 0 };
     o.n++;
     for (const [m, what] of [[meta, ''], [dev.meta, 'device plate: ']]) {

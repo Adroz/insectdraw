@@ -351,7 +351,7 @@ How each consumer loads it:
 ## Dev
 
 ```
-node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks, the device plate floors at 440, and the lepidopteran 1-bit ink gate (lepInk: every moth/butterfly plate's wings rasterised at 600 px) (about 13 min)
+node tests/check.js 3000                     # runs the engine over N seeds: NaN/fit/leg-pose/determinism/wing+body-uniqueness checks, the device plate floors at 440, the lepidopteran 1-bit ink gate (lepInk: every moth/butterfly plate's wings rasterised at 600 px), and the lane floor (laneSep: no two wing lanes within 1.8 px away from a junction, default and device plate) (about 35 min)
 node tests/check.js 300 --only antennae      # just the named checks (comma-separated), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists the checks
 npm install && npm test                      # e-ink survival gate: every layer rasterised at the device size through the panel pipeline (sharp), all strokes and fine strokes alone
 node scripts/render-daily.js 2026-01-01      # the daily plate for a Brisbane calendar day into daily/ (insect.svg, insect.png, insect.json); no date = today
