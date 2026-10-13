@@ -78,9 +78,15 @@ contract for changes.
   curves, the banded / tip-dark hatch, side ticks or pile, and the spot and stripe hatch) are one deferred element in
   `drawAbdomen` resolved at the plate scale, which holds every neighbouring pair `ABD_PITCH_PX` (3) plate px apart at
   the rim and on the midline and keeps the families apart (ticks stop short of the plain curves; a hatched segment
-  draws no ticks), so the gene spacings (body units) are floors, not the drawn pitch. `meta.abdMarks` records what it
-  drew and `abdPitch` in `tests/check.js` asserts it on the default and the device plate. A new mark inside a segment
-  goes into that element and onto `meta.abdMarks`, never straight into `L.abdomen`.
+  draws no ticks), so the genes' pitches (body units, `band.spacing` / `ticks.spacing` / `hair.spacing`) are floors,
+  not the drawn pitch. `meta.abdMarks` records what it drew and `abdPitch` in `tests/check.js` asserts it on the
+  default and the device plate. A new mark inside a segment goes into that element and onto `meta.abdMarks`, never
+  straight into `L.abdomen`.
+- The elytral striae never fuse at the apex (#15): they converge toward it (and fan out of a narrow base), so
+  `wingsElytra` rolls them as before and draws them through one deferred element (`elytralStriae`) resolved at the plate
+  scale: each stria keeps only its run `ELY_PITCH_PX` (3) plate px clear of every other stria and the outline, and a
+  puncture is kept only where its centre clears every line and the last puncture in its row by as much. `meta.elytra`
+  records what it drew and `elytraPitch` in `tests/check.js` measures it on the default and the device plate.
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px
@@ -171,7 +177,7 @@ contract for changes.
 ## Verify before claiming done
 
 ```
-node tests/check.js 3000                 # invariants + determinism + wing uniqueness + lane floor + abdomen pitch (about 35 min; laneSep and abdPitch run on the default and the device plate)
+node tests/check.js 3000                 # invariants + determinism + wing uniqueness + lane floor + abdomen and elytral pitch (about 35 min; laneSep, abdPitch and elytraPitch run on the default and the device plate)
 node tests/check.js 300 --only antennae  # just the named checks (a,b,...), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists them
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster
