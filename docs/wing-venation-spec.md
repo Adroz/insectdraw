@@ -182,7 +182,7 @@ dropped.
 Observed:
 
 - **C** heavy to the apex with a costal break; **Sc** ends on the costa at ~45%; **R1** ends on
-  the costa at ~65%; **R2+3** ends on the costa at ~85%; **R4+5** ends at the apex, dipping toward
+  the costa at ~65%; **R2+3** ends on the costa at ~85%; **R4+5** ends at or just before the apex, dipping toward
   M1 in syrphids. **M1** bends forward near its end (muscids) or runs to the margin (asilids).
 - Closed cells: **br** (basal radial), **bm** (basal medial), **cup** (anal, closed by CuA2+A1),
   **dm** (discal medial, closed by dm-cu), **r4+5** (closed when M1 meets R4+5). Asilid: discal
@@ -202,14 +202,14 @@ in brackets where they differ):
 | C | – | apex | `costaEls`, H; costal spines gene |
 | Sc | (0.02, 0.2) | costa at u 0.42–0.55 [0.6–0.7] | D; hugs the costa (bow −0.02..−0.06); the small stigma lens sits at its end |
 | R1 | (0.02, 0.3) | costa at u 0.6–0.72 [0.76–0.84] | D; the stem before the Rs fork is O |
-| Rs | fork off R1 at u 0.17–0.23 | apex node, or `r45J` (u mEnd + 0.12–0.16, s 0.3) when r4+5 closes | O to its own fork, then D as R4+5 (O with the heavy gene); `R45b` carries it on from `r45J` to the apex |
+| Rs | fork off R1 at u 0.17–0.23 | `r45E`, or `r45J` (u mEnd + 0.12–0.16, s 0.3) when r4+5 closes | O to its own fork, then D as R4+5 (O with the heavy gene); `R45b` carries it on from `r45J` to `r45E`. `r45E` is the apex node, except in a bend family with r4+5 open (muscid elbow), where it sits on the costa at u 0.98 and M1 reaches the margin just behind the apex |
 | R2+3 | fork off Rs at u 0.48–0.62 [0.62–0.72] | costa at u 0.8–0.9 | D; concave toward the costa |
-| R4 | fork off Rs at u 0.66–0.74 | costa at r23 + 0.05 | tabanid and asilid only |
-| M | (0.02, 0.45) | `mE` (u mEnd 0.7–0.8, s 0.5) in bend families; `mF` (u mf, s 0.5) in fork / three | D (O if heavy); carries r-m, bm-cu, dm-cu |
-| M1 (bend) | `mE` | `r45J` (r4+5 closed: a long oblique vein as in eristalis), or the elbow `m1K` (u mEnd + 0.07–0.1, s 0.5 − bend 0.1–0.16) and on to the margin just behind the apex | muscid: the two-lane elbow is the bent M1 |
+| R4 | fork off Rs at u 0.66–0.74 | costa at r23 + 0.07 (≤ 0.96) | tabanid and asilid only |
+| M | (0.02, 0.36) | `mE` (u mEnd 0.7–0.8, s 0.4) in bend families; `mF` (u mf, s 0.4) in fork / three | D (O if heavy); carries r-m, bm-cu, dm-cu |
+| M1 (bend) | `mE` | `r45J` (r4+5 closed: a long oblique vein as in eristalis), or the elbow `m1K` (u mEnd + 0.07–0.1, s 0.4 − 0.3 × bend 0.1–0.16) and on to the margin just behind the apex, R4+5 then meeting the costa at u 0.98 | muscid: the two-lane elbow is the bent M1 |
 | M1, M2 (fork / three) | `mF` | hind margin at u 0.95 / 0.88 [0.96 / 0.89] | M2 odds 0.75 in nematocerans, always in tabanid / asilid |
 | M3 | fork off M at dm-cu + 0.02 | hind margin at u 0.81 [0.82] | odds 0.5 nemato, 0.8 tipulid, always tabanid / asilid |
-| CuA1 | (0.02, 0.6) | `cuK` (u dm-cu + 0.01–0.03, s 0.74), then `CuA1b` down to the margin at dm-cu + 0.05–0.1 [0.04–0.08] | D (O if heavy); dm's lower edge sits at s ≈ 0.75 as in eristalis, so the drop to the margin is short |
+| CuA1 | (0.02, 0.43), cubic ease-in (runs close under M to bm-cu, then drops) | `cuK` (u dm-cu + 0.01–0.03, s 0.74), then `CuA1b` down to the margin at dm-cu + 0.05–0.1 [0.04–0.08] | D (O if heavy); dm's lower edge sits at s ≈ 0.75 as in eristalis, so the drop to the margin is short |
 | CuA2 | (0.02, 0.64) | `cupJ` (u 0.28–0.4, s 0.84): cup closes; [margin at u 0.54–0.62, cup open] | D; strong negative bow (−0.1..−0.14) so it runs out, then bends down onto A1 |
 | A1 | (0.02, 0.8) | `cupJ` [margin at cu2 − 0.16] | D |
 | A1c | `cupJ` | margin at cu2 + 0.05 | A1+CuA2, the short way on to the margin |
@@ -224,17 +224,29 @@ outside R-D's band for a crossvein. Crossvein bows stay within ±0.06: a bow rot
 tangents of the arc by about atan(4·bow), so a −0.1 bow on dm-cu could never satisfy both junction
 angles.
 
-Family parameters (ky = breadth / span; k = site spacing / strip width; sepAbs = narrowest strip,
+Outline (#9): the breadth is split about the root–apex line, `up` of it on the costal side (0.3 in
+muscid / syrphid / tabanid, 0.35 nemato, 0.38 asilid, 0.47 tipulid: the costa runs close to that
+line on dip-eristalis, the crane fly's apex sits mid-chord on dip-limonia); tipulids move the
+widest point out to ~60% (`pk` 0.08) and cap the apex sharpness at 0.3 (rounded). Measured as the
+PCA breadth / length of the outline, the per-family medians (check.js 3000) are muscid 0.42, syrphid 0.42,
+tabanid 0.41, nemato 0.37, asilid 0.31, tipulid 0.30 against the references' 0.40 (dip-eristalis), 0.30
+(dip-asilid-photo), 0.30 (dip-limonia); the nematocerans have no reference image and are held to
+0.35. M and CuA1 were pulled up to the narrower chord so r-m and bm-cu are 3–4% of the span (were
+16–18%). `tests/check.js` (`dipAspect`) asserts each median within 0.05 of its reference, the crane
+fly at most 0.35, and r-m / bm-cu medians at most 5% of the span (`wingStats.rm` / `.bmcu`).
+
+Family parameters (ky = outline scale: breadth ≈ 0.7·ky·span, split `up` / 1 − `up` between the costal and hind
+sides, so the W/L above is the measure to compare with a reference, not ky; k = site spacing / strip width; sepAbs = narrowest strip,
 as a fraction of the span, that carries sites):
 
 | family | ky | len | M1 mode | r4+5 closed | R4 fork | cup | k | sepAbs | uOpen |
 |---|---|---|---|---|---|---|---|---|---|
-| muscid | 0.92–1.1 | 1.05–1.28 | bend | 0.5 | – | closed | 2.5–4 | 0.1 | 0.7–0.8 |
-| nemato | 0.85–1.0 | 1.05–1.25 | fork (M3 0.5) | – | – | closed | 2.5–4 | 0.1 | 0.72–0.8 |
-| syrphid | 0.95–1.1 | 1.08–1.28 | bend | always | – | closed | 2.5–4 | 0.1 | 0.72–0.8 |
-| tabanid | 1.08–1.2 | 1.05–1.2 | three | – | always | closed | 2.5–3.5 | 0.1 | 0.74–0.8 |
-| asilid | 0.72–0.84 | 1.2–1.35 | three | – | always | closed | 2.5–4 | 0.1 | 0.74–0.8 |
-| tipulid | 0.56–0.68 | 0.95–1.05 | fork (M3 0.8) | – | – | open | 1.6–2.4 | 0.055 | 0.88–0.92 |
+| muscid | 0.52–0.64 | 1.05–1.28 | bend | 0.5 | – | closed | 2.5–4 | 0.1 | 0.7–0.8 |
+| nemato | 0.47–0.56 | 1.05–1.25 | fork (M3 0.5) | – | – | closed | 2.5–4 | 0.1 | 0.72–0.8 |
+| syrphid | 0.53–0.63 | 1.08–1.28 | bend | always | – | closed | 2.5–4 | 0.1 | 0.72–0.8 |
+| tabanid | 0.53–0.63 | 1.05–1.2 | three | – | always | closed | 2.5–3.5 | 0.1 | 0.74–0.8 |
+| asilid | 0.40–0.48 | 1.2–1.35 | three | – | always | closed | 2.5–4 | 0.1 | 0.74–0.8 |
+| tipulid | 0.38–0.46 | 0.95–1.05 | fork (M3 0.8) | – | – | open | 1.6–2.4 | 0.055 | 0.88–0.92 |
 
 Sites: with `sepAbs` 0.1 the basal bundle and every strip narrower than a tenth of the span carry
 no sites, so a fly gets 0–1 secondary rungs (3.3–3.8 joins per wing, nearly all named), as in the
@@ -486,7 +498,8 @@ to its `deflect` step:
 - **Density gradient** (R-H): site spacing shrinks toward the tip and trailing edge by `grad`.
 
 `growVeins` returns `{ lanes, joins, forks, stats }`; `stats = { joins, dropped, minAngle, maxAngle,
-rungs, angSum, ladders, multi }` is exposed as `meta.wingStats` by every winged order and asserted by
+rungs, angSum, ladders, multi }` is exposed as `meta.wingStats` by every winged order (an order may add its own
+fields: Diptera adds `rm` / `bmcu`, the drawn r-m and bm-cu lengths as span fractions) and asserted by
 `tests/check.js` (the 105–140 band on slide-placed rungs; mesh edges and structural obliques with their
 own band are exempt). Each join also carries its polyline (`joins[i][3]`) so an order can assemble a
 chain from placed pieces (the lepidopteran discocellular). The family only sets which lanes, forks and
