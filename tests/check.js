@@ -25,7 +25,7 @@ const typeCount = {};
 const wingSigs = {};   // type -> Map(structural wing signature -> count)
 const bodySigs = {};   // type -> Map(structural body signature -> count)
 let elTotal = 0;
-const dipStats = {};   // Diptera family -> { wl, rm, bmcu } per plate (CHECKS.dipAspect), asserted by POST.dipAspect
+const dipStats = {};   // Diptera family (meta.wingFam) -> { type, wl, rm, bmcu } per plate (CHECKS.dipAspect), asserted by POST.dipAspect
 const DIP_REF = { muscid: 0.40, syrphid: 0.40, tabanid: 0.40, nemato: 0.35, asilid: 0.30, tipulid: 0.30 };   // reference forewing W/L per family (#9)
 const DIP_MIN = 15;   // plates a family needs before its median is asserted
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
@@ -336,7 +336,8 @@ const CHECKS = {
   // drawn); the medians are asserted per family in POST.dipAspect
   dipAspect(meta, svg, fail) {
     if (meta.type !== 'fly' && meta.type !== 'cranefly') return;
-    const s = meta.wingStats || {}, fam = meta.wingSig.split(',')[1], o = dipStats[fam] ||= { wl: [], rm: [], bmcu: [] };
+    if (!meta.wingFam) return fail('Diptera plate has no meta.wingFam');
+    const s = meta.wingStats || {}, fam = meta.wingFam, o = dipStats[fam] ||= { type: meta.type, wl: [], rm: [], bmcu: [] };
     o.wl.push(pcaAspect(meta.wingOutlines[0]));
     if (typeof s.rm !== 'number') return fail('Diptera wingStats has no r-m length');
     if (s.rm > 0) o.rm.push(s.rm);
@@ -406,7 +407,7 @@ const POST = {
     for (const fam in DIP_REF) {
       const o = dipStats[fam], ref = DIP_REF[fam];
       if (!o || o.wl.length < DIP_MIN) { skipped.push(fam + ' (' + (o ? o.wl.length : 0) + ')'); continue; }
-      const wl = median(o.wl), rm = o.rm.length ? median(o.rm) : 1, bmcu = o.bmcu.length ? median(o.bmcu) : 1, t = fam === 'tipulid' ? 'cranefly' : 'fly';
+      const wl = median(o.wl), rm = o.rm.length ? median(o.rm) : 1, bmcu = o.bmcu.length ? median(o.bmcu) : 1, t = o.type;
       if (Math.abs(wl - ref) > 0.05) fail('Diptera ' + fam + ' forewing W/L median ' + wl.toFixed(3) + ' is not within 0.05 of the reference ' + ref, t);
       if (fam === 'tipulid' && wl > 0.35) fail('crane fly forewing W/L median ' + wl.toFixed(3) + ' above 0.35', t);
       if (rm > 0.05 || bmcu > 0.05) fail('Diptera ' + fam + ' crossveins too long: r-m ' + rm.toFixed(3) + ', bm-cu ' + bmcu.toFixed(3) + ' of the span (max 0.05)', t);

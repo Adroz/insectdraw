@@ -1426,8 +1426,8 @@ function growVeins(g, G) {
     const h = atX(la.pl, nv.ua * Lw); if (!h) return;
     const xb = (nv.ub === undefined ? nv.ua : nv.ub) * Lw;
     const p = place(la, h.p, h.d, lb, xb, (nv.reach === undefined ? 0.05 : nv.reach) * Lw, { sw: nv.sw || joinSw(la, lb), bow: nv.bow, ang: nv.ang, angT: nv.angT });
-    if (p) nv.pl = lastPl;   // the crossvein as drawn, for a caller that measures it (the Diptera crossvein lengths in wingStats)
-    if (p) { const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um);
+    if (p) { nv.pl = lastPl;   // the crossvein as drawn, on the caller's spec: namedW is keyed by lane pair, which bm-cu and dm-cu share
+      const um = (h.p[0] + p[0]) / 2 / Lw; (named[pairKey(la, lb)] ||= []).push(um); (named[pairKey(lb, la)] ||= []).push(um);
       const wEntry = { u: um, pl: lastPl, from: la.id }; (namedW[pairKey(la, lb)] ||= []).push(wEntry); (namedW[pairKey(lb, la)] ||= []).push(wEntry); }
     if (nv.forkB) fork(lb, (p ? p[0] : xb) / Lw, nv.forkB);
     // `then`: the crossvein continues across lb into the next lane(s) with the same lean (aligned odonate antenodals, the
@@ -3432,7 +3432,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
                m1: 'fork', m3: 0.5, r45: 0, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.72, 0.8], a2: 0.5, h: 0.7, bmcuP: 0.8, stig: ['solid', 'stipple', 'none', 'none'] },
     syrphid: { ky: [0.53, 0.63], up: 0.3, len: [1.08, 1.28], sc: [0.45, 0.55], r1: [0.6, 0.7], fork: [0.48, 0.58], r23: [0.8, 0.88], bmcu: [0.34, 0.4], dmcu: [0.62, 0.7], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
                m1: 'bend', m3: 0, r45: 1, r4: 0, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.72, 0.8], a2: 0.5, h: 0.8, bmcuP: 1, stig: ['solid', 'solid', 'stipple'] },
-    tabanid: { ky: [0.56, 0.66], up: 0.3, len: [1.05, 1.2], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.5, 0.58], r23: [0.82, 0.88], bmcu: [0.34, 0.4], dmcu: [0.6, 0.68], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
+    tabanid: { ky: [0.53, 0.63], up: 0.3, len: [1.05, 1.2], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.5, 0.58], r23: [0.82, 0.88], bmcu: [0.34, 0.4], dmcu: [0.6, 0.68], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
                m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 3.5], uOpen: [0.74, 0.8], a2: 0.6, h: 0.8, bmcuP: 0.9, stig: ['solid', 'stipple', 'none'] },
     asilid:  { ky: [0.40, 0.48], up: 0.38, len: [1.2, 1.35], sc: [0.45, 0.55], r1: [0.62, 0.72], fork: [0.5, 0.6], r23: [0.84, 0.9], bmcu: [0.34, 0.4], dmcu: [0.6, 0.68], cu1: [0.05, 0.1], cu2: [0.3, 0.38], mEnd: [0.7, 0.76],
                m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.74, 0.8], a2: 0.3, h: 0.7, bmcuP: 0.8, stig: ['solid', 'solid', 'none'] },
@@ -3461,9 +3461,10 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   // outline (#9): the breadth is split about the root-apex line, F.up of it on the costal side (the references' costa runs
   // close to that line in muscids and syrphids, the crane fly's apex sits mid-chord); F.pk moves the widest point out
   // (Tipulidae widest at ~60%) and F.sharp caps how pointed the apex can get (rounded in Tipulidae)
-  const s = G.sharp * (F.sharp || 1), pk = F.pk || 0, kT = F.up * 0.7 / 0.33, kB = (1 - F.up) * 0.7 / 0.37, tipY = G.tipY * (G.tipY < 0 ? kT : kB);   // the apex offset scales with its own side, so it never rises past the costa's apex point
-  const o = [[0, 0], [0.08, -0.05 * G.stalk * kT], [0.18, -0.14 * G.stalk * kT], [0.35 + pk * 0.6, -0.27 * kT], [0.55 + pk, -0.33 * kT], [0.78 + pk * 0.6, -0.3 * kT], [lerp(0.9, 0.95, s), -lerp(0.2, 0.1, s) * kT], [1.0, tipY], [lerp(0.9, 0.95, s), lerp(0.2, 0.1, s) * kB + tipY * 0.5],
-    [0.75 + pk * 0.6, 0.3 * G.lobe * kB], [0.5 + pk, 0.37 * G.lobe * kB], [0.3 + pk * 0.6, 0.35 * kB * randRange(0.85, 1.15)], [0.16, 0.22 * G.stalk * kB * randRange(0.6, 1.3)], [0.08, 0.08 * G.stalk * kB]]
+  const oT = 0.33, oB = 0.37;   // the template's widest half-breadths, costal and hind; F.up is a share of their sum
+  const s = G.sharp * (F.sharp || 1), pk = F.pk || 0, kT = F.up * (oT + oB) / oT, kB = (1 - F.up) * (oT + oB) / oB, tipY = G.tipY * (G.tipY < 0 ? kT : kB);   // the apex offset scales with its own side, so it never rises past the costa's apex point
+  const o = [[0, 0], [0.08, -0.05 * G.stalk * kT], [0.18, -0.14 * G.stalk * kT], [0.35 + pk * 0.6, -0.27 * kT], [0.55 + pk, -oT * kT], [0.78 + pk * 0.6, -0.3 * kT], [lerp(0.9, 0.95, s), -lerp(0.2, 0.1, s) * kT], [1.0, tipY], [lerp(0.9, 0.95, s), lerp(0.2, 0.1, s) * kB + tipY * 0.5],
+    [0.75 + pk * 0.6, 0.3 * G.lobe * kB], [0.5 + pk, oB * G.lobe * kB], [0.3 + pk * 0.6, 0.35 * kB * randRange(0.85, 1.15)], [0.16, 0.22 * G.stalk * kB * randRange(0.6, 1.3)], [0.08, 0.08 * G.stalk * kB]]
     .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
   const wing = makeWing([bx, by], theta, o, 0.9);
   L.wings.push(pathEl(wing.path, SW.O, '#fff'));
@@ -3471,9 +3472,9 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   if (G.spines) L.wings.push(...costalSpines(wing, X(0.2), X(0.75), 3.2, 2.6));
   const g = wingGraph(wing, Lw), wO = G.heavy ? SW.O : SW.D;   // R-G: the heavy gene promotes Rs, M and CuA1 to O
   if (G.stig !== 'none') g.stigma(X(E.sc) - X(0.035), X(E.sc) + X(0.03), Y(0.035), 0.4, G.stig);   // small dark stigma where Sc ends
-  // margin nodes: Sc, R1, R2+3 (and R4) on the costa, R4+5 at the apex, M1-M3 / CuA1 / CuA2 / A1 / A2 on the hind margin
+  // margin nodes: Sc, R1, R2+3 (and R4) on the costa, R4+5 at r45E (the apex, or the costa at u 0.98 when r4+5 is open), M1-M3 / CuA1 / CuA2 / A1 / A2 on the hind margin
   g.margin('scE', E.sc, 'top'); g.margin('r1E', E.r1, 'top'); g.margin('r23E', E.r23, 'top'); g.margin('r4E', Math.min(E.r23 + 0.07, 0.96), 'top');   // R4 meets the costa well clear of R2+3 on the narrower chord
-  if (F.m1 === 'bend' && !G.r45closed) g.margin('tip', 0.98, 'top'); else g.margin('tip', 1, 'tip');   // an open r4+5 (muscid elbow): R4+5 meets the costa just before the apex and M1 the margin just behind it (dip-eristalis), so the two never cross at an apex set toward the hind margin
+  if (F.m1 === 'bend' && !G.r45closed) g.margin('r45E', 0.98, 'top'); else g.margin('r45E', 1, 'tip');   // R4+5's end. An open r4+5 (muscid elbow): R4+5 meets the costa just before the apex and M1 the margin just behind it (dip-eristalis), so the two never cross at an apex set toward the hind margin
   g.margin('cu1E', E.cu1, 'bot'); g.margin('cu2E', E.cu2 + (F.cupOpen ? 0 : 0.05), 'bot'); g.margin('a1E', E.cu2 - 0.16, 'bot'); g.margin('a2E', E.a, 'bot');
   const bend = F.m1 === 'bend', three = F.m1 === 'three', forked = F.m1 === 'fork';
   const uM1 = fam === 'tipulid' ? 0.96 : 0.95;
@@ -3488,7 +3489,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   const lanes = [
     { id: 'Sc', u0: 0.02, s0: 0.2, s1: 0.03, end: 'scE', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.06, -0.02) },                  // Sc hugs the costa and meets it
     { id: 'R1', u0: 0.02, s0: 0.3, s1: 0.03, end: 'r1E', sw: SW.D, noFork: true, stub: false, ctrl: 2, bow: randRange(0.03, 0.07),                     // R stem (O) then R1 rising to the costa
-      fork: { id: 'Rs', u: randRange(0.17, 0.23), s1: 0.3, end: closed45 ? 'r45J' : 'tip', sw: wO, noFork: false, stub: false, ctrl: 2, bow: randRange(-0.01, 0.03) } },   // Rs: stem (O) to its fork, then R4+5 to the apex
+      fork: { id: 'Rs', u: randRange(0.17, 0.23), s1: 0.3, end: closed45 ? 'r45J' : 'r45E', sw: wO, noFork: false, stub: false, ctrl: 2, bow: randRange(-0.01, 0.03) } },   // Rs: stem (O) to its fork, then R4+5 to its end (r45E)
     { id: 'M', u0: 0.02, s0: 0.36, s1: 0.4, end: bend ? 'mE' : 'mF', sw: wO, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.02, 0.02) },          // M through r-m, bm-cu, dm-cu, flat to where M1 begins
     { id: 'CuA1', u0: 0.02, s0: 0.43, s1: 0.74, end: 'cuK', sw: wO, noFork: true, stub: false, ctrl: 2, ease: 'in', bow: randRange(-0.03, 0) },                     // CuA1 under bm and dm
     { id: 'CuA1b', start: 'cuK', s1: 0.97, end: 'cu1E', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.08, -0.04) },      // then down to the hind margin, convex toward the apex
@@ -3497,7 +3498,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   ];
   if (!F.cupOpen) lanes.push({ id: 'A1c', start: 'cupJ', s1: 0.97, end: 'cu2E', sw: SW.D, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: 0 });   // A1+CuA2, the short way on to the margin
   if (G.a2) lanes.push({ id: 'A2', u0: 0.02, s0: 0.9, s1: 0.97, end: 'a2E', sw: SW.F, noFork: true, stub: false, ctrl: 1, bow: randRange(0, 0.03) });
-  if (closed45) lanes.push({ id: 'R45b', start: 'r45J', s1: 0.5, end: 'tip', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.09, -0.05) });   // R4+5 on to the apex past M1 (the bow keeps it on Rs's line as the chord shrinks)
+  if (closed45) lanes.push({ id: 'R45b', start: 'r45J', s1: 0.5, end: 'r45E', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.09, -0.05) });   // R4+5 on to the apex past M1 (the bow keeps it on Rs's line as the chord shrinks)
   if (bend) {   // muscid / syrphid M1: a long oblique vein from the end of M onto R4+5 (r4+5 closed) or over an elbow to the margin below the apex
     if (closed45) lanes.push({ id: 'M1', start: 'mE', s1: 0.3, end: 'r45J', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(0, 0.03) });   // bowed away from R4+5 (M sits close under it since #9), so it meets it rather than grazing across
     else lanes.push({ id: 'M1', start: 'mE', s1: 0.4 - G.bend * 0.3, end: 'm1K', sw: wO, noFork: true, noJoin: true, stub: false, ctrl: 1, bow: randRange(-0.03, 0) },
@@ -3523,6 +3524,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   L.wings.push(...costaEls(wing, X(0), X(0.97)));
   const plLen = pl => { let d = 0; for (let i = 0; i + 1 < (pl || []).length; i++) d += vlen(sub(pl[i + 1], pl[i])); return d / Lw; };
   meta.wingStats = Object.assign({}, grown.stats, { rm: plLen(rmNv.pl), bmcu: plLen(bmcuNv.pl) }); meta.wingTheta = theta;   // r-m and bm-cu as drawn, fractions of the span (0 when not drawn)
+  meta.wingFam = fam;   // the Diptera family, for tests/check.js (dipAspect) rather than parsing it out of wingSig
   meta.wingSig = ['dip', fam, grown.lanes.length, grown.joins.length, grown.forks, G.heavy ? 1 : 0, G.spurious ? 1 : 0, G.spines ? 1 : 0, closed45 ? 1 : 0, G.r4 ? 1 : 0, G.m2 ? 1 : 0, G.m3 ? 1 : 0, G.a2 ? 1 : 0, G.stig, G.bmcu ? 1 : 0, G.h ? 1 : 0,
     Math.round(G.uOpen * 10), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.lobe * 10), Math.round(G.stalk * 5), Math.round(E.fork * 10), Math.round(E.r1 * 10), Math.round(E.dmcu * 10)].join(',');
   // halteres
