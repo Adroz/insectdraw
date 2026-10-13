@@ -39,6 +39,14 @@ const DIP_BMCU_ALWAYS = ['tabanid', 'asilid'];   // families whose bm cell is al
 const HYM_CELLS = { apid: { sub: 3, disc: 2 }, vespid: { sub: 3, disc: 2 } };   // closed submarginal / discoidal cells per family
 const HYM_AREOLET = ['ichneumonid'];   // families that always close an areolet
 const HYM_AREOLET_MAX = 0.08;   // the areolet is tiny: its two r-m at most this far apart (fraction of the span; ~0.06 on the diagram)
+// #12, from the habitus (Apis / Bombus: abdomen broader than the thorax, short legs, the hind tibia a broad corbicula,
+// head about as wide as the thorax, three ocelli in a triangle on the vertex; research-antennae: bee scape 0.3-0.4)
+const BEE_FAMS = ['apid'];   // the bee families the engine draws; type bee rolls only these, type wasp none
+const BEE = { abd: 1.05, tibia: 1.5, head: 0.8, ocelli: 0.6, scape: [0.27, 0.4] };
+const beeSeen = { hymFamilies: 0, beeAbdomen: 0, beeLegs: 0, beeCorbicula: 0, beeHead: 0, beeOcelli: 0, beeLattice: 0, beeScape: 0 };   // plates each #12 check asserted on, for POST.beeSeen
+let beeSeenPlates = 0;   // bee plates in the run, counted by the seed loop whichever checks are selected
+const BEE_MIN = 20;   // bee plates a run needs before a #12 check that never ran fails rather than being reported (~8% of plates are bees; no lattice bee in 20 has odds 0.4^20)
+const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
@@ -357,6 +365,76 @@ const CHECKS = {
       }
     }
   },
+  // #12 the caption and the drawing agree: type bee draws bee families only and type wasp none of them
+  hymFamilies(meta, svg, fail) {
+    if (meta.type !== 'bee' && meta.type !== 'wasp') return;
+    beeSeen.hymFamilies++;
+    if (meta.type === 'bee' && !BEE_FAMS.includes(meta.fam)) fail('bee plate rolls the non-bee family ' + meta.fam);
+    if (meta.type === 'wasp' && BEE_FAMS.includes(meta.fam)) fail('wasp plate rolls the bee family ' + meta.fam);
+  },
+  // #12 bees read as bees, one entry per trait of the habitus (Apis / Bombus); each counts the plates it asserted on in
+  // beeSeen, so POST.beeSeen fails a long run where one of them never ran.
+  // the abdomen broader than the thorax
+  beeAbdomen(meta, svg, fail) {
+    if (meta.type !== 'bee') return;
+    beeSeen.beeAbdomen++;
+    const r = maxHw(meta.abdomen.profile) / maxHw(meta.thorax.profile);
+    if (r < BEE.abd) fail('bee abdomen ' + r.toFixed(2) + 'x the thorax width (want >= ' + BEE.abd + ')');
+  },
+  // short legs: no leg (femur + tibia + tarsus) longer than the abdomen
+  beeLegs(meta, svg, fail) {
+    if (meta.type !== 'bee') return;
+    beeSeen.beeLegs++;
+    const abLen = meta.abdomen.yBot - meta.abdomen.yTop;
+    for (const leg of meta.legs) {   // pts: attach, coxa, trochanter, femur tip, tibia tip, tarsomeres, claw tip
+      let len = 0; for (let k = 2; k + 2 < leg.pts.length; k++) len += dist(leg.pts[k], leg.pts[k + 1]);
+      if (len > abLen) fail('bee ' + leg.pair + ' leg ' + (len / abLen).toFixed(2) + 'x the abdomen length (want <= 1)');
+    }
+  },
+  // the hind tibia a corbicula (the engine draws its fringe and comb rows), BEE.tibia times the mid tibia's width
+  beeCorbicula(meta, svg, fail) {
+    if (meta.type !== 'bee') return;
+    beeSeen.beeCorbicula++;
+    if (!meta.bodyGenes.legs[2].corbicula) fail('bee hind leg without the fringed corbicula');
+    const hind = meta.legs.find(l => l.pair === 'hind'), mid = meta.legs.find(l => l.pair === 'mid');
+    if (hind.segHw[3] < BEE.tibia * mid.segHw[3]) fail('bee hind tibia only ' + (hind.segHw[3] / mid.segHw[3]).toFixed(2) + 'x the mid tibia width (want >= ' + BEE.tibia + ')');
+  },
+  // a head nearly as wide as the thorax
+  beeHead(meta, svg, fail) {
+    if (meta.type !== 'bee') return;
+    beeSeen.beeHead++;
+    const r = meta.head.W / (2 * maxHw(meta.thorax.profile));
+    if (r < BEE.head) fail('bee head ' + r.toFixed(2) + 'x the thorax width (want >= ' + BEE.head + ')');
+  },
+  // three ocelli in a triangle on the vertex, not a row: the laterals behind the median by BEE.ocelli of their offset
+  beeOcelli(meta, svg, fail) {
+    if (meta.type !== 'bee') return;
+    beeSeen.beeOcelli++;
+    const oc = meta.head.ocelli;
+    if (oc.length !== 3) return fail('bee with ' + oc.length + ' ocelli');
+    const med = oc.find(o => Math.abs(o[0]) < 1e-9), lat = oc.find(o => o[0] > 0);
+    if (!med || !lat || lat[1] - med[1] < BEE.ocelli * lat[0]) fail('bee ocelli are not a triangle: height ' + (med && lat ? ((lat[1] - med[1]) / lat[0]).toFixed(2) : '?') + ' of the lateral offset (want >= ' + BEE.ocelli + ')');
+  },
+  // a lattice eye is worked over the whole eye, the highlight included (before #12 the highlight was left bare, so
+  // the honeycomb sat on the lower inner part only): every lattice eye draws cells inside its highlight
+  beeLattice(meta, svg, fail) {
+    if (meta.type !== 'bee' || meta.bodyGenes.head.eye.style !== 'lattice') return;
+    beeSeen.beeLattice++;
+    for (const e of meta.head.eyes) {
+      if (!(e.hlCells >= 0)) fail('bee lattice eye without hlCells on meta.head.eyes');
+      else if (e.hlCells < 1) fail('bee eye lattice leaves its highlight unworked');
+    }
+  },
+  // a geniculate antenna whose scape is about a third of it (research-antennae: bee scape 0.3-0.4)
+  beeScape(meta, svg, fail) {
+    if (meta.type !== 'bee') return;
+    beeSeen.beeScape++;
+    const an = meta.antennae;
+    if (an.kind !== 'geniculate') return fail('bee antenna is ' + an.kind + ', not geniculate');
+    const pl = an.lines[0].pl; let fl = 0; for (let i = 1; i < pl.length; i++) fl += dist(pl[i], pl[i - 1]);   // pts: base, elbow, pedicel tip; lines[0].pl the flagellum
+    const scape = dist(an.pts[0], an.pts[1]), share = scape / (scape + dist(an.pts[1], an.pts[2]) + fl);
+    if (share < BEE.scape[0] || share > BEE.scape[1]) fail('bee scape ' + share.toFixed(2) + ' of the antenna (want ' + BEE.scape.join('-') + ')');
+  },
   // swallowtail: the hindwing veins must not converge into the tail root; the two vein endpoints nearest the tail tip must be
   // at least 6% of the span apart from each other (the engine exposes meta.lepHindEnds and meta.lepTail when a tail is rolled)
   swallowtail(meta, svg, fail) {
@@ -651,6 +729,14 @@ const POST = {
   laneSep() {
     console.log('lane floor (closest non-junction approach of two lanes, px; floor ' + LANE_FLOOR + '):', Object.keys(laneRun).map(t => t + ' ' + (laneRun[t].worst === Infinity ? '> ' + 2 * LANE_FLOOR : laneRun[t].worst.toFixed(2) + ' (seed ' + laneRun[t].seed + ')') + ' n ' + laneRun[t].n).join('; '));
   },
+  // the #12 checks assert only on bee (and wasp) plates, so a short run or a type that stopped drawing would pass them
+  // by silence: once the run has BEE_MIN bee plates every one of them must have run; a shorter run reports the counts.
+  beeSeen(fail) {
+    const bees = beeSeenPlates, idle = Object.keys(beeSeen).filter(k => ran.has(k) && !beeSeen[k]);
+    if (idle.length && bees >= BEE_MIN) fail('#12 bee checks that never ran in ' + bees + ' bee plates: ' + idle.join(', '));
+    console.log('#12 bee checks asserted on (of ' + bees + ' bee plates):', Object.keys(beeSeen).filter(k => ran.has(k)).map(k => k + ' ' + beeSeen[k]).join(', ') +
+      (bees < BEE_MIN ? '; too few bee plates (' + bees + ' < ' + BEE_MIN + ') to require every check' : ''));
+  },
   signatures(fail) {
     sigRule(wingSigs, 'wing', 0.5, fail);
     sigRule(bodySigs, 'body', 0.98, fail);
@@ -695,19 +781,24 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
+const POST_FOR = { beeSeen: Object.keys(beeSeen) };   // a POST entry that also runs when a check it audits is selected
+const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
 async function run() {
   let args;
   try { args = parseArgs(process.argv.slice(2)); } catch (e) { console.error(e.message); process.exit(2); }
   const { from, to, only } = args, count = to - from + 1;
-  const pre = selected(PRE, only), checks = selected(CHECKS, only), post = selected(POST, only);
+  const pre = selected(PRE, only), checks = selected(CHECKS, only);
+  const post = Object.keys(POST).filter(k => !only || only.includes(k) || (POST_FOR[k] || []).some(c => only.includes(c)));
+  for (const k of checks) ran.add(k);
   let sampledCount = 0;
   for (const name of pre) PRE[name](onceFail(name));
   for (let seed = from; seed <= to; seed++) {
     const { svg, meta } = E.generateInsectDetailed(seed);
     const key = meta.variant || meta.type;
     typeCount[key] = (typeCount[key] || 0) + 1;
+    if (meta.type === 'bee') beeSeenPlates++;
     if (meta.wingSig) { const m = wingSigs[key] ||= new Map(); m.set(meta.wingSig, (m.get(meta.wingSig) || 0) + 1); }
     if (meta.bodySig) { const m = bodySigs[key] ||= new Map(); m.set(meta.bodySig, (m.get(meta.bodySig) || 0) + 1); }
     elTotal += drawn(svg);

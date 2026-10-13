@@ -185,6 +185,10 @@ front-to-back extent (our `headH`).
   sits upper-left on both eyes. The engine draws both eyes individually in the unmirrored
   `thoraxHead` layer with the same highlight offset, so the plate keeps that upper-left lighting;
   the gene is the offset and radius of the unworked patch, not its side.
+- Exception, the bee (#12): the popular plates of *Apis* and *Bombus* work the honeycomb over the
+  whole eye, so a bee's lattice (`full`) leaves no unworked patch and runs out to 0.94 of the
+  outline (0.88 otherwise). The highlight genes are still rolled for a bee (a stipple bee uses
+  them, and dropping the draws would shift every later roll), but on a full lattice they draw nothing.
 - Hairs: a bumblebee's eye carries hairs between the facets and the head a fringe; a fly's
   face has bristles (frontal, orbital, mystax). Short ticks around the eye rim or over the
   face read as pile without a fill.
@@ -201,7 +205,7 @@ and `P.headH` keep their meaning: bounding width, bounding depth and centre of t
 | dragonfly | 1.55–1.95, `transverse` (two eye lobes, frons bump 0.3–0.4 W, occipital notch) | cx 0.24–0.27, rx 0.24–0.27, ry 0.38–0.46, tilt 0, no dent; gomphid variant cx 0.3, rx 0.2 (eyes apart) | 3: median on the frons bump, laterals at the seam front | labrum bands 1–2 under the frons; no mandibles | lattice (pitch floor 1.8) or stipple; highlight upper-outer |
 | damselfly | 2.3–2.9, `transverse` bar | cx 0.37–0.41, rx 0.1–0.13, ry 0.38–0.46 | 3 triangle at the centre of the bar | none | lattice / stipple |
 | fly | 1.2–1.45, `round` (globose); holoptic 55 % (asilid 0 %, nemato 30 %) | holoptic: cx 0.24–0.26, rx 0.23–0.26, ry 0.4–0.48; dichoptic: cx 0.3–0.34, rx 0.16–0.21, ry 0.38–0.46 | 3 ocellar triangle at the back of the vertex (asilid: in a dish) | none visible; asilid mystax ticks | lattice (floor 2.3) / stipple / plain |
-| bee / wasp | 1.1–1.35, `round`, vertex flat 50 % | cx 0.32–0.36, rx 0.12–0.16, ry 0.36–0.44, tilt ±8°, dent toward the socket 0.15–0.3 | 3 large, flat triangle on the vertex | clypeus bow; mandible tips 0.1–0.2 W at 60 %; sawfly: bigger round eyes, broad head | lattice / stipple |
+| bee / wasp | 1.1–1.35, `round`, vertex flat 50 % | cx 0.32–0.36, rx 0.12–0.16, ry 0.36–0.44, tilt ±8°, dent toward the socket 0.15–0.3 | 3 large, flat triangle on the vertex | clypeus bow; mandible tips 0.1–0.2 W at 60 %; sawfly (type wasp): bigger round eyes, broad head | lattice / stipple; bee (#12): head 0.85–0.97 of the thorax width, ocelli always a triangle (height 0.1–0.15 H), the lattice worked over the whole eye, highlight included |
 | moth / butterfly | 0.95–1.2, `round` | cx 0.3–0.35, rx 0.14–0.18, ry 0.24–0.3 | moth 0–2 small behind the eyes, butterfly 0 | palps 2 forward clubs 80 %; proboscis spiral 35 % (butterfly 50 %), 1.5–2.5 turns | lattice / stipple; hair ticks on the vertex (moth) |
 | beetle, ground / rove | 0.7–0.9, `elongate` (narrower than the pronotum, frontal furrows) | cx 0.38–0.42, rx 0.09–0.13, ry 0.16–0.24, flat at the rear corners | 0 (rove: 0–1 median 20 %) | mandibles 0.4–0.6 W, curvature strong, crossing 50 %, serration 30 %; labrum line; palps 2 | plain-with-highlight or stipple |
 | beetle, scarab / longhorn | 0.85–1.1, `round`, vertex flat | cx 0.36–0.4, rx 0.1–0.14, ry 0.2–0.28, dent toward the antennal base (longhorn) 0.3–0.45 | 0 | mandibles 0.1–0.2 W, blunt; clypeus line | stipple / plain |
@@ -222,6 +226,8 @@ Common rules:
   `1.8 / p5scale(type)`; stipple dots at the same pitch on a staggered grid, denser (two rows
   closer) toward the lower-inner edge, none in the highlight; plain = outline + a highlight
   crescent line. Highlight centre `[-0.42, -0.42]` ± 0.1 of the radii, radius 0.3–0.42.
+  `full` (bee, `latticeFull` in the head entry): the tone runs out to 0.94 of the outline and a
+  lattice covers the highlight too, so the highlight genes have no effect on a lattice bee.
 - **Vertex**: `flat` 0/1 clips the rear arc of a round head to a straight line (bees, scarabs);
   `genal swelling` 0–0.15 widens the outline below the eyes (round and triangular heads).
 - **Markings**: frontal stripe 0/1 (a median line down the frons), hatched vertex 0/1 (3–5 fine
