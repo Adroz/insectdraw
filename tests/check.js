@@ -28,6 +28,10 @@ let elTotal = 0;
 const dipStats = {};   // Diptera family (meta.wingFam) -> { type, wl, rm, bmcu } per plate (CHECKS.dipAspect), asserted by POST.dipAspect
 const DIP_REF = { muscid: 0.40, syrphid: 0.40, tabanid: 0.40, nemato: 0.35, asilid: 0.30, tipulid: 0.30 };   // reference forewing W/L per family (#9)
 const DIP_MIN = 15;   // plates a family needs before its median is asserted
+// #10, stated here from the references rather than read from the engine's family table, so a wrong table fails the gate
+const DIP_RUNG_FAMS = ['muscid', 'syrphid', 'tabanid'];   // the short-rung plan: r-m always drawn, r-m and bm-cu at most DIP_RUNG_MAX
+const DIP_RUNG_MAX = 0.06;   // per-plate cap on r-m and bm-cu, fraction of the span
+const DIP_BMCU_ALWAYS = ['tabanid', 'asilid'];   // families whose bm cell is always closed by bm-cu
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -342,6 +346,20 @@ const CHECKS = {
     if (typeof s.rm !== 'number') return fail('Diptera wingStats has no r-m length');
     if (s.rm > 0) o.rm.push(s.rm);
     if (s.bmcu > 0) o.bmcu.push(s.bmcu);
+  },
+  // Diptera short rungs (#10): Tabanidae and Asilidae always close bm with bm-cu, and on the muscid / syrphid / tabanid
+  // plan r-m and bm-cu are short rungs on every plate, never a long oblique (dip-eristalis: ~5.5% of the span)
+  dipRungs(meta, svg, fail, { dev }) {
+    if (meta.type !== 'fly' || !meta.wingFam) return;
+    const fam = meta.wingFam, rungs = DIP_RUNG_FAMS.includes(fam);
+    const one = (s, what) => {
+      if (!s) return fail(what + 'Diptera ' + fam + ' wing has no wingStats');
+      if (rungs && !(s.rm > 0)) fail(what + 'Diptera ' + fam + ' wing has no r-m (br left open)');
+      if (DIP_BMCU_ALWAYS.includes(fam) && !(s.bmcu > 0)) fail(what + 'Diptera ' + fam + ' wing has no bm-cu (bm left open)');
+      if (rungs && (s.rm > DIP_RUNG_MAX || s.bmcu > DIP_RUNG_MAX)) fail(what + 'Diptera ' + fam + ' crossvein too long: r-m ' + (s.rm || 0).toFixed(3) + ', bm-cu ' + (s.bmcu || 0).toFixed(3) + ' of the span (max ' + DIP_RUNG_MAX + ')');
+    };
+    one(meta.wingStats, '');
+    one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry, as the wings check reads it
   },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {
