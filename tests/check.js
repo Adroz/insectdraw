@@ -46,6 +46,12 @@ const BEE = { abd: 1.05, tibia: 1.5, head: 0.8, ocelli: 0.6, scape: [0.27, 0.4] 
 const beeSeen = { hymFamilies: 0, beeAbdomen: 0, beeLegs: 0, beeCorbicula: 0, beeHead: 0, beeOcelli: 0, beeLattice: 0, beeScape: 0 };   // plates each #12 check asserted on, for POST.beeSeen
 let beeSeenPlates = 0;   // bee plates in the run, counted by the seed loop whichever checks are selected
 const BEE_MIN = 20;   // bee plates a run needs before a #12 check that never ran fails rather than being reported (~8% of plates are bees; no lattice bee in 20 has odds 0.4^20)
+// #19, from the references (neu-nothochrysa: 2-5 rungs in the R1-Rs strip; M beside Rs for ~45% of the span, then forked,
+// the intramedian cell a small rhombus between Rs and the fork; Chrysopidae forelegs slender walking legs under the prothorax)
+const NEU = { r1rs: [2, 6], forkMin: 0.28, beside: 1.5, imMax: 0.15, poses: ['walking', 'spread'], femurMin: -50 };   // ...; forelegs: a walking or spread pose, the femur at most 50 degrees forward of straight out (raised is 64-88)   // fork at or past forkMin of the span; M at most beside R1-Rs gaps under Rs before it (one cell, as R1-Rs); im cell at most imMax of the span long
+const neuSeen = { neuR1Rs: 0, neuMedia: 0, neuForeleg: 0 };   // lacewing plates each #19 check asserted on, for POST.neuSeen
+let neuSeenPlates = 0;   // lacewing plates in the run, counted by the seed loop whichever checks are selected
+const NEU_MIN = 20;   // lacewing plates a run needs before a #19 check that never ran fails rather than being reported (~8% of plates)
 const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
@@ -537,12 +543,56 @@ const CHECKS = {
     one(meta.wingStats, '');
     one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
   },
+  // #19 lacewing (neu-nothochrysa): the strip under R1 (R1-Rs) carries a few rungs, 2-5 on the reference, never none (Sc,
+  // R1 and Rs would read as three ruled parallels) and never the costal ladder's density; the engine reports the
+  // forewing's R1-Rs rung count as wingStats.r1rs. Default and device plate (pass 2's geometry).
+  neuR1Rs(meta, svg, fail, { dev }) {
+    if (meta.type !== 'lacewing') return;
+    neuSeen.neuR1Rs++;
+    for (const [s, what] of [[meta.wingStats, ''], [dev.meta.device.wingStats, 'device plate: ']]) {
+      if (!s || typeof s.r1rs !== 'number') { fail(what + 'lacewing wingStats has no r1rs'); continue; }
+      if (s.r1rs < NEU.r1rs[0] || s.r1rs > NEU.r1rs[1]) fail(what + 'lacewing R1-Rs strip rung count outside ' + NEU.r1rs[0] + '-' + NEU.r1rs[1] + ': ' + s.r1rs);
+    }
+  },
+  // #19 lacewing M (neu-nothochrysa): M runs beside Rs from its root, then forks well before the hind margin (no single
+  // long diagonal), and the intramedian cell is a small closed cell between Rs and the fork: one Rs-M rung on the stem
+  // before the fork, one on the anterior branch after it. wingStats.media: { fork, end (span fractions of the fork and
+  // M's margin end), beside (largest M-Rs gap before the fork, in R1-Rs gaps), mpMargin (the posterior branch ends on
+  // the outline), im: [u, u] (the two rungs, span fractions, null when one was not placed) }. Default and device plate.
+  neuMedia(meta, svg, fail, { dev }) {
+    if (meta.type !== 'lacewing') return;
+    neuSeen.neuMedia++;
+    for (const [s, what] of [[meta.wingStats, ''], [dev.meta.device.wingStats, 'device plate: ']]) {
+      const m = s && s.media;
+      if (!m) { fail(what + 'lacewing wingStats has no media'); continue; }
+      if (!(m.fork >= NEU.forkMin && m.fork < m.end - 0.05)) fail(what + 'lacewing M does not fork from ' + NEU.forkMin + ' of the span and before the margin: fork ' + (+m.fork).toFixed(2) + ', end ' + (+m.end).toFixed(2));
+      if (!m.mpMargin) fail(what + 'lacewing M posterior branch does not reach the margin');
+      if (!(m.beside <= NEU.beside)) fail(what + 'lacewing M leaves Rs before its fork (max ' + NEU.beside + ' R1-Rs gaps under it): ' + (+m.beside).toFixed(2));
+      const im = m.im || [];
+      if (!(im[0] < m.fork && im[1] > m.fork)) fail(what + 'lacewing intramedian cell not closed across the M fork: rungs at ' + im.map(u => u === null ? 'none' : u.toFixed(2)).join(', '));
+      else if (im[1] - im[0] > NEU.imMax) fail(what + 'lacewing intramedian cell longer than ' + NEU.imMax + ' of the span: ' + (im[1] - im[0]).toFixed(2));
+    }
+  },
+  // #19 lacewing forelegs (Chrysopidae): slender walking legs under the prothorax, not a mantid's raised forelegs. The
+  // fore coxa attaches on the prothorax (ahead of the pronotal collar, meta.bodyGenes.thorax.lines[0]), the pose family
+  // rolled and drawn is walking or spread (never raised), and the femur (trochanter to femur tip, meta.legs[0].pts) points
+  // out from the body no more than NEU.femurMin degrees toward the head; on the right legs and the skewed left set.
+  neuForeleg(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    neuSeen.neuForeleg++;
+    const fr = meta.legs.find(l => l.pair === 'front'), collar = meta.bodyGenes.thorax.lines[0];
+    if (!fr || !collar) return fail('lacewing plate has no front leg / pronotal collar');
+    const yCollar = meta.thorax.yTop + collar.t * (meta.thorax.yBot - meta.thorax.yTop);
+    if (!(fr.y < yCollar)) fail('lacewing fore coxa behind the pronotal collar (want it on the prothorax): y ' + fr.y.toFixed(1) + ', collar ' + yCollar.toFixed(1));
+    if (!NEU.poses.includes(meta.bodyGenes.pose) || !NEU.poses.includes(meta.legRoll.pose)) fail('lacewing leg pose not ' + NEU.poses.join(' / ') + ': rolled ' + meta.bodyGenes.pose + ', drawn ' + meta.legRoll.pose);
+    for (const [label, pts] of [['', fr.pts], [' skewed', skewedPts(fr)]]) {
+      const a = Math.atan2(pts[3][1] - pts[2][1], pts[3][0] - pts[2][0]) * 180 / Math.PI;
+      if (a < NEU.femurMin) fail('lacewing' + label + ' fore femur raised more than ' + (-NEU.femurMin) + ' degrees toward the head: ' + (-a).toFixed(0));
+    }
+  },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {
       if (!s) return fail(what + 'no wingStats on a grown wing');
-      // lacewing: the strip under R1 (R1-Rs) carries only a few rungs in the references (neu-nothochrysa); the costal
-      // ladder is the dense one. The engine reports the R1-Rs rung count as wingStats.r1rs.
-      if (meta.type === 'lacewing' && s.r1rs > 6) fail(what + 'lacewing R1-Rs strip has ' + s.r1rs + ' rungs (max 6)');
       if (s.joins > 0 && (s.minAngle < 100 || s.maxAngle > 145)) fail(what + 'junction angle outside 100-145: ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
       if (meta.type !== 'moth' && s.dropped > s.joins) fail(what + 'more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
       if ((meta.type === 'dragonfly' || meta.type === 'damselfly') && s.rungs < 40) fail(what + 'too few ladder rungs on an odonate: ' + s.rungs);
@@ -737,6 +787,13 @@ const POST = {
     console.log('#12 bee checks asserted on (of ' + bees + ' bee plates):', Object.keys(beeSeen).filter(k => ran.has(k)).map(k => k + ' ' + beeSeen[k]).join(', ') +
       (bees < BEE_MIN ? '; too few bee plates (' + bees + ' < ' + BEE_MIN + ') to require every check' : ''));
   },
+  // the #19 checks assert only on lacewing plates: once the run has NEU_MIN of them every selected one must have run
+  neuSeen(fail) {
+    const n = neuSeenPlates, idle = Object.keys(neuSeen).filter(k => ran.has(k) && !neuSeen[k]);
+    if (idle.length && n >= NEU_MIN) fail('#19 lacewing checks that never ran in ' + n + ' lacewing plates: ' + idle.join(', '));
+    console.log('#19 lacewing checks asserted on (of ' + n + ' lacewing plates):', Object.keys(neuSeen).filter(k => ran.has(k)).map(k => k + ' ' + neuSeen[k]).join(', ') +
+      (n < NEU_MIN ? '; too few lacewing plates (' + n + ' < ' + NEU_MIN + ') to require every check' : ''));
+  },
   signatures(fail) {
     sigRule(wingSigs, 'wing', 0.5, fail);
     sigRule(bodySigs, 'body', 0.98, fail);
@@ -781,7 +838,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { beeSeen: Object.keys(beeSeen) };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen) };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
@@ -799,6 +856,7 @@ async function run() {
     const key = meta.variant || meta.type;
     typeCount[key] = (typeCount[key] || 0) + 1;
     if (meta.type === 'bee') beeSeenPlates++;
+    if (meta.type === 'lacewing') neuSeenPlates++;
     if (meta.wingSig) { const m = wingSigs[key] ||= new Map(); m.set(meta.wingSig, (m.get(meta.wingSig) || 0) + 1); }
     if (meta.bodySig) { const m = bodySigs[key] ||= new Map(); m.set(meta.bodySig, (m.get(meta.bodySig) || 0) + 1); }
     elTotal += drawn(svg);
