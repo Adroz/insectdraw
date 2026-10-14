@@ -4728,7 +4728,8 @@ function wingsElytra(C) {   // (type === 'beetle')
 const ELY_W = 1.03;        // an elytron's width over the abdomen's half-width (rollBodyGenes reads it to hold the pronotum / elytra ratio, #24)
 const ELY_PITCH_PX = 3;    // plate px between neighbouring striae, a stria and the outline, and a puncture and any of them
 const ELY_MARGIN_PX = 0.02;   // drawn that much clear of the floor, so tests/check.js's own sampling of the curves cannot fail it
-const ELY_DOT_R = 0.8;     // a puncture's radius (body units)
+const ELY_DOT_R = 0.8;     // a puncture's radius (body units); on a device plate at least ELY_DOT_DEV of the pitch floor, so it survives the threshold as a dot
+const ELY_DOT_DEV = 0.3;
 const ELY_ARC = 1.05;      // punctures and dash gaps are spaced by arc length along a curved stria; the chord between them is a little shorter
 function elytralStriae(meta, striae, G, outline, Pf) {
   const PER = 32, nSeg = bz => (bz.length - 1) / 3;   // samples per bezier segment (the drawn striae go onto meta.elytra at twice that)
@@ -4778,7 +4779,7 @@ function elytralStriae(meta, striae, G, outline, Pf) {
     const ptAt = d => { let j = 1; while (j < cum.length - 1 && cum[j] < d) j++; const t = cum[j] === cum[j - 1] ? 0 : (d - cum[j - 1]) / (cum[j] - cum[j - 1]); return lerpP(pl[j - 1], pl[j], Math.max(0, Math.min(1, t))); };
     if (style === 'punctate') {
       const step = floorPitch(Math.max(G.pitch, Pf * ELY_ARC)), n = Math.floor(len / step);
-      for (let i = 0; i <= n; i++) { const c = ptAt((len - n * step) / 2 + i * step); els.push(circleEl(c, ELY_DOT_R, SW.F)); dots.push(c); dotStria.push(kk); }
+      for (let i = 0; i <= n; i++) { const c = ptAt((len - n * step) / 2 + i * step); els.push(circleEl(c, Math.max(ELY_DOT_R, ELY_DOT_DEV * pitchFloor), SW.F)); dots.push(c); dotStria.push(kk); }
     } else {   // dashed
       const step = floorPitch(Math.max(G.pitch * 2, Pf * ELY_ARC / (1 - G.dash), 2 * Pf * ELY_ARC)), dashLen = Math.min(step * G.dash, step - Pf * ELY_ARC), n = Math.floor((len + step - dashLen) / step);
       const d0 = (len - (n * step - (step - dashLen))) / 2;
