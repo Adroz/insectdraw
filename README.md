@@ -30,7 +30,9 @@ Three pages, one engine:
   from a separate PRNG stream so the drawing is unaffected. They are rendered
   as a Victorian plate caption below the insect and exposed as `meta.name`
   / `insectName(seed, type, variant, fam)` (`fam`, the drawn family `meta.fam`,
-  picks the noun where the order's names table has `famNouns`).
+  picks the noun where the order's names table has `famNouns`). The common
+  name never repeats a stem ("Dark Darkling", "Blue-tailed Bluet"), and every
+  epithet stem x gender is written out in `tests/names.js` (`FORMS`, against the `EPITHETS` export).
 
 ## Use
 
@@ -344,10 +346,11 @@ Consumers rely on exactly this, and `node tests/check.js` fails if any of it sto
   every platform; the only inputs are the seed and the options (`{ type, devicePx }`). `dailySeed()` is
   the one function that reads the clock.
 - **The exports.** `module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName,
-  dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H }`
+  EPITHETS, dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H }`
   (`ORDERS` is the order registry, read-only (frozen to the leaves, asserted by `engineContract()`): one entry
   per body plan with its gene tables, wing roots, head scale, wing function and name tables; `TYPES` is its
-  key list, in pick order). Adding an
+  key list, in pick order; `EPITHETS` is every species-epithet stem the namer declines with its masculine /
+  feminine / neuter forms, frozen). Adding an
   export means updating `EXPORTS` in `tests/engine.js` in the same commit; removing or renaming one is a
   breaking change for every consumer below.
 
@@ -357,7 +360,7 @@ How each consumer loads it:
 | --- | --- |
 | `index.html` | the block runs inline; the page's own UI script is a second `<script>` after it |
 | `compare.html`, `parts.html`, `tests/sheet.html` | `fetch` `index.html` (`../index.html` from `tests/`), match the tag, inject the text as a script (so they need HTTP) |
-| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `perceptual.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm`, returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
+| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `perceptual.js`, `names.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm`, returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
 | crowpanel-ha `services/insectdraw-render` | the Dockerfile curls `index.html` from `main` at build time and writes the script block containing `module.exports` to `insectdraw-engine.js`, which `server.js` requires |
 
 `tests/engine.js` also exports `engineContract(path)`, the list of violations (empty on a good file), and
