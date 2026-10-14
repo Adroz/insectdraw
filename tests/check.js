@@ -191,8 +191,12 @@ const BEETLE = { pronWL: [1.1, 1.5], pronEly: [0.55, 0.9] };
 // bodySig): 'smooth' draws the striae as lines and no punctures; 'punctate' draws each stria as a row of punctures and no
 // line; 'dashed' as dashes ELY_PITCH px apart along it and no line. Every puncture and dash lies on a stria's run
 // (within ELY_ON body units of meta.elytra.striae), and once a run has ELY_STYLE_MIN beetle plates each style must
-// hold at least ELY_STYLE_SHARE of them.
-const ELY_STYLES = ['smooth', 'punctate', 'dashed'], ELY_ON = 0.05, ELY_STYLE_MIN = 40, ELY_STYLE_SHARE = 0.1;
+// hold at least ELY_STYLE_SHARE of them. #53 adds the sculpture families of docs/research-thorax.md: 'costate', a few
+// raised costae drawn as heavier lines (2 to ELY_COSTAE striae, meta.elytra.weight 'D'); 'glabrous', a smooth shining
+// elytron with only the sutural stria (one line); 'tubercle', rows of tubercles (rings at least ELY_TUB_R body units
+// across the radius) along the striae, each ELY_PITCH px clear of the next along its row.
+const ELY_STYLES = ['smooth', 'punctate', 'dashed', 'costate', 'glabrous', 'tubercle'], ELY_ON = 0.05, ELY_STYLE_MIN = 40, ELY_STYLE_SHARE = 0.1;
+const ELY_LINES = ['smooth', 'costate', 'glabrous'], ELY_COSTAE = 4, ELY_TUB_R = 1.2;
 const elyStyles = {};   // style -> beetle plates, for POST.elytraTexture
 // #24, the rove beetle (Staphylinidae; the audit's reference): elytra about the pronotum's length (ROVE.ely, elytra / pronotum
 // length) and truncate (the hind margin at least ROVE.trunc of the elytron's width within ROVE.edge of its end), over a long
@@ -223,6 +227,64 @@ const WEEVIL = { along: [0.15, 0.7], edge: 1.5 };
 const CARABID = { len: [0.22, 0.55], tipX: 0.12, baseX: 0.22, gap: 0.12 };
 const LONGHORN = { len: [0.7, 1.3], minPx: 0.8, baseW: 0.1, tipBack: 0.15, tipOut: 1.9 };
 const colSeen = { beetleOcelli: 0, weevilSocket: 0, carabidMandibles: 0, longhornAntenna: 0 };   // beetle plates each #25 check asserted on, for POST.colSeen
+// #53 beetle families and within-family genes, stated from docs/research-thorax.md (Coleoptera) and the references there,
+// not read from the engine:
+// - the families a beetle plate draws (COL_FAMS): the five of #24 plus the round ones the sheet never showed, the
+//   ladybird (Coccinellidae: elytra together about as broad as long, a hemisphere from above) and the leaf beetle
+//   (Chrysomelidae: a short convex oval), and the stag beetle (Lucanidae); the elytra together, breadth over length
+//   (meta.elytra.outline: one elytron, so twice its half width over its length), lie in COL_ASPECT[fam] where given
+const COL_FAMS = ['ground', 'rove', 'scarab', 'longhorn', 'weevil', 'coccinellid', 'chrysomelid', 'lucanid'];
+const COL_ASPECT = { coccinellid: [0.85, 1.3], chrysomelid: [0.68, 1.0] };
+// - the elytral outline (meta.bodyGenes.elytra.outline, on bodySig as 'eo' + its initial and the shoulder's) as drawn, the
+//   half width of meta.elytra.outline at a fraction t of its length over its widest (w(t)): parallel, the sides parallel
+//   over the disc (w(0.2), w(0.6) >= par); oval, widest about the middle (widest between oval.at) and narrowing to both
+//   ends (w(0.1), w(0.8) <= oval.ends); rounded, broad to a round apex (w(0.8) >= round); tapering, widest at the
+//   shoulders and narrowing to a pointed apex (widest at or before taper.at, w(0.8) <= taper.end); the shoulders square
+//   (w(0.03) >= sq) or rounded (w(0.03) <= rd). A truncate elytron (the rove's) has no outline gene.
+const ELY_OUTLINES = ['parallel', 'oval', 'rounded', 'tapering'];
+const ELY_SHAPE = { par: 0.9, oval: { at: [0.28, 0.62], ends: 0.88 }, round: 0.75, taper: { at: 0.35, end: 0.62 }, sq: 0.8, rd: 0.74 };
+// - the elytral pattern (meta.bodyGenes.elytra.pattern, on bodySig as 'ep' + its initial), drawn as hatched shapes
+//   (meta.elytra.pattern: regions, closed polylines, and hatch, the hatch segments): none draws nothing; spots at least
+//   two regions (one on a ladybird), bands at least one, a stripe one, dark (the whole elytron hatched round pale spots,
+//   meta.elytra.pattern.holes, no hatch middle inside one) one; every region and hatch end inside the elytron (within ELY_IN body
+//   units of its outline), every hatch segment's middle inside a region, and the hatch lines ELY_PITCH px apart at plate
+//   scale on the default and the device plate (measured across the lines, which are parallel on one elytron)
+const ELY_PATTERNS = ['none', 'spots', 'bands', 'stripe', 'dark'], ELY_IN = 0.6;
+// - the pronotal pattern (meta.bodyGenes.thorax.pron, on bodySig as 'pp' + its initial; the ladybird's spots and dark
+//   disc, a leaf beetle's vittae): none, disc (one dark disc), sides (dark sides round a pale disc, two regions), spots
+//   (two), vittae (two), drawn as hatched shapes (meta.thorax.pattern) inside the pronotum's outline (meta.thorax.profile,
+//   within ELY_IN), the hatch ELY_PITCH px apart at plate scale on the default and the device plate
+const PRON_PATTERNS = { none: 0, disc: 1, sides: 2, spots: 2, vittae: 2 };
+// - the pronotum : elytra width class (meta.bodyGenes.thorax.pronClass, on bodySig as 'pr' + its initial): the drawn
+//   pronotum's width over both elytra's (as beetleProportions measures it) lies in PRON_CLASS[class], three overlapping
+//   thirds of the research band BEETLE.pronEly (a narrow carabid pronotum to one nearly the elytra's width)
+const PRON_CLASS = { narrow: [0.55, 0.71], mid: [0.65, 0.81], broad: [0.75, 0.9] };
+// - pronotal armature (meta.bodyGenes.armature, on bodySig as 'ar' + the horn's initial or '-' and 's' for spines): a horn
+//   only on a scarab (Dynastinae, Geotrupinae: a cephalic horn rising from the head, a pronotal horn projecting forward
+//   over it), lateral pronotal spines only on a longhorn (Cerambycidae). meta.armature: horn { kind, base, tip } and the
+//   right side's spines [{ base, tip }]: a cephalic horn's base inside the head outline, a pronotal horn's on the
+//   pronotum; the tip near the midline (ARM.tipX head widths) and at least ARM.ahead head widths ahead of its base's part
+//   (the head's front / the pronotum's); a spine's base on the pronotal margin (within ARM.edge body units) and its tip
+//   ARM.spine[0]-ARM.spine[1] of the pronotum's half width out past it
+const ARM = { horn: ['scarab'], spines: ['longhorn'], tipX: 0.15, ahead: 0.2, edge: 2, spine: [0.2, 0.6] };
+// - a stag beetle's mandibles (Lucanidae; ref thorax-col-lucanus-jacobson, docs/research-thorax.md): two antler-like jaws
+//   (meta.head.mand) each reaching STAG.len head widths ahead of the head's front, bowed out to at least STAG.spread head
+//   widths from the midline and curving back in to a tip within STAG.tipX of it, with an inner tooth
+//   (meta.head.mandTeeth, one point per jaw, between the head's front and the jaw's tip); the jaw size class
+//   (major from STAG.major head widths, else minor) is tallied
+const STAG = { len: [0.55, 1.15], spread: 0.42, tipX: 0.3, major: 0.8 };
+// - the fore tibia (meta.bodyGenes.legs[0].tibTeeth, on bodySig as 'ft' + the count): fossorial, toothed along its outer
+//   edge (FOSS.teeth teeth; Scarabaeidae, Lucanidae, the digging carabids), only on the FOSS.fams families, or slender (0).
+//   Drawn: meta.legs[0].tib.teeth is the gene's count, and each tooth tip (meta.legs[0].tib.tips) stands at least
+//   FOSS.out of the tibia's widest width off its axis, on the side away from the midline, over FOSS.at of its length (the
+//   apical tooth at the tip)
+const FOSS = { fams: ['scarab', 'lucanid', 'ground'], teeth: [2, 4], out: 0.4, at: [0.3, 1.15] };   // at: the apical tooth stands at the tip
+const colFams = {};   // family -> beetle plates, for POST.colGenes
+const colTally = {};   // gene -> value -> beetle plates, for POST.colGenes
+const tally = (g, v) => { const T = colTally[g] ||= {}; T[v] = (T[v] || 0) + 1; };
+const COL_SHARE = 0.05, COL_GENE_MIN = 20;   // ... and a gene is held to it once COL_GENE_MIN plates rolled it (a family's own gene: its plates)   // a gene value drawn on fewer of the plates that roll the gene is one the sheet never shows
+const COL_VALUES = { outline: ELY_OUTLINES, shoulder: ['square', 'rounded'], pattern: ELY_PATTERNS, pronPattern: Object.keys(PRON_PATTERNS), pronClass: Object.keys(PRON_CLASS), horn: ['none', 'cephalic', 'pronotal'], spines: ['0', '1'], stag: ['minor', 'major'], foretibia: ['slender', 'toothed'] };
+const COL_GENE_CHECKS = ['colFamily', 'elytraOutline', 'elytraPattern', 'pronotumPattern', 'pronotumRatio', 'beetleArmature', 'stagMandibles', 'foretibia'];   // the #53 checks POST.colGenes audits
 const COL_MIN = 40;   // beetle plates a run needs before a #25 check that never ran fails rather than being reported (a family is 1/6 of beetles: no weevil in 40 has odds 0.0007)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
@@ -350,7 +412,7 @@ const PRE = {
       if (o.tegula && (!range2(o.tegula.rx) || (o.tegula.hairs !== undefined && !range2(o.tegula.hairs)))) f('tegula is not { rx: [min, max], hairs?: [min, max] }: ' + JSON.stringify(o.tegula));
       if (o.tegula && o.wingRootX === undefined) f('tegula without a wingRootX to sit at');
       if (o.legThick !== undefined && !(typeof o.legThick === 'number' && o.legThick > 0)) f('legThick is not a positive factor: ' + o.legThick);
-      if (o.elytra !== undefined && (!o.elytra || !o.elytra.styles || !range2(o.elytra.pitch) || !range2(o.elytra.dash) || Object.values(o.elytra.fams || {}).some(e => !range2(e.len)))) f('elytra is not { styles, pitch: [min, max], dash: [min, max], fams?: { fam: { len: [min, max], truncate? } } }');
+      if (o.elytra !== undefined && (!o.elytra || !o.elytra.styles || !range2(o.elytra.pitch) || !range2(o.elytra.dash) || Object.values(o.elytra.fams || {}).some(e => e.len !== undefined && !range2(e.len)))) f('elytra is not { styles, pitch: [min, max], dash: [min, max], fams?: { fam: { len?: [min, max], truncate?, outlines?, square? } } }');
       if (o.pronotum !== undefined && (!o.pronotum || !range2(o.pronotum.wl) || !range2(o.pronotum.ely))) f('pronotum is not { wl: [min, max], ely: [min, max] }: ' + JSON.stringify(o.pronotum));
       if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
       if (o.wingSet !== undefined && (!o.wingSet || !range2(o.wingSet.fw) || !range2(o.wingSet.hw) || Object.values(o.wingSet.fams || {}).some(w => (w.fw && !range2(w.fw)) || (w.hw && !range2(w.hw))))) f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } }: ' + JSON.stringify(o.wingSet));
@@ -1153,6 +1215,160 @@ const CHECKS = {
     if (exposed.length < ROVE.exposed) fail('rove abdomen shows ' + exposed.length + ' tergites past the elytra (want >= ' + ROVE.exposed + ')');
     if (exposed.some(seg => !seg.some(m => m.k === 'hatch'))) fail('a rove tergite past the elytra is not hatched');
   },
+  // #53: the beetle family is one of COL_FAMS, and the round families are round (COL_ASPECT)
+  colFamily(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    if (!COL_FAMS.includes(meta.fam)) return fail('beetle family ' + meta.fam + ' is not one of ' + COL_FAMS.join('/'));
+    colFams[meta.fam] = (colFams[meta.fam] || 0) + 1;
+    const Y = meta.elytra, band = COL_ASPECT[meta.fam];
+    if (!band) return;
+    if (!Y || !Array.isArray(Y.outline)) return fail('no elytron outline on meta.elytra');
+    const ys = Y.outline.map(p => p[1]), k = 2 * Math.max(...Y.outline.map(p => p[0])) / (Math.max(...ys) - Math.min(...ys));
+    if (k < band[0] || k > band[1]) fail(meta.fam + ' elytra ' + k.toFixed(2) + ' as broad as long (want ' + band.join('-') + ')');
+  },
+  // #53: the elytral outline and shoulders as drawn (ELY_SHAPE)
+  elytraOutline(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    const G = meta.bodyGenes.elytra, Y = meta.elytra;
+    if (!G || !Y || !Array.isArray(Y.outline)) return fail('no elytra genes / outline on meta');
+    if (G.outline === null && meta.fam === 'rove') return;   // the truncate elytron
+    if (!ELY_OUTLINES.includes(G.outline) || !['square', 'rounded'].includes(G.shoulder)) return fail('elytral outline gene ' + G.outline + ' / shoulder ' + G.shoulder + ' is not one of ' + ELY_OUTLINES.join('/') + ' x square/rounded');
+    if (!meta.bodySig.split(',').includes('eo' + G.outline[0] + G.shoulder[0])) fail('elytral outline missing from bodySig');
+    tally('outline', G.outline); tally('shoulder', G.shoulder);
+    const ys = Y.outline.map(p => p[1]), y0 = Math.min(...ys), len = Math.max(...ys) - y0;
+    const hw = t => { const y = y0 + t * len; let best = 0; for (let i = 0; i + 1 < Y.outline.length; i++) { const a = Y.outline[i], b = Y.outline[i + 1]; if ((a[1] - y) * (b[1] - y) <= 0 && a[1] !== b[1]) best = Math.max(best, a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1])); } return best; };
+    const W = Math.max(...Y.outline.map(p => p[0])), w = t => hw(t) / W;
+    let at = 0; for (let t = 0; t <= 1; t += 0.01) if (hw(t) > hw(at)) at = t;
+    const S = ELY_SHAPE, bad = m => fail(G.outline + ' elytra: ' + m + ' (' + meta.fam + ')');
+    if (G.outline === 'parallel' && (w(0.2) < S.par || w(0.6) < S.par)) bad('sides not parallel, w(0.2) ' + w(0.2).toFixed(2) + ', w(0.6) ' + w(0.6).toFixed(2));
+    if (G.outline === 'oval' && (at < S.oval.at[0] || at > S.oval.at[1] || w(0.1) > S.oval.ends || w(0.8) > S.oval.ends)) bad('widest at ' + at.toFixed(2) + ', w(0.1) ' + w(0.1).toFixed(2) + ', w(0.8) ' + w(0.8).toFixed(2));
+    if (G.outline === 'rounded' && w(0.8) < S.round) bad('apex not broad, w(0.8) ' + w(0.8).toFixed(2));
+    if (G.outline === 'tapering' && (at > S.taper.at || w(0.8) > S.taper.end)) bad('widest at ' + at.toFixed(2) + ', w(0.8) ' + w(0.8).toFixed(2));
+    if (G.shoulder === 'square' && w(0.03) < S.sq) bad('shoulders not square, w(0.03) ' + w(0.03).toFixed(2));
+    if (G.shoulder === 'rounded' && w(0.03) > S.rd) bad('shoulders not rounded, w(0.03) ' + w(0.03).toFixed(2));
+  },
+  // #53: the elytral pattern as hatched shapes inside the elytron (ELY_PATTERNS), on the default and the device plate
+  elytraPattern(meta, svg, fail, { dev }) {
+    if (meta.type !== 'beetle') return;
+    const kind = meta.bodyGenes.elytra && meta.bodyGenes.elytra.pattern;
+    if (!ELY_PATTERNS.includes(kind)) return fail('elytral pattern gene ' + kind + ' is not one of ' + ELY_PATTERNS.join('/'));
+    if (!meta.bodySig.split(',').includes('ep' + kind[0])) fail('elytral pattern missing from bodySig');
+    tally('pattern', kind);
+    const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], l2 = dx * dx + dy * dy, t = l2 ? Math.max(0, Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / l2)) : 0; return Math.hypot(p[0] - a[0] - t * dx, p[1] - a[1] - t * dy); };
+    const inside = (p, poly) => { if (inPoly(p, poly)) return true; for (let i = 0; i + 1 < poly.length; i++) if (segD(p, poly[i], poly[i + 1]) <= ELY_IN) return true; return false; };
+    for (const [m, what] of [[meta, ''], [dev.meta, 'device plate: ']]) {
+      const Y = m.elytra, Pt = Y && Y.pattern;
+      if (!Pt || Pt.kind !== kind || !Array.isArray(Pt.regions) || !Array.isArray(Pt.hatch)) { fail(what + 'meta.elytra.pattern is not the gene: ' + (Pt && Pt.kind)); continue; }
+      const nR = Pt.regions.length, want = { none: [0, 0], spots: [meta.fam === 'coccinellid' ? 1 : 2, 99], bands: [1, 99], stripe: [1, 1], dark: [1, 1] }[kind];
+      if (nR < want[0] || nR > want[1]) fail(what + kind + ' pattern with ' + nR + ' regions');
+      if (kind === 'none' && Pt.hatch.length) fail(what + 'an unpatterned elytron with hatch');
+      if (kind !== 'none' && !Pt.hatch.length) fail(what + kind + ' pattern without hatch');
+      if (Pt.regions.some(r => r.length < 4 || r.some(p => !inside(p, Y.outline)))) fail(what + kind + ' region outside the elytron');
+      if (Pt.hatch.some(([a, b]) => !inside(a, Y.outline) || !inside(b, Y.outline))) fail(what + kind + ' hatch outside the elytron');
+      if (Pt.hatch.some(([a, b]) => !Pt.regions.some(r => inside([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], r)))) fail(what + kind + ' hatch outside its shapes');
+      if (kind === 'dark' && (!Array.isArray(Pt.holes) || !Pt.holes.length)) fail(what + 'a dark elytron without pale spots');
+      if (Pt.hatch.some(([a, b]) => (Pt.holes || []).some(h => inPoly([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], h)))) fail(what + 'hatch inside a pale spot');
+      if (Pt.hatch.length > 1) {   // across the lines: their offsets along the normal of their (shared) direction
+        const [a0, b0] = Pt.hatch[0], L0 = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]), d = [(b0[0] - a0[0]) / L0, (b0[1] - a0[1]) / L0];
+        if (Pt.hatch.some(([a, b]) => Math.abs((b[0] - a[0]) * d[1] - (b[1] - a[1]) * d[0]) > 1e-3 * Math.hypot(b[0] - a[0], b[1] - a[1]) + 1e-6)) fail(what + 'hatch lines not parallel');
+        const off = [...new Set(Pt.hatch.map(([a]) => Math.round((a[0] * d[1] - a[1] * d[0]) * 1e4) / 1e4))].sort((x, y) => x - y);
+        let gap = Infinity; for (let i = 1; i < off.length; i++) gap = Math.min(gap, off[i] - off[i - 1]);
+        if (gap * m.scale < ELY_PITCH - 1e-3) fail(what + 'pattern hatch ' + (gap * m.scale).toFixed(2) + ' px apart (want >= ' + ELY_PITCH + ')');
+      }
+    }
+  },
+  // #53: the pronotal pattern (PRON_PATTERNS) as hatched shapes inside the pronotum
+  pronotumPattern(meta, svg, fail, { dev }) {
+    if (meta.type !== 'beetle') return;
+    const kind = meta.bodyGenes.thorax.pron;
+    if (!(kind in PRON_PATTERNS)) return fail('pronotal pattern gene ' + kind + ' is not one of ' + Object.keys(PRON_PATTERNS).join('/'));
+    if (!meta.bodySig.split(',').includes('pp' + kind[0])) fail('pronotal pattern missing from bodySig');
+    tally('pronPattern', kind);
+    for (const [m, what] of [[meta, ''], [dev.meta, 'device plate: ']]) {
+      const Pt = m.thorax.pattern, th = m.thorax;
+      if (!Pt || Pt.kind !== kind) { fail(what + 'meta.thorax.pattern is not the gene'); continue; }
+      if (Pt.regions.length !== PRON_PATTERNS[kind]) fail(what + kind + ' pronotum with ' + Pt.regions.length + ' regions');
+      if (kind !== 'none' && !Pt.hatch.length) fail(what + kind + ' pronotum without hatch');
+      const inPron = p => p[1] >= th.yTop - ELY_IN && p[1] <= th.yBot + ELY_IN && Math.abs(p[0]) <= profHw(th.profile, Math.min(Math.max(p[1], th.yTop), th.yBot - 0.01), 0.11) + ELY_IN;
+      if (Pt.regions.some(r => r.some(p => !inPron(p))) || Pt.hatch.some(h => !h.every(inPron))) fail(what + kind + ' pronotal pattern outside the pronotum');
+      if (Pt.hatch.length > 1) {
+        const [a0, b0] = Pt.hatch[0], L0 = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]), d = [(b0[0] - a0[0]) / L0, (b0[1] - a0[1]) / L0];
+        const off = [...new Set(Pt.hatch.map(([a]) => Math.round((a[0] * d[1] - a[1] * d[0]) * 1e4) / 1e4))].sort((x, y) => x - y);
+        let gap = Infinity; for (let i = 1; i < off.length; i++) gap = Math.min(gap, off[i] - off[i - 1]);
+        if (gap * m.scale < ELY_PITCH - 1e-3) fail(what + 'pronotal hatch ' + (gap * m.scale).toFixed(2) + ' px apart (want >= ' + ELY_PITCH + ')');
+      }
+    }
+  },
+  // #53: the pronotum : elytra width class as drawn (PRON_CLASS)
+  pronotumRatio(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    const c = meta.bodyGenes.thorax.pronClass, Y = meta.elytra;
+    if (!(c in PRON_CLASS)) return fail('pronotum width class ' + c + ' is not one of ' + Object.keys(PRON_CLASS).join('/'));
+    if (!meta.bodySig.split(',').includes('pr' + c[0])) fail('pronotum width class missing from bodySig');
+    tally('pronClass', c);
+    const pe = 2 * maxHw(meta.thorax.profile) / (2 * Math.max(...Y.outline.map(p => p[0])));
+    if (pe < PRON_CLASS[c][0] || pe > PRON_CLASS[c][1]) fail(c + ' pronotum ' + pe.toFixed(2) + ' of the elytral width (want ' + PRON_CLASS[c].join('-') + ', ' + meta.fam + ')');
+  },
+  // #53: the pronotal armature (ARM): scarab horns, longhorn lateral spines
+  beetleArmature(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    const G = meta.bodyGenes.armature, A = meta.armature, h = meta.head, th = meta.thorax;
+    if (!G || !A) return fail('no armature gene / meta.armature on a beetle');
+    const tok = 'ar' + (G.horn ? G.horn[0] : '-') + (G.spines ? 's' : '');
+    if (!meta.bodySig.split(',').includes(tok)) fail('armature missing from bodySig (' + tok + ')');
+    if (G.horn && !ARM.horn.includes(meta.fam)) fail('a horn on a ' + meta.fam);
+    if (G.spines && !ARM.spines.includes(meta.fam)) fail('pronotal spines on a ' + meta.fam);
+    if (ARM.horn.includes(meta.fam)) tally('horn', G.horn || 'none');
+    if (ARM.spines.includes(meta.fam)) tally('spines', G.spines ? '1' : '0');
+    if (!!G.horn !== !!A.horn || (G.horn && A.horn.kind !== G.horn)) return fail('the drawn horn is not the gene');
+    if (A.horn) {
+      const { base, tip } = A.horn, front = G.horn === 'cephalic' ? h.top : th.yTop;
+      if (G.horn === 'cephalic' && !inPoly(base, h.outline)) fail('cephalic horn base outside the head');
+      if (G.horn === 'pronotal' && (base[1] < th.yTop || base[1] > th.yBot || Math.abs(base[0]) > profHw(th.profile, base[1], 0.11))) fail('pronotal horn base off the pronotum');
+      if (Math.abs(tip[0]) > ARM.tipX * h.W) fail('horn tip off the midline: ' + (tip[0] / h.W).toFixed(2) + ' head widths');
+      if (front - tip[1] < ARM.ahead * h.W) fail(G.horn + ' horn reaches only ' + ((front - tip[1]) / h.W).toFixed(2) + ' head widths ahead (want >= ' + ARM.ahead + ')');
+    }
+    if (!!G.spines !== !!(A.spines && A.spines.length)) return fail('the drawn spines are not the gene');
+    for (const sp of A.spines || []) {
+      const hb = profHw(th.profile, sp.base[1], 0.11), ht = profHw(th.profile, Math.min(Math.max(sp.tip[1], th.yTop), th.yBot - 0.01), 0.11);
+      if (Math.abs(sp.base[0] - hb) > ARM.edge) fail('pronotal spine base off the margin');
+      const out = (sp.tip[0] - ht) / ht;
+      if (out < ARM.spine[0] || out > ARM.spine[1]) fail('pronotal spine reaches ' + out.toFixed(2) + ' of the half width out (want ' + ARM.spine.join('-') + ')');
+    }
+  },
+  // #53: the stag beetle's antler mandibles (STAG)
+  stagMandibles(meta, svg, fail) {
+    if (meta.type !== 'beetle' || meta.fam !== 'lucanid') return;
+    const h = meta.head, M = h.mand, W = h.W, T = h.mandTeeth;
+    if (!Array.isArray(M) || M.length !== 2 || !Array.isArray(T) || T.length !== 2) return fail('stag beetle without two jaws and two inner teeth on meta.head');
+    let reach = Infinity;
+    M.forEach((j, i) => {
+      const ys = j.map(p => p[1]), tipY = Math.min(...ys), tip = j[ys.indexOf(tipY)], len = (h.top - tipY) / W, out = Math.max(...j.map(p => Math.abs(p[0]))) / W;
+      reach = Math.min(reach, len);
+      if (len < STAG.len[0] || len > STAG.len[1]) fail('stag mandible length ' + len.toFixed(2) + ' head widths (want ' + STAG.len.join('-') + ')');
+      if (out < STAG.spread) fail('stag mandible bowed out only ' + out.toFixed(2) + ' head widths (want >= ' + STAG.spread + ')');
+      if (Math.abs(tip[0]) / W > STAG.tipX) fail('stag mandible tip ' + (Math.abs(tip[0]) / W).toFixed(2) + ' head widths off the midline (want <= ' + STAG.tipX + ')');
+      if (!(T[i][1] < h.top && T[i][1] > tipY)) fail('stag mandible tooth not along the jaw');
+    });
+    tally('stag', reach >= STAG.major ? 'major' : 'minor');
+  },
+  // #53: the fore tibia, fossorial (toothed) or slender (FOSS)
+  foretibia(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    const n = meta.bodyGenes.legs[0].tibTeeth, tib = meta.legs[0].tib, pts = meta.legs[0].pts;
+    if (!(n === 0 || (n >= FOSS.teeth[0] && n <= FOSS.teeth[1]))) return fail('fore tibia teeth gene ' + n);
+    if (!meta.bodySig.split(',').includes('ft' + n)) fail('fore tibia type missing from bodySig');
+    if (FOSS.fams.includes(meta.fam)) tally('foretibia', n ? 'toothed' : 'slender');
+    else if (n) fail('a toothed fore tibia on a ' + meta.fam);
+    if (!tib || tib.teeth !== n || (tib.tips || []).length !== n) return fail('fore tibia draws ' + (tib && tib.teeth) + ' teeth, gene ' + n);
+    const a = pts[3], b = pts[4], L = Math.hypot(b[0] - a[0], b[1] - a[1]), d = [(b[0] - a[0]) / L, (b[1] - a[1]) / L];
+    for (const p of tib.tips) {
+      const s = ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / L, foot = [a[0] + d[0] * s * L, a[1] + d[1] * s * L], off = Math.hypot(p[0] - foot[0], p[1] - foot[1]);
+      if (s < FOSS.at[0] || s > FOSS.at[1]) fail('fore tibia tooth at ' + s.toFixed(2) + ' of the tibia (want ' + FOSS.at.join('-') + ')');
+      if (off < FOSS.out * tib.wMax) fail('fore tibia tooth stands ' + (off / tib.wMax).toFixed(2) + ' of the tibia width off its axis (want >= ' + FOSS.out + ')');
+      if (p[0] < foot[0]) fail('fore tibia tooth on the inner edge');
+    }
+  },
   // #25: no ocelli on a beetle
   beetleOcelli(meta, svg, fail) {
     if (meta.type !== 'beetle') return;
@@ -1218,10 +1434,18 @@ const CHECKS = {
       const Y = m.elytra;
       if (!Y || Y.style !== style) { fail(what + 'meta.elytra.style is not the gene: ' + (Y && Y.style)); continue; }
       const dashes = Y.dashes || [];
-      if (style === 'smooth' && (Y.dots.length || dashes.length)) fail(what + 'smooth elytra with punctures or dashes');
-      if (style !== 'smooth' && Y.lines) fail(what + style + ' striae drawn as lines too');
-      if (style === 'smooth' && !Y.lines) fail(what + 'smooth striae not drawn as lines');
+      const lined = ELY_LINES.includes(style);
+      if (lined && (Y.dots.length || dashes.length)) fail(what + style + ' elytra with punctures or dashes');
+      if (!lined && Y.lines) fail(what + style + ' striae drawn as lines too');
+      if (lined && !Y.lines) fail(what + style + ' striae not drawn as lines');
+      if (style === 'costate' && (Y.weight !== 'D' || Y.striae.length < 2 || Y.striae.length > ELY_COSTAE)) fail(what + 'costate elytra with ' + Y.striae.length + ' costae drawn at weight ' + Y.weight);
+      if (style !== 'costate' && Y.weight !== 'F') fail(what + style + ' striae drawn at weight ' + Y.weight);
+      if (style === 'glabrous' && Y.striae.length !== 1) fail(what + 'glabrous elytra with ' + Y.striae.length + ' striae (want the sutural stria alone)');
       if (style === 'punctate' && (Y.dots.length < Y.striae.length * 3 || dashes.length)) fail(what + 'punctate striae with ' + Y.dots.length + ' punctures on ' + Y.striae.length + ' striae, ' + dashes.length + ' dashes');
+      if (style === 'tubercle') {
+        if (Y.dots.length < Y.striae.length * 2 || dashes.length || !(Y.dotR >= ELY_TUB_R)) fail(what + 'tubercle rows with ' + Y.dots.length + ' tubercles of radius ' + Y.dotR + ' on ' + Y.striae.length + ' striae');
+        for (let i = 1; i < Y.dots.length; i++) if (Y.dotStria[i] === Y.dotStria[i - 1] && (Math.hypot(Y.dots[i][0] - Y.dots[i - 1][0], Y.dots[i][1] - Y.dots[i - 1][1]) - 2 * Y.dotR) * m.scale < ELY_PITCH - 1e-6) { fail(what + 'tubercles closer than ' + ELY_PITCH + ' px along a row'); break; }
+      } else if (style === 'punctate' && Y.dotR >= ELY_TUB_R) fail(what + 'punctures as large as tubercles');
       if (style === 'dashed' && (dashes.length < Y.striae.length * 2 || Y.dots.length)) fail(what + 'dashed striae with ' + dashes.length + ' dashes on ' + Y.striae.length + ' striae, ' + Y.dots.length + ' punctures');
       if (Y.dots.some(c => !onStria(c, Y))) fail(what + 'a puncture off the striae');
       if (dashes.some(d => !d.pts.every(p => onStria(p, Y)))) fail(what + 'a dash off the striae');
@@ -1453,6 +1677,16 @@ const POST = {
     console.log('#25 beetle checks asserted on (of ' + n + ' beetle plates):', Object.keys(colSeen).filter(k => ran.has(k)).map(k => k + ' ' + colSeen[k]).join(', ') +
       (n < COL_MIN ? '; too few beetle plates (' + n + ' < ' + COL_MIN + ') to require every check' : ''));
   },
+  // #53 the run's beetles: once it has COL_MIN beetle plates every family of COL_FAMS has been drawn
+  colGenes(fail) {
+    const n = beetlePlates, fmt = o => Object.keys(o).sort().map(k => k + ' ' + o[k]).join(', ');
+    if (n >= COL_MIN && ran.has('colFamily')) for (const f of COL_FAMS) if (!colFams[f]) fail('beetle family ' + f + ' never drawn in ' + n + ' beetle plates', 'beetle');
+    // every value of a gene a selected check tallies is drawn on at least COL_SHARE of the beetle plates that roll the gene
+    for (const g in colTally) { const T = colTally[g], tot = Object.values(T).reduce((a, b) => a + b, 0);
+      if (n >= COL_MIN && tot >= COL_GENE_MIN) for (const v of COL_VALUES[g]) if ((T[v] || 0) < COL_SHARE * tot) fail('beetle ' + g + ' ' + v + ' on ' + (T[v] || 0) + ' of ' + tot + ' plates (min ' + COL_SHARE * 100 + '%)', 'beetle');
+      console.log('#53 beetle ' + g + ':', fmt(T)); }
+    console.log('#53 beetle families (of ' + n + ' beetle plates):', fmt(colFams) + (n < COL_MIN ? '; too few beetle plates (' + n + ' < ' + COL_MIN + ') to require each' : ''));
+  },
   // #26 the run's cicadas: the median plate scale at least CIC.scale (0.81 before #26), once the run has CIC_MIN of them
   cicScale(fail) {
     const n = cicRun.scales.length, m = median(cicRun.scales);
@@ -1516,7 +1750,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen) };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
