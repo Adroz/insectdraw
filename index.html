@@ -1987,9 +1987,28 @@ const EPITHETS = Object.freeze([...EPITHET, ...EPITHET_TAIL.map(([t, cls]) => ['
   const s = stem.replace(/^-/, '');
   return Object.freeze({ stem, m: declineEpithet(s, cls, 'm'), f: declineEpithet(s, cls, 'f'), n: declineEpithet(s, cls, 'n') });
 }));
-const COMMON_ADJ = ['Lesser', 'Greater', 'Banded', 'Spotted', 'Velvet', 'Marsh', 'Heath', 'Northern', 'Southern', 'Common', 'Dusky', 'Golden',
-  'Striped', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Scarce', 'Brindled', 'Clouded', 'Bronze', 'Silver', 'Ruddy', 'Small',
-  'Large', 'Variable', 'Four-spotted', 'Dark', 'Pale', 'Hairy', 'Black-tailed', 'White-legged', 'Emerald', 'Scarlet', 'Twin-spot', 'Chalk', 'River'];
+// The common name is [qualifier] <adjective> <noun> [base] (#28). The adjective is a gene word whenever the plate has one
+// to give: its abdominal marking (B.abd.mark; plain gives none) or an antenna kind its family draws on under half its
+// plates, so a
+// banded abdomen is "Banded" or "Ringed" and a bipectinate moth "Feathered". Otherwise it comes from the order's `adj`
+// list (else COMMON_ADJ), from which every marking and antenna word is kept out: a plate is never named for a marking
+// it does not draw. The qualifier (size, range, rarity) widens the pool so plates seldom share a name.
+// tests/names.js MARK_CLAIMS / ANT_CLAIMS hold the claim vocabulary these must stay inside.
+const GENE_MARK_ADJ = {
+  banded: ['Banded', 'Ringed', 'Girdled', 'Belted'],
+  spotted: ['Spotted', 'Four-spotted', 'Six-spotted', 'Twin-spot', 'Dotted'],
+  striped: ['Striped', 'Lined', 'Streaked'],
+  tipdark: ['Black-tailed', 'Dark-tipped', 'Black-tipped'],
+  hairy: ['Hairy', 'Downy', 'Velvet', 'Woolly', 'Shaggy'],
+};
+const GENE_ANT_ADJ = { moniliform: ['Bead-horned'], lamellate: ['Fan-horned'], serrate: ['Saw-horned'], pectinate: ['Comb-horned'], bipectinate: ['Feathered'], plumose: ['Plumed'], clubbed: ['Club-horned'] };
+const COMMON_ADJ = ['Marsh', 'Heath', 'Dusky', 'Golden', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Brindled', 'Clouded', 'Bronze',
+  'Silver', 'Ruddy', 'Variable', 'Dark', 'Pale', 'White-legged', 'Scarlet', 'Chalk', 'River', 'Tawny', 'Sooty', 'Amber', 'Grey', 'Moorland',
+  'Hedgerow', 'Orchard', 'Ashy', 'Smoky', 'Glossy', 'Sandy', 'Violet'];
+const NAME_QUAL = ['Lesser', 'Greater', 'Small', 'Large', 'Little', 'Common', 'Scarce', 'Rare', 'Northern', 'Southern', 'Western', 'Eastern',
+  'Alpine', 'Lowland', 'Upland', 'Dwarf', 'Giant', 'Island', 'Coastal', 'Continental'];
+const NAME_QUAL_P = 0.85;   // share of names with a qualifier
+const GENE_WORDS = new Set([...Object.values(GENE_MARK_ADJ), ...Object.values(GENE_ANT_ADJ)].flat());
 
 // two common-name parts repeat a stem: a word of one equals a word of the other ignoring case, or starts it when the
 // shorter has 4+ letters (tests/names.js repeatedStem states the same rule independently)
@@ -1999,7 +2018,10 @@ function nameClash(a, b) {
   return words(a).some(x => wb.some(y => x === y || (x.length >= 4 && y.startsWith(x)) || (y.length >= 4 && x.startsWith(y))));
 }
 
-function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta.fam); a names table with famNouns takes its noun from it
+// fam: the drawn family (meta.fam), which picks the noun (and base) from a table with famNouns (famBase); genes: the
+// plate's { mark: B.abd.mark, ant: B.ant.kind }, which give the adjective (#28). Without them (a name by seed alone)
+// the adjective comes from the general list.
+function insectName(seed, type, variant, fam, genes) {
   const r = mulberry32((((seed >>> 0) ^ 0x9E3779B9) >>> 0));   // private PRNG: never touches the drawing's rng
   const pk = arr => arr[Math.floor(r() * arr.length)];
   const order = ORDERS[type] || ORDERS.beetle, names = (variant && order.variantNames && order.variantNames[variant]) || order.names;
@@ -2026,14 +2048,20 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
     species = declineEpithet(stem, cls, gender);
   }
 
-  // common name: <Adjective> <Noun> [<Base>], never repeating a stem across the three (#29): no word equal to another
-  // ignoring case, nor the start of another when the shorter has 4+ letters ("Dark Darkling", "Blue-tailed Bluet",
-  // "Twin-spot Spotted"). The noun re-rolls as before (so a name the old guard settled keeps its noun), then is picked
-  // from the nouns that clear, and the adjective too if none does; the name PRNG is private, so this moves no drawing.
-  const c = names.common;
-  const adjs = c.adj || COMMON_ADJ;
-  const nouns = (fam && c.famNouns && c.famNouns[fam]) || c.nouns;
-  const fits = (a, n) => !nameClash(a, n) && !nameClash(a, c.base) && !nameClash(n, c.base);
+  // common name: [<Qualifier>] <Adjective> <Noun> [<Base>] (#28), drawn after the binomial so the binomial's draws are
+  // unchanged. Never repeating a stem across the parts (#29): no word equal to another ignoring case, nor the start of
+  // another when the shorter has 4+ letters ("Dark Darkling", "Blue-tailed Bluet"). The noun re-rolls, then is picked
+  // from the nouns that clear, and the adjective too if none does; a qualifier that clashes is dropped. The name PRNG is
+  // private, so none of this moves a drawing.
+  const c = names.common, famNouns = (fam && c.famNouns) || {};
+  const nouns = famNouns[fam] || c.nouns, base = (fam && c.famBase && c.famBase[fam]) || c.base;
+  const otherNouns = new Set(Object.keys(famNouns).filter(f => f !== fam).flatMap(f => famNouns[f]));   // another family's noun is no adjective here
+  const g = genes || {}, antT = order.ant, antKinds = Object.assign({}, antT.base, antT[fam] || {}).kinds;
+  const antTot = Object.values(antKinds).reduce((x, w) => x + w, 0);
+  const antRare = (antKinds[g.ant] || 0) < 0.5 * antTot;   // only a kind the family draws on under half its plates sets this one apart
+  const geneAdj = [...(GENE_MARK_ADJ[g.mark] || []), ...(antRare ? GENE_ANT_ADJ[g.ant] || [] : [])];
+  const adjs = geneAdj.length ? geneAdj : (c.adj || COMMON_ADJ).filter(a => !GENE_WORDS.has(a) && !otherNouns.has(a));
+  const fits = (a, n) => !nameClash(a, n) && !nameClash(a, base) && !nameClash(n, base);
   let adj = pk(adjs), noun = pk(nouns);
   for (let i = 0; i < 8 && !fits(adj, noun); i++) noun = pk(nouns);
   if (!fits(adj, noun)) {
@@ -2041,7 +2069,9 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
     if (ok.length) noun = pk(ok);
     else { const pairs = adjs.flatMap(a => nouns.filter(n => fits(a, n)).map(n => [a, n])); if (pairs.length) [adj, noun] = pk(pairs); }
   }
-  const common = [adj, noun, c.base].filter(Boolean).join(' ');
+  let qual = r() < NAME_QUAL_P ? pk(c.qual || NAME_QUAL) : '';
+  if ([adj, noun, base].some(x => nameClash(qual, x))) qual = '';
+  const common = [qual, adj, noun, base].filter(Boolean).join(' ');
 
   return { genus, species, common, binomial: genus + ' ' + species };
 }
@@ -2086,7 +2116,9 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
 //   wings: the wing section function (hoisted declarations below; the elytra and the orthopteran tegmen draw into
 //     `covers`).
 //   names: tails: genus tails with grammatical gender (m/f/n) so epithets can agree; common: the common-name nouns
-//     and base (adj overrides the shared COMMON_ADJ list); variantNames: the same tables per variant.
+//     and base (adj overrides the shared COMMON_ADJ list, qual the NAME_QUAL qualifiers); famNouns / famBase: the nouns
+//     (and base) per drawn family, required when the order rolls two or more families, the lists disjoint (#28;
+//     tests/check.js nameFamilies); variantNames: the same tables per variant.
 const LEGS_ODONATA = { spines: 1, spineSeg: 'both', spineSide: 'inner', spineLen: [0.8, 1.2], spineSp: [3.5, 5.5], spurs: [0, 0], tarsomeres: [3, 3], tibR: [0.92, 1.08], hindK: [1.2, 1.4], poses: { basket: 1 } };   // the odonate leg plan, shared by dragonfly and damselfly
 const ORDERS = {
   beetle: {
@@ -2141,7 +2173,11 @@ const ORDERS = {
     names: {
       tails: [['cera', 'f'], ['soma', 'n'], ['notus', 'm'], ['derus', 'm'], ['morpha', 'f'], ['gnathus', 'm'], ['cephala', 'f'], ['pus', 'm'],
         ['dactylus', 'm'], ['carabus', 'm'], ['phagus', 'm'], ['bius', 'm'], ['nychus', 'm'], ['stomus', 'm'], ['chila', 'f'], ['phorus', 'm'], ['ella', 'f']],
-      common: { nouns: ['Ground', 'Leaf', 'Soldier', 'Jewel', 'Longhorn', 'Click', 'Darkling', 'Chafer', 'Rove', 'Tiger', 'Flower', 'Bark'], base: 'Beetle' },
+      common: { nouns: ['Ground', 'Leaf', 'Soldier', 'Jewel', 'Longhorn', 'Click', 'Darkling', 'Chafer', 'Rove', 'Tiger', 'Flower', 'Bark'], base: 'Beetle',
+        famNouns: { ground: ['Ground', 'Tiger', 'Bombardier', 'Darkling', 'Snail-hunting', 'Caterpillar-hunter'], rove: ['Rove', 'Cocktail', 'Short-winged', 'Coach-horse'],
+          scarab: ['Chafer', 'Dung', 'Scarab', 'Dor', 'Rhinoceros', 'Flower'], longhorn: ['Longhorn', 'Musk', 'Timberman', 'Sawyer', 'Capricorn', 'Wasp'],
+          weevil: ['Acorn', 'Nut', 'Vine', 'Pea', 'Leaf', 'Snout', 'Clover', 'Figwort'] },
+        famBase: { weevil: 'Weevil' } },   // a weevil is named "... Weevil" (#28)
     },
   },
   moth: {
@@ -2181,12 +2217,18 @@ const ORDERS = {
     names: {
       tails: [['ptera', 'f'], ['phora', 'f'], ['noctua', 'f'], ['phila', 'f'], ['mera', 'f'], ['chroa', 'f'], ['stigma', 'n'], ['psyche', 'f'],
         ['pyga', 'f'], ['lepis', 'f'], ['pteryx', 'f'], ['thyris', 'f'], ['morpha', 'f'], ['ptilia', 'f']],
-      common: { nouns: ['Carpet', 'Pug', 'Wave', 'Underwing', 'Tiger', 'Footman', 'Rustic', 'Quaker', 'Thorn', 'Prominent', 'Hawk', 'Emerald', 'Wainscot', 'Dart', 'Brocade'], base: 'Moth' },
+      common: { nouns: ['Carpet', 'Pug', 'Wave', 'Underwing', 'Tiger', 'Footman', 'Rustic', 'Quaker', 'Thorn', 'Prominent', 'Hawk', 'Emerald', 'Wainscot', 'Dart', 'Brocade'], base: 'Moth',
+        famNouns: { noctuid: ['Underwing', 'Rustic', 'Dart', 'Wainscot', 'Brocade', 'Arches', 'Sallow', 'Chestnut', 'Clay'], geometrid: ['Carpet', 'Pug', 'Wave', 'Thorn', 'Emerald', 'Beauty', 'Umber', 'Looper'],
+          arctiid: ['Tiger', 'Footman', 'Ermine', 'Tussock', 'Crimson'], saturniid: ['Emperor', 'Silk', 'Moon', 'Atlas', 'Royal'], sphingid: ['Hawk', 'Sphinx', 'Hummingbird Hawk', 'Elephant Hawk', 'Bee Hawk'],
+          plain: ['Prominent', 'Quaker', 'Drab', 'Kitten', 'Lappet', 'Eggar', 'Hook-tip', 'Lutestring'] } },
     },
     variantNames: { butterfly: {
       tails: [['ptera', 'f'], ['nympha', 'f'], ['pteryx', 'f'], ['chroma', 'n'], ['psyche', 'f'], ['thyra', 'f'], ['cera', 'f'], ['phora', 'f'],
         ['chrysa', 'f'], ['lepis', 'f'], ['nais', 'f']],
-      common: { nouns: ['Fritillary', 'Skipper', 'Blue', 'Copper', 'Hairstreak', 'Argus', 'Brown', 'White', 'Admiral', 'Tortoiseshell', 'Swallowtail', 'Ringlet'], base: '' },
+      common: { nouns: ['Fritillary', 'Skipper', 'Blue', 'Copper', 'Hairstreak', 'Argus', 'Brown', 'White', 'Admiral', 'Tortoiseshell', 'Swallowtail', 'Ringlet'], base: '',
+        famNouns: { nymphalid: ['Fritillary', 'Admiral', 'Tortoiseshell', 'Comma', 'Peacock', 'Checkerspot', 'Crescent', 'Emperor'], satyrine: ['Brown', 'Ringlet', 'Heath', 'Grayling', 'Wood-nymph', 'Satyr', 'Arctic'],
+          pierid: ['White', 'Yellow', 'Sulphur', 'Orange-tip', 'Brimstone', 'Wood White'], lycaenid: ['Blue', 'Copper', 'Hairstreak', 'Argus', 'Elfin', 'Metalmark'],
+          papilionid: ['Swallowtail', 'Apollo', 'Birdwing', 'Kite', 'Festoon'] } },
     } },
   },
   fly: {
@@ -2218,7 +2260,10 @@ const ORDERS = {
     names: {
       tails: [['myia', 'f'], ['pogon', 'm'], ['cera', 'f'], ['phora', 'f'], ['soma', 'n'], ['rhina', 'f'], ['phaga', 'f'], ['nema', 'n'],
         ['ptera', 'f'], ['cnemis', 'f'], ['merus', 'm'], ['pus', 'm']],
-      common: { nouns: ['Hover', 'Soldier', 'Snipe', 'Dance', 'Robber', 'Bee', 'Flesh', 'Dung', 'Picture-winged', 'Long-legged', 'Stiletto', 'Thick-headed', 'Flat-footed'], base: 'Fly' },
+      common: { nouns: ['Hover', 'Soldier', 'Snipe', 'Dance', 'Robber', 'Bee', 'Flesh', 'Dung', 'Picture-winged', 'Long-legged', 'Stiletto', 'Thick-headed', 'Flat-footed'], base: 'Fly',
+        famNouns: { muscid: ['House', 'Flesh', 'Dung', 'Blow', 'Stable', 'Cluster', 'Face', 'Root-maggot'], nemato: ['Dance', 'Fungus', 'March', 'Window', 'Moth', 'Gall', 'Black'],
+          syrphid: ['Hover', 'Drone', 'Flower', 'Marmalade', 'Narcissus', 'Bulb'], tabanid: ['Horse', 'Deer', 'Cleg', 'Greenhead', 'Band-eyed'],
+          asilid: ['Robber', 'Assassin', 'Bee-killer', 'Hornet Robber', 'Hanging'] } },
     },
   },
   bee: {
@@ -2274,7 +2319,7 @@ const ORDERS = {
       tails: [['gomphus', 'm'], ['lestes', 'm'], ['themis', 'f'], ['ptera', 'f'], ['cordulia', 'f'], ['aeschna', 'f'], ['neura', 'f'],
         ['agrion', 'n'], ['cordia', 'f'], ['libellula', 'f'], ['cnemis', 'f'], ['anax', 'm']],   // -agrion is neuter: see the damselfly's names
       common: { nouns: ['Hawker', 'Darter', 'Skimmer', 'Emperor', 'Chaser', 'Clubtail', 'Emerald', 'Goldenring'], base: '',
-        adj: ['Northern', 'Southern', 'Common', 'Migrant', 'Brown', 'Hairy', 'Ruddy', 'Black', 'Four-spotted', 'Scarce', 'Keeled', 'Broad-bodied', 'Lesser', 'Vagrant', 'Emerald', 'Moorland', 'Downy'] },
+        adj: ['Migrant', 'Brown', 'Ruddy', 'Black', 'Keeled', 'Broad-bodied', 'Vagrant', 'Emerald', 'Moorland', 'Golden-ringed', 'Yellow-winged', 'Red-veined', 'White-faced', 'Blue-eyed', 'Amber-winged'] },
     },
   },
   grasshopper: {
@@ -2302,7 +2347,10 @@ const ORDERS = {
     names: {
       tails: [['locusta', 'f'], ['acris', 'f'], ['cerus', 'm'], ['tettix', 'm'], ['pus', 'm'], ['notus', 'm'], ['tropis', 'f'], ['soma', 'n'],
         ['cephala', 'f'], ['morpha', 'f'], ['phyma', 'n'], ['dera', 'f']],
-      common: { nouns: ['Field', 'Meadow', 'Heath', 'Marsh', 'Bush', 'Dune', 'Band-winged', 'Stripe-winged', 'Toothed', 'Pygmy', 'Rufous'], base: 'Grasshopper' },
+      common: { nouns: ['Field', 'Meadow', 'Heath', 'Marsh', 'Bush', 'Dune', 'Band-winged', 'Stripe-winged', 'Toothed', 'Pygmy', 'Rufous'], base: 'Grasshopper',
+        famNouns: { acridid: ['Field', 'Meadow', 'Heath', 'Marsh', 'Dune', 'Band-winged', 'Stripe-winged', 'Rufous', 'Slant-faced', 'Mottled'],
+          tettigoniid: ['Oak', 'Bog', 'Great Green', 'Saddle-backed', 'Cone-headed', 'Sickle-bearing', 'Wart-biter'], tetrigid: ['Slender', 'Pygmy', 'Sand', 'Hooded', 'Mud', "Cepero's"] },
+        famBase: { tettigoniid: 'Bush-cricket', tetrigid: 'Groundhopper' } },   // a long-horned katydid and a groundhopper are not grasshoppers (#28)
     },
   },
   cranefly: {
@@ -2326,7 +2374,7 @@ const ORDERS = {
     wings: wingsDiptera,
     names: {
       tails: [['tipula', 'f'], ['limnobia', 'f'], ['ptera', 'f'], ['phlebia', 'f'], ['cera', 'f'], ['myia', 'f'], ['peza', 'f'], ['nephria', 'f'], ['pus', 'm']],
-      common: { nouns: ['Meadow', 'Tiger', 'Phantom', 'Winter', 'Giant', 'Fen', 'Bog', 'Spotted', 'Short-palped', 'Hairy-eyed'], base: 'Crane Fly' },
+      common: { nouns: ['Meadow', 'Tiger', 'Phantom', 'Winter', 'Fen', 'Bog', 'Marbled', 'Short-palped', 'Hairy-eyed', 'Cabbage', 'Leatherjacket'], base: 'Crane Fly' },
     },
   },
   lacewing: {
@@ -2380,7 +2428,7 @@ const ORDERS = {
     wings: wingsCicada,
     names: {
       tails: [['cicada', 'f'], ['tettix', 'm'], ['tibicen', 'm'], ['cephala', 'f'], ['psaltria', 'f'], ['soma', 'n'], ['neura', 'f'], ['ptera', 'f'], ['cerus', 'm'], ['notus', 'm']],
-      common: { nouns: ['Harvest', 'Dog-day', 'Dusk', 'Scissor', 'Floury', 'Bladder', 'Hill', 'Hairy', 'Bush', 'Mountain', 'Grass'], base: 'Cicada' },
+      common: { nouns: ['Harvest', 'Dog-day', 'Dusk', 'Scissor', 'Floury', 'Bladder', 'Hill', 'Bush', 'Mountain', 'Grass', 'Drummer', 'Squeaker', 'Ticker'], base: 'Cicada' },
     },
   },
   wasp: {
@@ -2410,7 +2458,10 @@ const ORDERS = {
     wings: wingsHymenoptera,
     names: {
       tails: [['vespa', 'f'], ['sphex', 'm'], ['crabro', 'm'], ['cerus', 'm'], ['gaster', 'f'], ['pompilus', 'm'], ['pelta', 'f'], ['cera', 'f'], ['bia', 'f'], ['lestes', 'm']],
-      common: { nouns: ['Digger', 'Mason', 'Potter', 'Paper', 'Spider', 'Sand', 'Ruby-tailed', 'Gall', 'Ichneumon', 'Wood', 'Cuckoo', 'Thread-waisted'], base: 'Wasp' },
+      common: { nouns: ['Digger', 'Mason', 'Potter', 'Paper', 'Spider', 'Sand', 'Ruby-tailed', 'Gall', 'Ichneumon', 'Wood', 'Cuckoo', 'Thread-waisted'], base: 'Wasp',
+        famNouns: { vespid: ['Paper', 'Potter', 'Mason', 'Tree', 'Median', 'Pollen', 'Hornet'], ichneumonid: ['Ichneumon', 'Sabre', 'Darwin', 'Ophion', 'Long-tailed'],
+          sawfly: ['Turnip', 'Rose', 'Pine', 'Birch', 'Gooseberry', 'Hawthorn', 'Willow', 'Stem'], chalcid: ['Chalcid', 'Fig', 'Seed', 'Jewel', 'Fairy', 'Torymid'] },
+        famBase: { sawfly: 'Sawfly' } },   // a sawfly is no wasp by name (#28)
     },
   },
   damselfly: {
@@ -2438,7 +2489,7 @@ const ORDERS = {
       tails: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
       common: { nouns: ['Demoiselle', 'Bluet', 'Spreadwing', 'Damsel', 'Featherleg', 'Jewelwing', 'Bluetail', 'Redtail'], base: '',
         famNouns: { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'] },   // the noun follows the drawn antenodals (#17)
-        adj: ['Azure', 'Large Red', 'Small Red', 'Scarce', 'Emerald', 'Banded', 'White-legged', 'Variable', 'Northern', 'Blue-tailed', 'Willow', 'Dainty', 'Dusky', 'Southern', 'Copper'] },
+        adj: ['Azure', 'Red', 'Emerald', 'White-legged', 'Variable', 'Blue-tailed', 'Willow', 'Dainty', 'Dusky', 'Copper', 'Red-eyed', 'Orange', 'Familiar', 'Slender', 'Sedge'] },
     },
   },
   mayfly: {
@@ -2461,8 +2512,8 @@ const ORDERS = {
     wings: wingsEphemeroptera,
     names: {
       tails: [['phlebia', 'f'], ['ephemera', 'f'], ['nema', 'n'], ['baetis', 'f'], ['genia', 'f'], ['ptera', 'f'], ['neura', 'f'], ['philus', 'm'], ['bius', 'm'], ['urus', 'm'], ['cercus', 'm']],
-      common: { nouns: ['Dun', 'Spinner', 'Drake'], base: '',
-        adj: ['Pale', 'Dark', 'Olive', 'Large', 'Small', 'Summer', 'Autumn', 'Blue-winged', 'Claret', 'Sepia', 'Yellow', 'Brook', 'Lake', 'Grey', 'Evening', 'Dusky', 'Iron', 'Green'] },
+      common: { nouns: ['Dun', 'Spinner', 'Drake', 'Olive', 'Upright', 'Watery', 'Brown'], base: '',   // angler's names: Large Dark Olive, Pale Watery, Yellow Upright
+        adj: ['Pale', 'Dark', 'Summer', 'Autumn', 'Blue-winged', 'Claret', 'Sepia', 'Yellow', 'Brook', 'Lake', 'Grey', 'Evening', 'Dusky', 'Iron', 'Green', 'March', 'Medium'] },
     },
   },
 };
@@ -5030,7 +5081,7 @@ function assemblePlate(C) {
   const plateH = 600 - CAPTION_H;             // drawing is centred within the top 555px
   const s = Math.min((600 - 2 * margin) / bw, (plateH - 2 * margin) / bh, 1.3);
   const tx = 300, ty = plateH / 2 - (box.minY + box.maxY) / 2 * s;
-  meta.name = insectName(seed, type, P.variant, meta.fam);
+  meta.name = insectName(seed, type, P.variant, meta.fam, { mark: B.abd.mark, ant: B.ant.kind });
   meta.bodySig = B.sig.join(',');
   meta.scale = s;
   meta.bbox = { minX: -halfW, maxX: halfW, minY: box.minY, maxY: box.maxY };

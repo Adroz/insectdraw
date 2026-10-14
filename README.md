@@ -29,8 +29,14 @@ Three pages, one engine:
   English common name, drawn
   from a separate PRNG stream so the drawing is unaffected. They are rendered
   as a Victorian plate caption below the insect and exposed as `meta.name`
-  / `insectName(seed, type, variant, fam)` (`fam`, the drawn family `meta.fam`,
-  picks the noun where the order's names table has `famNouns`). The common
+  / `insectName(seed, type, variant, fam, genes)`. The common name agrees
+  with the plate (#28): `fam`, the drawn family `meta.fam`, picks the noun (an
+  ichneumonid is an Ichneumon, a papilionid a Swallowtail, a sawfly a Sawfly)
+  from the order's `famNouns`, and `genes` (`{ mark, ant }`, the abdominal
+  marking and antenna kind) give the adjective whenever the plate has one to
+  give ("Banded", "Black-tailed", "Feathered"); no name claims a marking the
+  plate does not draw. An optional qualifier ("Lesser", "Northern") keeps
+  repeats under 10% of seeds 1-3000. The common
   name never repeats a stem ("Dark Darkling", "Blue-tailed Bluet"), and every
   epithet stem x gender is written out in `tests/names.js` (`FORMS`, against the `EPITHETS` export).
 
