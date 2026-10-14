@@ -115,6 +115,7 @@ const FAM_NOUN_SPEC = {
   bee: { apid: ['Bumble', 'Mining'] },
   butterfly: { papilionid: ['Swallowtail'], satyrine: ['Brown', 'Ringlet'] },
   damselfly: { coenagrionid: ['Bluet', 'Damsel'], calopterygid: ['Demoiselle', 'Jewelwing'] },
+  fly: { tachinid: ['Tachinid'], bombyliid: ['Bee'], conopid: ['Thick-headed'] },   // #54
 };
 // a phrase (one or more words) appears in the common name as whole words
 const hasPhrase = (common, w) => (' ' + common + ' ').includes(' ' + w + ' ');

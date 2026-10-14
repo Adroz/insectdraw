@@ -3,8 +3,8 @@
 Status: two plans in one file. The first, the per-seed genes for legs, body, head, eyes and antennae, has all seven
 steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07); it follows the wing-genes work (see
 README "Venation" and `meta.wingSig`). The second, "Nine plates, nine insects (#30)" at the end, is open: the
-perceptual criterion (`tests/perceptual.js`) and eight steps, one ticket per order (#48–#55); step 2 (cicada, #49) is
-done.
+perceptual criterion (`tests/perceptual.js`) and eight steps, one ticket per order (#48–#55); step 2 (cicada, #49) and
+step 7 (fly, #54) are done.
 
 ### Status detail
 
@@ -458,6 +458,15 @@ rules for all of them:
    bands, tachinid round with bristle rows, asilid long and tapering, tabanid broad and flat, bombyliid round and
    hairy, conopid petiolate), abdominal macrochaetae, leg pose and length per family (asilid long raptorial legs).
    #9 and #10 cover the wing outline and venation.
+   **Done (#54, 2026-10-14)**, grounded in `research-diptera-habitus.md` (refs `docs/ref/dip-hab-*`): `P.fam` adds
+   tachinid, bombyliid and conopid (eight families; the new ones drawn on their nearest family's venation plan,
+   `wingPlans`), the wing set spread / half-folded / folded scissor-wise over the abdomen (`B.wing.set`, per-family
+   weights; a folded wing turns in until the abdomen's sides show), the abdomen family per `P.fam` (`habitus`,
+   `abdFams`), abdominal macrochaetae and pile (`chaetae`), and legs, antennae and head per family (asilid long
+   raptorial legs, conopid porrect antennae and broad head); `dipWingSet`, `dipHabitus`, `dipChaetae`, `dipLegs` and the
+   `dipShares` audit in `tests/check.js`. `node tests/perceptual.js 60 --type fly` before (backlog at 1a52ddd) -> after:
+   seeds 1-60 min 9.32 -> 13.85 (floor 12.5), sheet9 13.29 -> 18.16; seeds 61-120 min 9.07 -> 12.09, sheet9
+   14.38 -> 18.27; `--view body` 8.86 -> 13.49 (1-60) and 9.16 -> 12.93 (61-120).
 8. **Crane fly: pose families and Tipulomorpha families, #55** (11.28 under 12.5). One leg pose on every plate, and the
    wings always spread. Genes: leg pose families for very long legs (spread as now; trailing, hind pairs swept back
    past the abdomen tip; forward, front pair reaching ahead past the antennae; and a pose with the mid legs out and

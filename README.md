@@ -210,6 +210,14 @@ margin-terminating vein ends on an outline sample.
   so r4+5 closes (muscid, syrphid), forked into M1 / M2 (+ M3) (nematoceran),
   or three branches to the margin with R4 forking off R4+5 (tabanid, asilid).
   Small stigma where Sc ends, syrphid vena spuria, alula and halteres.
+  The wing set is a body gene (#54, `docs/research-diptera-habitus.md`):
+  spread, half-folded in a delta, or folded scissor-wise over the abdomen
+  (the hind margins over the midline, the abdomen's sides showing beside
+  them), weighted by family. Eight families: muscid, nematoceran, syrphid
+  (banded oval abdomen), tabanid (broad), asilid (long tapering abdomen, long
+  raptorial legs), tachinid (round, with abdominal macrochaetae), bombyliid
+  (round and hairy) and conopid (petiolate, long porrect antennae); the last
+  three are drawn on the venation of the nearest family.
 - **Bee / wasp** — grown rather than templated: smooth longitudinal lanes
   (Sc+R into the stigma, R1 closing the marginal cell, Rs forking off Sc+R, an
   M+Cu stem forking at the basal vein, A) carry the family's named crossveins
