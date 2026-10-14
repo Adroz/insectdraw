@@ -3394,7 +3394,7 @@ function drawAntennae(C) {
       const W0 = 2 * hw0 + 48, H0 = ob.maxY - ob.minY + 48;
       const sc = Math.min(552 / W, 507 / H), sc0 = Math.min(552 / W0, 507 / H0);
       if (sc < 0.6 && sc < sc0 - 1e-9) return 'fit';
-      if (order.antFit) {   // the order's own bound, at assemblePlate's scale (the 0.6 rule above counts the margins twice)
+      if (fit) {   // the order's own bound, at assemblePlate's scale (the 0.6 rule above counts the margins twice)
         const ps = (hw, h) => Math.min(552 / (2 * hw), 507 / h, 1.3);
         const scA = ps(Math.max(hw0, maxX), H - 48), scA0 = ps(hw0, H0 - 48);
         if (scA < fit.scale && scA < scA0 - 1e-9) return 'fit';
@@ -3428,7 +3428,7 @@ function drawAntennae(C) {
       if (ANT_HIT[why]) straight = true;
       if (straight) {   // back off a little from the midline after a cross, else on toward straight ahead (a fit or cross hit while straightened keeps the wing's bound)
         pose.ang = why === 'cross' ? Math.min(-45, prev.ang + randRange(5, 15)) : Math.max((ANT_HIT[why] || ANT_HIT.wing).minAng, Math.min(prev.ang, -45) - randRange(5, 20));
-        if (why === 'fit' && order.antFit) pose.ang = Math.min(prev.ang, ANT_FIT_FB.ang);   // #23: a fit hit only shortens; walking it toward the midline would lay the pair side by side
+        if (why === 'fit' && fit) pose.ang = Math.min(prev.ang, ANT_FIT_FB.ang);   // #23: a fit hit only shortens; walking it toward the midline would lay the pair side by side
         pose.curve = randRange(5, 30); pose.droop = 0;
       }
     }
@@ -3437,11 +3437,11 @@ function drawAntennae(C) {
       // the midline, for a plume) until it clears; antOk draws no rng
       // An order with antFit whose antenna still does not fit (a katydid's, longer than the body, #23) is laid forward
       // (ANT_FIT_FB) from full length and shortened until it fits, never curled into a stub.
-      const fitFb = why === 'fit' && !!order.antFit;
+      const fitFb = why === 'fit' && !!fit;
       const fb = fitFb ? ANT_FIT_FB : ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
       pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: 0, lenK: fitFb ? 1 : Math.min(pose.lenK, 0.8) };
       A.hookSide = 1; G = antennaGeom(A, base, P.headW, pose);
-      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && order.antFit)); k++) {
+      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && fit)); k++) {
         if (r === 'legs') { pose.ang = Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') pose.lenK *= ANT_SHRINK.fbStep; else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
         G = antennaGeom(A, base, P.headW, pose);
       }

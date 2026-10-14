@@ -28,7 +28,7 @@ contract for changes.
 - One registry per order (#4): an order is one entry in `ORDERS` (just above `rollBodyGenes`), holding
   everything the engine knows about it under one key: its `proportions` roll, the `abd` / `thorax` /
   `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots` + `wingRootX` (the root's
-  x as a fraction of the thorax half-width), the `tegula` and `legThick` opt-ins, its `wings` function
+  x as a fraction of the thorax half-width), the `tegula`, `legThick` and `antFit` opt-ins, its `wings` function
   and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
   first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
   re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs
