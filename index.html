@@ -1972,8 +1972,10 @@ function declineEpithet(stem, cls, gender) {
   return stem;
 }
 // every stem x gender the namer can produce, exported read-only for tests/names.js; a tail stem is written '-pter'
-const EPITHETS = Object.freeze([...EPITHET, ...EPITHET_TAIL.map(([t, cls]) => ['-' + t, cls])].map(([stem, cls]) =>
-  Object.freeze({ stem, m: declineEpithet(stem.replace(/^-/, ''), cls, 'm'), f: declineEpithet(stem.replace(/^-/, ''), cls, 'f'), n: declineEpithet(stem.replace(/^-/, ''), cls, 'n') })));
+const EPITHETS = Object.freeze([...EPITHET, ...EPITHET_TAIL.map(([t, cls]) => ['-' + t, cls])].map(([stem, cls]) => {
+  const s = stem.replace(/^-/, '');
+  return Object.freeze({ stem, m: declineEpithet(s, cls, 'm'), f: declineEpithet(s, cls, 'f'), n: declineEpithet(s, cls, 'n') });
+}));
 const COMMON_ADJ = ['Lesser', 'Greater', 'Banded', 'Spotted', 'Velvet', 'Marsh', 'Heath', 'Northern', 'Southern', 'Common', 'Dusky', 'Golden',
   'Striped', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Scarce', 'Brindled', 'Clouded', 'Bronze', 'Silver', 'Ruddy', 'Small',
   'Large', 'Variable', 'Four-spotted', 'Dark', 'Pale', 'Hairy', 'Black-tailed', 'White-legged', 'Emerald', 'Scarlet', 'Twin-spot', 'Chalk', 'River'];
@@ -2000,7 +2002,6 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
   genus = genus.charAt(0).toUpperCase() + genus.slice(1).toLowerCase();
 
   // species epithet: either a Latin adjective or one built from the same syllable tables; agree with genus gender
-  const decline = (stem, cls) => declineEpithet(stem, cls, gender);
   let species;
   if (r() < 0.25) {
     let p2 = pk(NAME_PREFIX);
@@ -2008,10 +2009,10 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
     const [t2, cls] = pk(EPITHET_TAIL);
     let stem = p2.toLowerCase();
     if (/[aeiou]$/.test(stem) && /^[aeiou]/.test(t2)) stem = stem.slice(0, -1);
-    species = decline(stem + t2, cls);
+    species = declineEpithet(stem + t2, cls, gender);
   } else {
     const [stem, cls] = pk(EPITHET);
-    species = decline(stem, cls);
+    species = declineEpithet(stem, cls, gender);
   }
 
   // common name: <Adjective> <Noun> [<Base>], never repeating a stem across the three (#29): no word equal to another
@@ -2243,7 +2244,7 @@ const ORDERS = {
     wings: wingsOdonata,
     names: {
       tails: [['gomphus', 'm'], ['lestes', 'm'], ['themis', 'f'], ['ptera', 'f'], ['cordulia', 'f'], ['aeschna', 'f'], ['neura', 'f'],
-        ['agrion', 'n'], ['cordia', 'f'], ['libellula', 'f'], ['cnemis', 'f'], ['anax', 'm']],
+        ['agrion', 'n'], ['cordia', 'f'], ['libellula', 'f'], ['cnemis', 'f'], ['anax', 'm']],   // -agrion is neuter: see the damselfly's names
       common: { nouns: ['Hawker', 'Darter', 'Skimmer', 'Emperor', 'Chaser', 'Clubtail', 'Emerald', 'Goldenring'], base: '',
         adj: ['Northern', 'Southern', 'Common', 'Migrant', 'Brown', 'Hairy', 'Ruddy', 'Black', 'Four-spotted', 'Scarce', 'Keeled', 'Broad-bodied', 'Lesser', 'Vagrant', 'Emerald', 'Moorland', 'Downy'] },
     },
@@ -2399,7 +2400,7 @@ const ORDERS = {
     legThick: 0.62,
     wings: wingsOdonata,
     names: {
-      // -agrion is neuter (#29), as the ICZN-era genera built on it are: Coenagrion hastulatum / pulchellum / mercuriale,
+      // -agrion is neuter (#29), as the modern genera built on it are: Coenagrion hastulatum / pulchellum / mercuriale,
       // Ceriagrion tenellum, Pseudagrion microcephalum, Megalagrion pacificum. "Agrion puella" (Fabricius) is no evidence of
       // a feminine: puella is a noun in apposition and does not agree. The dragonfly's tails share this entry's reading.
       tails: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
