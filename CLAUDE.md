@@ -55,7 +55,7 @@ contract for changes.
   when a new body part or venation plan is grounded in a reference.
   `docs/plan-body-variation.md` holds the finished plan that gave legs, body, head and antennae the
   per-seed "genes" treatment the wings have, and the open #30 plan "Nine plates, nine insects": the
-  perceptual criterion (`tests/perceptual.js`, a report) and one step per order (#48–#55).
+  perceptual criterion (`tests/perceptual.js`, a report) and one step per order (#48–#55, grasshopper #72).
 
 ## Hard constraints (e-ink plates)
 
