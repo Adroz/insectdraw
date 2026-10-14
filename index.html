@@ -1814,7 +1814,7 @@ function growVeins(g, G) {
       // end) is tried again further along its cell, so a strip never keeps an open cell beside crowded ones
       // A retry keeps REFILL_SEP of a step from the last rung placed in this ladder and from the next one's bisector, so
       // it never closes a cell narrower than the ladders without refill draw
-      const tries = G.refill ? [0.5, 0.3, 0.7, 0.15, 0.85] : [0.5], REFILL_SEP = 0.5;
+      const tries = G.refill ? [0.5, 0.3, 0.7, 0.4, 0.6, 0.15, 0.85] : [0.5], REFILL_SEP = 0.5;   // 0.4 / 0.6 (#50): a rung blocked at the bisector and at 0.3 / 0.7 left a 3x gap on a small baetid wing
       let lastU = -Infinity;
       const own = G.gapFar !== undefined ? [] : null, ownK = G.evenSites ? 0.5 : 0.35;   // G.gapFar loosens the far end's clearance from the other strip's junctions only; from this ladder's own it stays the default
       for (let i = 0; i + 1 < sites.length; i++) {   // the Voronoi edge between two consecutive sites, clipped to the lanes
@@ -2813,11 +2813,45 @@ const ORDERS = {
         thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.55]],
         abdAnchors: [[0, 0.85], [0.15, 1], [0.6, 0.85], [0.9, 0.6], [0.98, 0.4], [1, 0]],
         antenna: 'setaceous', antLen: 7 * jitter(0.2) });
+      // #50 the families (docs/research-ephemeroptera-habitus.md): Ephemeridae large, long-bodied, three tails, dark dorsal
+      // triangles; Baetidae small and slender, two tails, the hindwing tiny or gone; Heptageniidae flattened with a broad
+      // head, two tails; Caenidae short and stout under broad forewings, no hindwing, three tails. Then the sex: the male's
+      // long forelegs held forward (legs.sexes) and, in baetids, his turbinate eyes (headFams)
+      P.fam = pick(['ephemerid', 'baetid', 'heptageniid', 'caenid']);
+      P.sex = rng() < 0.5 ? 'male' : 'female';
     },
-    abd: { tips: { pointed: 3, rounded: 1 }, marks: { plain: 3, banded: 1 }, peak: [0.15, 0.4], wK: [0.85, 1.2], start: [0.05, 0.12], seg: [8, 9], ticks: 0.5 },
+    // #50 the family's factors on the rolled sizes (no rng): the baetid smaller all over (the plate is drawn at the scale
+    // cap, so it is drawn smaller), the ephemerid longer, the heptageniid's head and abdomen broad, the caenid's abdomen short
+    famScale: { ephemerid: { abdLen: 1.12, thoraxLen: 1.08, thoraxW: 1.05, headW: 1.05 }, baetid: { headW: 0.82, headH: 0.82, thoraxW: 0.8, thoraxLen: 0.8, abdW: 0.6, abdLen: 0.82 },
+      heptageniid: { headW: 1.8, headH: 0.95, abdW: 1.7 }, caenid: { abdLen: 0.66, abdW: 1.35, thoraxW: 1.08, thoraxLen: 0.95, headW: 1.08 } },
+    abd: { tips: { pointed: 3, rounded: 1 }, marks: { plain: 3, banded: 2, spotted: 1, striped: 1, tipdark: 1 }, peak: [0.15, 0.4], wK: [0.85, 1.2], start: [0.05, 0.12], seg: [8, 9], ticks: 0.5, profiles: { rod: 1 } },
+    // #50 the abdomen per family: the width profile (ABD_PROFILES) and the tergite pattern, the ephemerid's dark dorsal
+    // triangles (B.abd.tri, drawn in the abdomen's marks element) its own
+    abdFams: {
+      ephemerid: { profiles: { rod: 2, broad: 1 }, marks: { triangles: 4, banded: 1, striped: 1 } },
+      baetid: { profiles: { rod: 1 }, wK: [0.85, 1.0], marks: { plain: 2, banded: 2, tipdark: 1 } },
+      heptageniid: { profiles: { broad: 2, rod: 1 }, wK: [1.0, 1.15], marks: { banded: 2, spotted: 2, striped: 1, plain: 1 } },
+      caenid: { profiles: { broad: 1 }, wK: [0.95, 1.1], tips: { rounded: 2, pointed: 1 }, marks: { plain: 2, banded: 1, tipdark: 1 } },
+    },
     thorax: { front: [0.8, 1.1], peak: [0.35, 0.5], hump: [0.03, 0.12], waist: [0, 0], lenK: [0.9, 1.2] },
-    head: { outline: 'transverse', ratio: [1.1, 1.4], cx: [0.26, 0.3], rx: [0.17, 0.21], ry: [0.36, 0.44], cy: [-0.04, 0.04], ocelli: 3, oc: 'triangle', ocY: [0.6, 0.75], turbinate: 0.5, styles: { lattice: 3, stipple: 2 } },
+    head: { outline: 'transverse', ratio: [1.1, 1.4], cx: [0.26, 0.3], rx: [0.17, 0.21], ry: [0.36, 0.44], cy: [-0.04, 0.04], ocelli: 3, oc: 'triangle', ocY: [0.6, 0.75], turbinate: 0, styles: { lattice: 3, stipple: 2 } },
+    headFams: { baetid: { turbinate: 0.85 }, heptageniid: { ratio: [1.5, 1.8] } },   // #50: turbinate eyes on the male baetid only (rollBodyGenes skips the draw on a female)
     legs: { base: { spurs: [0, 0], tarsomeres: [4, 4], frontK: [1.4, 1.8], poses: { raised: 3, spread: 1, walking: 1 } } },
+    // #50 the leg ranges by sex (P.sex, over the family's): the male's forelegs about twice the mid leg and held forward
+    // along the antennae; the female's little longer than the mid leg, in the walking poses
+    legSexes: { male: { frontK: [2.1, 2.6], poses: { raised: 1 } }, female: { frontK: [0.95, 1.15], poses: { spread: 2, walking: 2, tucked: 1 } } },
+    // #50 the tails (B.abd.filaments): the family's count and length in abdomen lengths, and a splay class (the outer
+    // tail's chord off straight back, degrees); the median filament on a three-tailed plate runs straight back
+    tails: { splay: { close: [5, 12], spread: [15, 24], wide: [27, 38] }, splays: { close: 1, spread: 1, wide: 1 }, curve: [-24, 12],
+      fams: { ephemerid: { n: 3, len: [0.9, 2.0] }, baetid: { n: 2, len: [0.8, 1.6] }, heptageniid: { n: 2, len: [1.0, 2.5] }, caenid: { n: 3, len: [1.0, 2.0] } } },
+    // #50 the hindwing size class per family, and its length over the forewing's; the forewing per family (wingsEphemeroptera):
+    // w its width over its length, lenK its length over the abdomen's nominal (no rng)
+    hindwing: { len: { large: [0.22, 0.36], small: [0.1, 0.16] }, fams: { ephemerid: { large: 1 }, heptageniid: { large: 1 }, baetid: { small: 2, absent: 1 }, caenid: { absent: 1 } } },
+    foreFams: { caenid: { w: [0.47, 0.52], lenK: 1.5 }, ephemerid: { lenK: 0.95 } },
+    // #50 wing set (B.wing.set, rolled with the body, read by wingsEphemeroptera): fw, the forewing's sweep at its root
+    // (degrees, + toward the tail): pushed forward with the hind margin square to the body (the setting-board pose), held
+    // straight out (a spent spinner), or swept back toward the abdomen; the hindwing keeps its angle to the forewing
+    wingSets: { forward: { w: 1, fw: [-24, -14] }, square: { w: 1, fw: [-10, -1] }, back: { w: 1, fw: [3, 12] } },
     ant: { base: { ref: 'hw', len: [0.15, 0.3], seg: [3, 5], socket: [0.08, 0.2], kinds: { setaceous: 1 } } },
     headScaleP5: 0.92,
     wingRoots: [0.45, 0.78],
@@ -2828,6 +2862,9 @@ const ORDERS = {
     names: {
       tails: [['phlebia', 'f'], ['ephemera', 'f'], ['nema', 'n'], ['baetis', 'f'], ['genia', 'f'], ['ptera', 'f'], ['neura', 'f'], ['philus', 'm'], ['bius', 'm'], ['urus', 'm'], ['cercus', 'm']],
       common: { nouns: ['Dun', 'Spinner', 'Drake', 'Olive', 'Upright', 'Watery', 'Brown'], base: '',   // angler's names: Large Dark Olive, Pale Watery, Yellow Upright
+        // #50 the noun follows the drawn family: Ephemera is the angler's drake, Baetis the olives and pale wateries, the
+        // heptageniids the uprights, March browns and quills, Caenis the angler's curse or broadwing (one noun, one family)
+        famNouns: { ephemerid: ['Drake', 'Spinner'], baetid: ['Olive', 'Watery', 'Dun'], heptageniid: ['Upright', 'Brown', 'Quill'], caenid: ['Broadwing', 'Curse'] },
         adj: ['Pale', 'Dark', 'Summer', 'Autumn', 'Blue-winged', 'Claret', 'Sepia', 'Yellow', 'Brook', 'Lake', 'Grey', 'Evening', 'Dusky', 'Iron', 'Green', 'March', 'Medium'] },
     },
   },
@@ -2897,6 +2934,9 @@ function rollBodyGenes(type, P) {
   if (A.mark === 'rings') { A.band.part = randRange(0.4, 0.6); A.band.period = 1; A.band.phase = 0; }   // #48: a dark ring over the base of every segment (the banded hatch over part of each); drawn only on a ringed plate
   if (A.mark === 'tipdark' && abdRanges.tipDark) A.tipDark = randInt(abdRanges.tipDark[0], abdRanges.tipDark[1]);   // the order's own dark-tip length in segments (odonates: S7-S10, #48); drawn only where the table has one
   A.hair = { spacing: randRange(2, 3.5), len: randRange(4, 7) };
+  // #50 the ephemerid's dark dorsal triangles: from segment `from` back, base k of the half width at the segment's hind
+  // margin, apex h of the segment ahead of it (drawn only on a triangles plate, so no other plate draws these)
+  A.tri = A.mark === 'triangles' ? { from: randInt(1, 4), k: randRange(0.4, 0.6), h: randRange(0.65, 0.9) } : null;
   // terminalia
   A.ovipositor = null; A.cerci = null; A.filaments = null; A.appendages = null;
   if (type === 'wasp') {
@@ -2907,10 +2947,13 @@ function rollBodyGenes(type, P) {
   if (type === 'bee' && rng() < 0.3) A.ovipositor = { len: randRange(6, 12), curve: 0, sheath: false };   // sting
   if (type === 'grasshopper') { A.cerci = { len: randRange(8, 14), spread: randRange(2, 5) }; if (rng() < 0.5) A.ovipositor = { len: randRange(8, 18), curve: 0, sheath: true, valves: true }; }
   if (type === 'cranefly' && rng() < 0.4) A.cerci = { len: randRange(5, 10), spread: randRange(1.5, 3) };   // ovipositor valves
-  if (type === 'mayfly') A.filaments = { n: rng() < 0.6 ? 3 : 2, len: randRange(0.6, 1.0), splay: randRange(10, 18) };
+  if (order.tails) {   // #50 the mayfly's tails: the family's count and length, a splay class and its angle, a bow (+ inward)
+    const TT = Object.assign({}, order.tails, order.tails.fams[fam]), cls = weighted(TT.splays);
+    A.filaments = { n: TT.n, len: rr(TT.len), cls, splay: rr(TT.splay[cls]), curve: rr(TT.curve) };
+  }
   if (isOdo) A.appendages = { len: randRange(8, 16), spread: randRange(3, 7) };
   B.sig.push(A.tip, A.mark, Math.round(A.peak * 10), Math.round(A.startT * 10), A.sw === SW.F ? 'f' : 'd', A.double ? 1 : 0, A.ticks ? 1 : 0, A.keel ? 1 : 0, A.waist || 0,
-    A.ovipositor ? Math.round(A.ovipositor.len / 10) : '-', A.cerci ? 1 : 0, A.filaments ? A.filaments.n : 0, A.mark === 'banded' ? A.band.period + ':' + A.band.phase : A.mark === 'striped' ? A.stripe.n : A.mark === 'tipdark' ? A.tipDark : 0,
+    A.ovipositor ? Math.round(A.ovipositor.len / 10) : '-', A.cerci ? 1 : 0, A.filaments ? A.filaments.n + A.filaments.cls[0] + Math.round(A.filaments.len * 2) : 0, A.mark === 'banded' ? A.band.period + ':' + A.band.phase : A.mark === 'striped' ? A.stripe.n : A.mark === 'tipdark' ? A.tipDark : A.tri ? 't' + A.tri.from : 0,
     ...(A.profile ? [A.profile] : []));
   // ---- thorax: docs/research-thorax.md, "Rules derived" ----
   // Profile: the order's anchors re-rolled (pronotum front against the head, widest point, mesonotal hump, propodeal
@@ -3095,7 +3138,7 @@ function rollBodyGenes(type, P) {
         dent: HF.dent && HF.dent[1] > 0 ? [HF.dentAt || 180, rr(HF.dent), randRange(0.7, 0.95)] : null,
         hl: [(HF.hl ? HF.hl[0] : -0.42) + randRange(-0.08, 0.08), (HF.hl ? HF.hl[1] : -0.42) + randRange(-0.08, 0.08)], hlR: HF.hlR ? rr(HF.hlR) : randRange(0.3, 0.42),
         style: w01(HF.styles), pitch: randRange(1.8, 3.0), full: !!HF.latticeFull };
-      G.turbinate = HF.turbinate && rng() < HF.turbinate;                          // male mayfly: a second pair of dorsal lobes
+      G.turbinate = HF.turbinate && P.sex !== 'female' && rng() < HF.turbinate;   // #50: a male character (no draw on a female)                          // male mayfly: a second pair of dorsal lobes
       if (G.turbinate) { G.eye.cx = randRange(0.36, 0.4); G.eye.rx = randRange(0.1, 0.12); G.eye.ry = randRange(0.3, 0.36); G.turban = { cx: randRange(0.16, 0.19), rx: randRange(0.16, 0.19), ry: randRange(0.34, 0.4), cy: randRange(-0.1, -0.02) }; G.turban.cx = G.turban.rx; }
     }
     G.bump = HF.bump ? { w: rr(HF.bump[0]), h: rr(HF.bump[1]), pointed: HF.pointed ? rng() < HF.pointed : false, striae: HF.striae ? randInt(HF.striae[0], HF.striae[1]) : 0 } : null;   // frons (odonate) / postclypeus (cicada)
@@ -3157,7 +3200,7 @@ function rollBodyGenes(type, P) {
   const LD = { lenK: [0.92, 1.08], wk: [0.92, 1.08], swell: [1.0, 1.25], flare: [1.0, 1.3], tibR: [0.88, 1.08], tarR: [0.42, 0.6], frontK: [0.8, 0.95], hindK: [1.08, 1.25],
     spines: 0.3, spineSeg: 'tibia', spineSide: 'outer', spineLen: [0.4, 0.8], spineSp: [5, 9], spurs: [1, 2], fringe: 0.1, pads: 0, clawK: [0.8, 1.4],
     poses: { spread: 3, walking: 2, tucked: 1, raised: 0.4 }, tarsomeres: [5, 5] };
-  const legRanges = order.legs, F = Object.assign({}, LD, legRanges.base || {}, legRanges[fam] || {});
+  const legRanges = order.legs, F = Object.assign({}, LD, legRanges.base || {}, legRanges[fam] || {}, (order.legSexes && order.legSexes[P.sex]) || {});   // legSexes: the sex's ranges over the family's (#50, the mayfly)
   const poseNames = Object.keys(F.poses), poseW = poseNames.map(k => F.poses[k]), wTot = poseW.reduce((a, b) => a + b, 0);
   let x = rng() * wTot; B.pose = poseNames[poseNames.length - 1];
   for (let k = 0; k < poseNames.length; k++) { x -= poseW[k]; if (x < 0) { B.pose = poseNames[k]; break; } }
@@ -3299,6 +3342,14 @@ function rollBodyGenes(type, P) {
     }
     B.sig.push('ws' + B.wing.set, 'wf' + B.wing.shape, 'ab' + (P.abdShape || '-'), B.habitus.tymbals ? 'ty' : '-', B.habitus.flange ? 'fl' + Math.round(B.habitus.flange * 10) : '-');
   }
+  // ---- the hindwing size class (#50, the mayfly): the family's weights, then its length over the forewing's; the wing
+  // block reads it ----
+  B.hindClass = null; B.hindL = 0;
+  if (order.hindwing) {
+    B.hindClass = weighted(order.hindwing.fams[fam]);
+    if (B.hindClass !== 'absent') B.hindL = rr(order.hindwing.len[B.hindClass]);
+    B.sig.push('hw' + B.hindClass[0] + Math.round(B.hindL * 20), P.sex || '-');
+  }
   // ---- abdominal macrochaetae and pile (#54, the fly): rolled last so every gene above keeps its draws ----
   A.chaetae = null;
   if (order.chaetae && order.chaetae[fam]) {
@@ -3365,6 +3416,7 @@ function drawPlate(seed, opts, dev) {
   partStart(); drawLegs(C); partEnd('legs');
   partStart(); order.wings(C); partEnd('wings');
   partStart(); drawAntennae(C); partEnd('antennae');   // after the wings since #6: the pose is checked against their outlines
+  partStart(); drawTails(C); partEnd('tails');   // #50 last: the tails are shortened to the room the rest of the plate leaves
   return assemblePlate(C);
 }
 
@@ -3392,7 +3444,8 @@ function layoutBody(C) {
   meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam; an odonate family is also its antenodal regime (#17, #48)
   meta.bodyGenes = B;
   if (B.wing && B.wing.shape) meta.cicada = { set: B.wing.set, shape: B.wing.shape, fam: P.fam, abdShape: P.abdShape, marks: null, collarY: null, tymbals: null };   // #49, filled in by the thorax and abdomen sections
-  if (type === 'fly') meta.fly = { set: B.wing.set, fam: P.fam, chaetae: null };   // #54, the macrochaetae filled in by the abdomen section
+  if (type === 'fly') meta.fly = { set: B.wing.set, fam: P.fam, chaetae: null };
+  if (order.hindwing) meta.mayfly = { fam: P.fam, sex: P.sex, set: B.wing.set, hindClass: B.hindClass, tails: null, tergites: null, fore: null, hind: null };   // #50, the tails and tergites filled in by the abdomen section, the wings by the wing block   // #54, the macrochaetae filled in by the abdomen section
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   if (B.habitus && B.habitus.abdCap) P.abdW = Math.min(P.abdW, B.habitus.abdCap * P.thoraxW);   // a slender family (#49): the abdomen held under this share of the thorax's width
   P.thoraxAnchors = B.thorax.anchors;
@@ -3481,7 +3534,7 @@ function drawAbdomen(C) {
     };
     // layout(s) lays the marks out at plate scale s (assemblePlate calls it once) and records them on meta.abdMarks
     const layout = s => {
-      const out = [], Pf = ABD_PITCH_PX / s;                 // the floor in body units
+      const out = [], Pf = ABD_PITCH_PX / s, triPolys = [];   // the floor in body units; the dorsal triangles drawn (#50)
       marks.segs = []; marks.pitches = [];
       const line = (y, inset) => { const hw = abdomen.hwAt(y) - inset; return { y, hw, mid: midAt(y, hw) }; };
       // the next line at or past y (dir +1 down, -1 up) whose midline is Pf from prev's too: walked ABD_STEP_DY at a
@@ -3506,7 +3559,7 @@ function drawAbdomen(C) {
             if (c.hw > 2) prev = push(c, ABD_MARK.HATCH);
             y = c.y + sp;
           }
-        } else if (A.mark !== 'hairy' || segH > 10) {   // plain: fine curves parallel to the boundary (one only under stripes, or they read as a grid)
+        } else if ((A.mark !== 'hairy' || segH > 10) && !(A.tri && i >= A.tri.from)) {   // plain: fine curves parallel to the boundary (one only under stripes, or they read as a grid); none under a dorsal triangle (#50)
           const k = Math.min(A.mark === 'striped' ? 1 : 3, Math.floor(segH / 4)), sp = floorPitch(Math.max(3, Pf));
           let prev = sEnd, y = y1 - sp;
           for (let j = 1; j <= k; j++) {
@@ -3526,6 +3579,16 @@ function drawAbdomen(C) {
               out.push(pathEl(ellipsePath(c, rx, ry, 0), SW.D, '#fff'));
               for (let dy = -ry + Math.max(2, Pf); dy < ry - Math.max(1, Pf); dy += sp) { const w = rx * Math.sqrt(Math.max(0, 1 - (dy / ry) * (dy / ry))) - 0.8; if (w > 0.8) out.push(lineEl([c[0] - w, c[1] + dy], [c[0] + w, c[1] + dy], SW.F)); }
             }
+          }
+        }
+        if (A.tri && i >= A.tri.from && segH > 6) {   // #50 the ephemerid's dark dorsal triangle: apex forward on the midline, its base a floor short of the hind margin, hatched across at the plate pitch
+          const yb = y1 - Math.max(1.2, Pf), ya = Math.max(y0 + Math.max(1, Pf), y1 - segH * A.tri.h), w = abdomen.hwAt(yb) * A.tri.k;
+          if (yb - ya > 1.4 * Pf && w > 0.7 * Pf) {
+            const tri = [[0, ya], [w, yb], [-w, yb]], sp = floorPitch(Math.max(2.2, Pf));
+            marks.pitches.push(['triangle hatch', sp]);
+            out.push(polygonEl(tri, SW.D, '#fff'));
+            for (let y = ya + sp; y <= yb - Pf; y += sp) { const hw = w * (y - ya) / (yb - ya) - 0.8; if (hw > 0.8) out.push(lineEl([-hw, y], [hw, y], SW.F)); }
+            triPolys.push(tri);
           }
         }
         if ((A.mark === 'hairy' || A.ticks) && !(banded || dark)) {   // side ticks (pilosity), ahead of the plain curves
@@ -3549,6 +3612,7 @@ function drawAbdomen(C) {
           }
         }
       }
+      if (meta.mayfly) meta.mayfly.tergites = { kind: A.mark, polys: triPolys };
       return out;
     };
     legacyMarksBox();
@@ -3574,7 +3638,6 @@ function drawAbdomen(C) {
       }
     }
     if (A.cerci) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * 2.5, tipY - 5], [sgn * A.cerci.spread, tipY - 5 + A.cerci.len], SW.D));
-    if (A.filaments && A.filaments.n === 3) L.abdomen.push(pathEl(smoothPath(shaftPoints([0, tipY - 2], 90, P.abdLen * A.filaments.len * 0.95, 0, 6), false), SW.D));   // middle tail filament
     if (A.appendages) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * 2, tipY - 4], [sgn * A.appendages.spread, tipY - 4 + A.appendages.len], SW.D));
     if (B.habitus && B.habitus.tymbals) {   // #49 the cicadine tymbal covers: rounded plates over the tymbals at the sides of the abdomen base, standing past its outline
       const y = abdomen.yTop + P.abdOverlap + 0.08 * P.abdLen, rx = B.habitus.tymbals * partMaxHw(abdomen), c = [abdomen.hwAt(y) - rx * 0.55, y];
@@ -3586,6 +3649,34 @@ function drawAbdomen(C) {
       if (meta.cicada) meta.cicada.tymbals = sampleBezier(ellipseBezier(c, rx, rx * 0.78, -18), 8);
     }
   }
+}
+
+// ---------- tails (#50, the mayfly) ----------
+// The cerci from beside the abdomen tip, splayed so the chord lies F.splay off straight back and bowed by F.curve (+
+// inward, never turned in across the midline); the median filament straight back on a three-tailed plate (in the abdomen layer). Each tail
+// tapers: drawn whole at the detail weight, its basal 0.6 again at the outline weight. Drawn last, once the rest of the
+// plate's box is known: they count toward the fit, so a tail is shortened (never under TAIL_LEN_MIN abdomen lengths) until
+// the plate would keep a scale of TAIL_SCALE_MIN. No rng.
+const TAIL_SCALE_MIN = 0.7, TAIL_LEN_MIN = 0.8;
+function drawTails(C) {
+  const { L, P, B, abdomen, meta, outerBox } = C, F = B.abd.filaments;
+  if (!F) return;
+  const tipY = abdomen.yBot, x0 = Math.min(3, abdomen.hwAt(tipY - 2) * 0.6), M = 24;
+  const maxY = outerBox.minY + (600 - CAPTION_H - 2 * M) / TAIL_SCALE_MIN, maxX = (600 - 2 * M) / 2 / TAIL_SCALE_MIN;
+  const curve = Math.max(F.curve, -2 * (F.splay - 3));   // an outward bow never turns the root in across the midline (it leaves at least 3 degrees out)
+  const shaft = len => shaftPoints([x0, tipY - 2], 90 - F.splay - curve / 2, len, curve, 10);
+  let len = P.abdLen * F.len, outer = shaft(len);
+  for (let k = 0; k < 8; k++) {
+    const yM = Math.max(...outer.map(p => p[1])), xM = Math.max(...outer.map(p => p[0]));
+    const f = Math.min(1, (maxY - tipY) / (yM - tipY), (maxX - x0) / Math.max(1e-6, xM - x0));
+    if (f >= 0.999 || len <= TAIL_LEN_MIN * P.abdLen) break;
+    len = Math.max(TAIL_LEN_MIN * P.abdLen, len * f * 0.995); outer = shaft(len);
+  }
+  const pts = [outer];
+  const tail = (pl, layer) => { const k = Math.ceil(pl.length * 0.6); layer.push(pathEl(smoothPath(pl, false), SW.D), pathEl(smoothPath(pl.slice(0, k + 1), false), SW.O)); };
+  tail(outer, L.antennae);   // the paired cerci go in the mirrored appendage layer with the antennae, as before #50 (the e-ink gate measures them there)
+  if (F.n === 3) { const mid = shaftPoints([0, tipY - 2], 90, len * 0.97, 0, 10); pts.push(mid); tail(mid, L.abdomen); }
+  if (meta.mayfly) meta.mayfly.tails = { n: F.n, splay: F.cls, pts };
 }
 
 // ---------- thorax ----------
@@ -4092,7 +4183,7 @@ function drawLegs(C) {
 // docs/research-antennae.md R-A, R-C, R-D. Drawn after the legs and the wings so their geometry is known; the layer
 // order in the assembly is unchanged (antennae on top).
 function drawAntennae(C) {
-  const { L, meta, outerBox, P, B, thorax, abdomen, headTop, order } = C;
+  const { L, meta, outerBox, P, B, thorax, headTop, order } = C;
   {
     const A = B.ant, R = A.poseR;
     const fit = order.antFit;   // the order's own antenna fit, if any (#23: a grasshopper's never shrinks the plate under 1.0, nor reaches past 1.3x the body box)
@@ -4208,7 +4299,6 @@ function drawAntennae(C) {
       box0: { minX: ob.minX, maxX: ob.maxX, minY: ob.minY, maxY: ob.maxY }, fam: P.fam, headW: P.headW };   // box0: the plate box before the antennae, for the fit checks
     B.sig.push(A.kind, A.club || '-', A.pose, Math.round(A.nSeg / 4), A.kind === 'lamellate' ? A.lamellae.n : (A.kind === 'pectinate' || A.kind === 'bipectinate') ? Math.round(A.rami.n / 6) : 0,
       Math.round(pose.ang / 10), Math.round(pose.curve / 15), Math.round(G.len / P.headW * 2), Math.round(A.socket[0] * 20));
-    if (B.abd.filaments) L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 90 - B.abd.filaments.splay, P.abdLen * B.abd.filaments.len, 14, 8), false), SW.D));   // outer tail filaments (mirrored)
   }
 }
 
@@ -5144,7 +5234,7 @@ function wingsCicada(C) {   // (type === 'cicada')
 }
 
 function wingsEphemeroptera(C) {   // (type === 'mayfly')
-  const { order, L, meta, P, thorax } = C;
+  const { order, L, meta, P, B, thorax } = C;
   // ---- Ephemeroptera, grown by growVeins v2 (docs/wing-venation-spec.md, Ephemeroptera; ref eph-ameletus-li2021, #59;
   // the numbers in brackets are the spec's observations). Forewing: a triangle about 2.5 times as long as wide, the costa
   // nearly straight to the apex at the costal corner, the outer margin sloping back to the hind margin, deepest at about
@@ -5157,18 +5247,23 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
   // junction band), the costal ladder sparse over the basal half and dense over the apical third (3; its forked cells are not drawn: the C-Sc
   // strip is 2-4 plate px, under the hatch floor for a fork).
   // Hindwing: a third of the forewing, a rounded oval with an angular costal process near the base and 7-10 veins
-  // radiating behind the costal strip (12); present with odds 0.8. ----
-  const Lw = P.abdLen * randRange(0.9, 1.05), CELL_K = 0.035;   // CELL_K: the forewing cell, a fraction of the length (times the cells gene)
+  // radiating behind the costal strip (12). #50: the hindwing's size class is the body's (B.hindClass: large as above;
+  // small, a narrow strap a tenth to a sixth of the forewing with 1-3 veins behind R1, the baetid's; absent), and the
+  // family sets the forewing's breadth and its length over the abdomen (order.foreFams: the caenid's broad forewing). ----
+  const WF = (order.foreFams && order.foreFams[P.fam]) || {};
+  const Lw = P.abdLen * randRange(0.8, 1.15) * (WF.lenK || 1), CELL_K = 0.035;   // CELL_K: the forewing cell, a fraction of the length (times the cells gene)
   const G = {
-    hasHind: rng() < 0.8, hindL: randRange(0.22, 0.36),
-    w: randRange(0.37, 0.44), deep: randRange(0.4, 0.5), top: randRange(0.9, 1.1), tipY: randRange(-0.04, 0.02), sharp: randRange(0, 1), heavy: rng() < 0.3,   // w: width / length (ref 0.39); deep: where the hind margin is deepest (ref 0.45)
+    hasHind: B.hindClass !== 'absent', hindL: B.hindL, small: B.hindClass === 'small',
+    w: randRange(...(WF.w || [0.37, 0.44])), deep: randRange(0.4, 0.5), top: randRange(0.9, 1.1), tipY: randRange(-0.04, 0.02), sharp: randRange(0, 1), heavy: rng() < 0.3,   // w: width / length (ref 0.39); deep: where the hind margin is deepest (ref 0.45)
     nRs: rng() < 0.5 ? 3 : 2, nA: rng() < 0.4 ? 2 : 1, fRs: randRange(0.14, 0.26), fRs2: randRange(0.36, 0.5), fMA: randRange(0.3, 0.46), fMP: randRange(0.16, 0.32),   // Rs branches; anal veins; where Rs, MA and MP fork (span fractions, basal half)
     ends: randInt(12, 16), u0i: randRange(0.38, 0.5), cuX: randRange(0.38, 0.46), nCub: randInt(4, 7), marg2: randRange(0.2, 0.6),   // vein ends wanted on the margin; where the long intercalaries start; cubital veinlets; odds of a second marginal intercalary in a wide strip
     cells: randRange(0.8, 1.3), costStep: randRange(0.02, 0.026), costBase: randRange(2.2, 3.0), sub: randRange(0.05, 0.07),   // cell size; the costal step over the apical third, and its multiple over the basal half; the C-Sc / Sc-R1 gaps (chord fraction)
     k: randRange(1.0, 1.4), angle: randRange(94, 104), und: randRange(0.001, 0.003),   // junction genes: the rungs' target angle (near-perpendicular, no preferred lean); undulation of the fan
     nH: randInt(6, 9), proc: randRange(0.9, 1.1),   // hindwing: veins behind R1; height of the costal process
   };
-  const defs = [{ L: Lw * G.hindL, th: randRange(10, 30), t: order.wingRoots[1], hind: true }, { L: Lw, th: randRange(-22, 4), t: order.wingRoots[0], hind: false }];
+  const hTh = randRange(10, 30), fTh = randRange(...order.wingSets[B.wing.set].fw);   // #50: the forewing's sweep from the wing set; the hindwing keeps its angle to it (about 29 degrees behind, as before)
+  const defs = [{ L: Lw * G.hindL, th: hTh + fTh + 9, t: order.wingRoots[1], hind: true }, { L: Lw, th: fTh, t: order.wingRoots[0], hind: false }];
+  const nHs = 1 + (G.nH - 6) % 3;   // a small hindwing's veins behind R1 (1-3), from the nH draw (no new draw)
   const s = G.sharp;
   const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0, leanD: 0, leanP: 0 };
   const rec = { fore: null, hind: null }, paint = [];   // meta.mayfly: each wing's outline, lanes and rungs in wing-local coordinates (base, th: makeWing's placement), and the paint order, for tests/check.js
@@ -5176,11 +5271,13 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
   for (const d of defs) {
     if (d.hind && !G.hasHind) continue;
     const byy = thorax.yAt(d.t), bxx = thorax.hwAt(byy) * 0.72;
-    const X = f => f * d.L, Y = f => f * d.L * (d.hind ? 0.625 : G.w);   // y in widths (hindwing length : width 1.6)
+    const X = f => f * d.L, Y = f => f * d.L * (d.hind ? (G.small ? 0.4 : 0.625) : G.w);   // y in widths (hindwing length : width 1.6; a small one's about 2.4)
+    const Lc = d.hind && G.small ? Lw * 0.29 : d.L;   // the length the cells scale with: a small hindwing keeps a large one's cells (its own would fall under the lane floor)
     // the apex (#21): a circular arc of radius apR (span fraction; y in widths) from the costa round to the outer margin,
     // so the costa runs down into a rounded apex with no hook or spur; its first point kept behind the costal knee (a
-    // narrow wing with a big arc would otherwise lift it above the knee and the spline would hook there)
-    const apR = lerp(0.045, 0.06, 1 - s), apY = Math.max(0.05 + G.tipY / 4, -0.13 * G.top + 0.035 + apR * Math.sin(60 * D2R) / G.w), apexArc = [-60, -20, 20, 60].map(a => [1 - apR + apR * Math.cos(a * D2R), apY + apR * Math.sin(a * D2R) / G.w]);
+    // narrow wing with a big arc would otherwise lift it above the knee and the spline would hook there); #50: a broad
+    // forewing (the caenid's, w over 0.44) takes a proportionally larger arc, or the spline pinches the corner under it
+    const apR = lerp(0.045, 0.06, 1 - s) * (d.hind ? 1 : Math.max(1, G.w / 0.44)), apY = Math.max(0.05 + G.tipY / 4, -0.13 * G.top + 0.035 + apR * Math.sin(60 * D2R) / G.w), apexArc = [-60, -20, 20, 60].map(a => [1 - apR + apR * Math.cos(a * D2R), apY + apR * Math.sin(a * D2R) / G.w]);
     const o = d.hind
       // hindwing (12): a rounded oval broadest at about 40%, the angular costal process near the base, a notch behind it
       ? [[0, 0.03], [0.05, -0.22], [0.12, -0.5 * G.proc], [0.17, -0.3], [0.3, -0.36], [0.55, -0.44], [0.8, -0.34], [0.95, -0.14], [1, 0.06], [0.92, 0.28], [0.72, 0.46], [0.45, 0.55], [0.2, 0.45], [0.06, 0.22]].map(p => [X(p[0]), Y(p[1])])
@@ -5247,7 +5344,7 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
         let xf = tg[0] - X(0.02);
         for (let it = 0; it < 6; it++) { const yp = plYAt(par, Math.max(par[0][0], Math.min(xf, par[par.length - 1][0]))); xf = tg[0] - k * Math.max(0, tg[1] - yp); }
         if (xf <= par[0][0] + X(0.02) || xf > par[par.length - 1][0]) continue;   // a steeper one roots further out
-        const S = [xf, plYAt(par, xf)], dx = tg[0] - xf, Cc = [lerp(xf, tg[0], 0.5) - 0.25 * dx, lerp(S[1], tg[1], 0.5)], pl = [];
+        const S = [xf, plYAt(par, xf)], dx = tg[0] - xf, Cc = [lerp(xf, tg[0], 0.5) - Math.max(0.25 * dx, 0.075 * (tg[1] - S[1])), lerp(S[1], tg[1], 0.5)], pl = [];   // the bow at least 0.075 of the drop (#50: the steepest retry on a broad caenid wing came out straight)
         for (let q = 0; q <= 24; q++) { const t = q / 24; pl.push(add(add(mul(S, (1 - t) * (1 - t)), mul(Cc, 2 * t * (1 - t))), mul(tg, t * t))); }
         const hp = plYAt(par, Math.min(xf + 1, par[par.length - 1][0])), tPar = norm([1, (hp === null ? S[1] : hp) - S[1]]), tV = norm(sub(pl[2], pl[0]));
         let hit = cross2(tPar, tV) < Math.sin(18 * D2R);   // it leaves its vein at 18 degrees or more (a shallower one runs beside the vein under the lane floor), and past its root stays behind it
@@ -5269,7 +5366,15 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
     const kinds = { Sc: 'costal', R1: 'costal' };
     const addLane = (id, pl, sw, kind, parent) => { lanes.push(Object.assign({ id, pl, sw, noFork: true, stub: false }, parent ? { parent, swStem: sw } : {})); kinds[id] = kind; };
     if (d.hind) {   // 7-10 longitudinals behind Sc: R1 and nH radiating veins, the rear ones short and curved (12)
-      for (let i = 0; i < G.nH; i++) { const f = i / (G.nH - 1); addLane('H' + i, stemPl(i, f, arcAt(lerp(0.05, 0.97, f))), i < 2 ? wR : SW.F, 'stem'); }
+      if (G.small) {   // #50 a small hindwing (the baetid's strap): 1-3 veins fanning from one point under R1's root to the hind margin, each bowed a little toward the costa (the root chord is too short to start a strip apart)
+        const r0 = [xs, r1At(xs) + gapRs * 0.6];
+        for (let i = 0; i < nHs; i++) {
+          const tg = arcAt(nHs === 1 ? 0.45 : lerp(0.25, 0.8, i / (nHs - 1))), c = lerpP(r0, tg, 0.5), n = norm(perp(sub(tg, r0))), pl = [];
+          const cc = add(c, mul(n, (n[1] < 0 ? 1 : -1) * 0.06 * vlen(sub(tg, r0))));
+          for (let q = 0; q <= 16; q++) { const t = q / 16; pl.push(add(add(mul(r0, (1 - t) * (1 - t)), mul(cc, 2 * t * (1 - t))), mul(tg, t * t))); }
+          addLane('H' + i, pl, i < 2 ? wR : SW.F, 'stem');
+        }
+      } else for (let i = 0; i < G.nH; i++) { const f = i / (G.nH - 1); addLane('H' + i, stemPl(i, f, arcAt(lerp(0.05, 0.97, f))), i < 2 ? wR : SW.F, 'stem'); }
     } else {
       // the margin slots, apex first: Rs branches, MA1-2, MP1-2, CuA, the CuA veinlets, CuP, its veinlets, the anals,
       // with the long intercalaries in the gaps between the branches from Rs to CuA (siblings first: IR, IMA, IMP)
@@ -5339,9 +5444,9 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
     lanes.push({ id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false });
     // cell size (R-H): shrinking toward the tip and the trailing edge; the costal ladder sparse over the basal half and at
     // its own dense step over the apical third (3); the hindwing coarser
-    const base = d.L * CELL_K * G.cells * (d.hind ? 1.6 : 1);
+    const base = Lc * CELL_K * G.cells * (d.hind ? 1.6 : 1);
     const costF = u => u < 0.5 ? G.costBase : u > 0.62 ? 1 : lerp(G.costBase, 1, (u - 0.5) / 0.12);
-    const cellFn = (u, sMid, A, B) => (A === 'C' || B === 'C') ? d.L * G.costStep * (d.hind ? 1.5 : 1) * costF(u) : base * (1 - 0.3 * u) * (1 - 0.25 * sMid);
+    const cellFn = (u, sMid, A, B) => (A === 'C' || B === 'C') ? Lc * G.costStep * (d.hind ? 1.5 : 1) * costF(u) : base * (1 - 0.3 * u) * (1 - 0.25 * sMid);
     const grown = growVeins(g, { lanes, named: [], forks: 0, uOpen: 1.0, k: G.k, minSep: 0.02, angle: G.angle, angBand: [90, 123], lean: 0, stubProb: 0, bowAmt: 0,
       evenSites: true, gapNear: 0.2, gapFar: 0.3, reachW: 0.7, refill: true, cell: cellFn, cellMin: 3.0, joinSw: SW.F, walls: { 'C|Sc': [0.5, 0.62] } });   // one-row ladders everywhere (9); every lane is shared by two ladders, so near ends need little clearance, and the slide grows with the strip
     L.wings.push(...g.emit());
@@ -5353,9 +5458,9 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
     rec[d.hind ? 'hind' : 'fore'] = { L: d.L, base: [bxx, byy], th: d.th, outline: poly, apex, lanes: lanes.filter(l => !l.noDraw).map(l => ({ id: l.id, kind: kinds[l.id], parent: l.parent || null, pl: l.pl })), joins: grown.joins.map(j => [j[0], j[1], j[2]]) };
     if (!d.hind) foreGrown = grown;
   }
-  meta.mayfly = Object.assign(rec, { paint });
+  meta.mayfly = Object.assign(meta.mayfly || {}, rec, { paint });
   meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi, leans: [S.leanD, S.leanP] };
-  meta.wingSig = ['eph', G.heavy ? 1 : 0, G.nRs, G.nA, nEnds, G.nCub, G.hasHind ? G.nH : 0, foreGrown.joins.length, S.multi, Math.round(G.top * 10), Math.round(G.tipY * 20), Math.round(G.sharp * 2), Math.round(G.w * 20),
+  meta.wingSig = ['eph', G.heavy ? 1 : 0, G.nRs, G.nA, nEnds, G.nCub, G.hasHind ? (G.small ? 's' + nHs : G.nH) : 0, foreGrown.joins.length, S.multi, Math.round(G.top * 10), Math.round(G.tipY * 20), Math.round(G.sharp * 2), Math.round(G.w * 20),
     Math.round(G.cells * 4), Math.round(G.costStep * 300), Math.round(G.hindL * 20), Math.round(G.sub * 100), Math.round(G.u0i * 20)].join(',');
 }
 
@@ -6129,7 +6234,7 @@ function generateInsect(seed, opts) { return generateInsectDetailed(seed, opts).
 // compared side by side without the mirror doubling them.
 const PARTS = ['wings', 'legs', 'antennae', 'head', 'abdomen', 'body'];
 const PART_LAYERS = { wings: ['covers', 'wings', 'tegulae'], legs: ['legs'], antennae: ['antennae'], head: ['thoraxHead'], abdomen: ['abdomen'], body: ['abdomen', 'thoraxHead', 'tegulae', 'antennae'] };
-const PART_BOXES = { wings: ['wings'], legs: ['legs'], antennae: ['antennae'], head: ['head'], abdomen: ['abdomen'], body: ['abdomen', 'head', 'antennae'] };
+const PART_BOXES = { wings: ['wings'], legs: ['legs'], antennae: ['antennae', 'tails'], head: ['head'], abdomen: ['abdomen', 'tails'], body: ['abdomen', 'tails', 'head', 'antennae'] };   // tails (#50): the cerci draw in the antenna layer, the median filament in the abdomen's
 function generatePart(seed, type, part, size) {
   part = PARTS.includes(part) ? part : 'wings';
   size = size || 300;

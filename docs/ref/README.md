@@ -104,3 +104,16 @@ References for `../research-diptera-habitus.md` (#54). From Wikimedia Commons, d
 | dip-hab-physocephala.jpg | *Physocephala rufipes* (Conopidae): petiolate clubbed abdomen, long porrect antennae, broad head | [Physocephala.rufipes.jpg](https://commons.wikimedia.org/wiki/File:Physocephala.rufipes.jpg), James K. Lindsey | CC BY-SA 3.0 |
 | dip-hab-tabanus.jpg | *Tabanus bovinus* (Tabanidae) at rest: wings swept back in a delta over a broad abdomen | [Tabanus.bovinus.female.jpg](https://commons.wikimedia.org/wiki/File:Tabanus.bovinus.female.jpg), James K. Lindsey | CC BY-SA 3.0 |
 | dip-hab-episyrphus.jpg | *Episyrphus balteatus* (Syrphidae), dorsal specimen: flat banded abdomen | [Episyrphus balteatus (10.3897-BDJ.10.e78518) Figure 22a.jpg](https://commons.wikimedia.org/wiki/File:Episyrphus_balteatus_(10.3897-BDJ.10.e78518)_Figure_22a.jpg), Rego et al. (2022) | CC BY 4.0 |
+
+## Mayfly habitus (`eph-hab-` prefix)
+
+References for `../research-ephemeroptera-habitus.md` (#50). From Wikimedia Commons, downscaled to 1000 px where larger.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| eph-hab-ephemera-vulgata.jpg | *Ephemera vulgata* (Ephemeridae), lateral: dark triangles on the tergites, three tails, the male's long foreleg held forward | [Ephemera vulgata 1.jpg](https://commons.wikimedia.org/wiki/File:Ephemera_vulgata_1.jpg), Peter Nijland | CC BY-SA 4.0 |
+| eph-hab-ephemera-danica.jpg | *Ephemera danica* (Ephemeridae): large, long-bodied, patterned abdomen, three tails | [Ephemera danica01.jpg](https://commons.wikimedia.org/wiki/File:Ephemera_danica01.jpg), Jeffdelonge | CC BY-SA 3.0 |
+| eph-hab-ecdyonurus.jpg | *Ecdyonurus venosus* (Heptageniidae): broad head, marked tergites, two long tails, long forelegs | [Ecdyonurus venosus.jpg](https://commons.wikimedia.org/wiki/File:Ecdyonurus_venosus.jpg), M. Albi | CC BY-SA 3.0 es |
+| eph-hab-baetis-male.jpg | *Baetis tricaudatus* (Baetidae) male imago: turbinate eyes, two tails, no hindwing showing | [Baetis tricaudatus male imago.jpg](https://commons.wikimedia.org/wiki/File:Baetis_tricaudatus_male_imago.jpg), JerryFriedman | CC BY-SA 3.0 |
+| eph-hab-caenis-stephens.jpg | *Caenis macrura*, Stephens 1835, dorsal: broad rounded forewings, no hindwing, short stout abdomen, three long tails | [Caenis macrura.jpg](https://commons.wikimedia.org/wiki/File:Caenis_macrura.jpg), Stephens vol. VI via L. Watson and M. J. Dallwitz | Public domain |
+| eph-hab-caenis-imago.jpg | *Caenis* sp. (Caenidae) imago: broad forewings, three tails | [Caenis spec. (Caenidae) - (imago), Arnhem, the Netherlands.jpg](https://commons.wikimedia.org/wiki/File:Caenis_spec._(Caenidae)_-_(imago),_Arnhem,_the_Netherlands.jpg), B. Schoenmakers (Waarneming.nl) | CC BY 3.0 |

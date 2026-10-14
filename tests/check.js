@@ -52,7 +52,37 @@ const EPH = { aspect: [2.2, 2.9], apex: 0.35, deep: [0.35, 0.55], sag: 0.05, sag
   // the length; the tightest bend past 0.85 a circle of at least apexR of the length through points apexArc either side);
   // open cells (no gap between neighbouring rungs of a strip more than `open` times the strip's median gap)
   apexOver: 0.001, apexR: 0.03, apexArc: 0.015, open: 3, openMin: 4 };
-const ephSeen = { ephOutline: 0, ephFan: 0, ephCostal: 0, ephMarginal: 0, ephCubital: 0, ephLean: 0, ephHind: 0, ephLanes: 0, ephApex: 0, ephMask: 0, ephForeleg: 0, ephOpen: 0 };   // mayfly plates each #59 / #21 check asserted on, for POST.ephSeen
+// #50 mayfly habitus (docs/research-ephemeroptera-habitus.md, refs eph-hab-*), read off the drawn plate and meta.mayfly
+// ({ fam, sex, hindClass (the hindwing size class), tails: { n, splay (class), pts: [outer, middle?] } (right side, body
+// coordinates), tergites: { kind, polys } }):
+// - fams: the four families, each with its tail count (tails) and the hindwing classes it may draw (hindFams); the
+//   forewing's length to width on a caenid (broad forewings) in caenidAspect, every other family keeps EPH.aspect;
+// - hind: the hindwing's length over the forewing's per size class (large is #59's EPH.hind.len), and a small one's
+//   veins behind Sc (smallVeins) and length to width (smallAspect);
+// - tailLen: each tail's drawn length over the abdomen's, splay: the outer tail's root-to-tip chord off straight back,
+//   per splay class, in degrees (splayTol either side); every tail point inside the plate's fitted box (they count
+//   toward the fit);
+// - habitus, on the drawn outlines: a heptageniid's head at least headBroad x the thorax's width and its abdomen at
+//   least abdBroad x it (flattened), a baetid's abdomen at most abdSlender x it, a caenid's abdomen at most caenidAbd x
+//   the forewing's length and an ephemerid's at least ephemeridAbd x it;
+// - foreMale / foreFemale: the fore leg (femur to claw) over the mid leg's, at least foreMale on a male, at most
+//   foreFemale on a female; a male's fore tarsus ends ahead of the head's front (held forward along the antennae);
+// - tergites: the pattern family one of `tergites`; the dorsal triangles each inside the abdomen outline (in by triIn),
+//   apex forward, on the midline;
+// - share: every family, hindwing class, tail count, sex and splay class on at least this share of a run's mayflies,
+//   once the run has shareMin of them
+const EPH_HAB = { fams: ['ephemerid', 'baetid', 'heptageniid', 'caenid'], tails: { ephemerid: 3, baetid: 2, heptageniid: 2, caenid: 3 },
+  hindFams: { ephemerid: ['large'], heptageniid: ['large'], baetid: ['small', 'absent'], caenid: ['absent'] }, caenidAspect: [1.85, 2.2],
+  hind: { large: [0.2, 0.38], small: [0.08, 0.18] }, smallVeins: [2, 4], smallAspect: [1.8, 3.4],
+  tailLen: [0.8, 2.5], tailTol: 0.03, splay: { close: [4, 13], spread: [14, 25], wide: [26, 40] }, splayTol: 1.5,
+  headBroad: 1.0, abdBroad: 0.72, abdSlender: 0.62, caenidAbd: 0.85, ephemeridAbd: 0.85, foreMale: 1.6, foreFemale: 1.35,
+  tergites: ['plain', 'banded', 'spotted', 'striped', 'tipdark', 'triangles'], triIn: 0.3, share: 0.1, shareMin: 100,
+  // the wing set (meta.mayfly.set): the forewing's root-to-apex line in body coordinates, degrees below the horizontal
+  // (+ toward the tail): pushed forward, square (straight out) or swept back, setTol either side
+  sets: { forward: [-26, -12], square: [-10, 1], back: [3, 15] }, setTol: 0.5 };
+const ephHab = { fams: {}, hind: {}, tails: {}, sex: {}, splay: {}, sets: {} };   // over the run, for POST.ephShares
+const ephSeen = { ephOutline: 0, ephFan: 0, ephCostal: 0, ephMarginal: 0, ephCubital: 0, ephLean: 0, ephHind: 0, ephLanes: 0, ephApex: 0, ephMask: 0, ephForeleg: 0, ephOpen: 0,
+  ephFamily: 0, ephHindSize: 0, ephTails: 0, ephForeLen: 0, ephTergites: 0, ephWingSet: 0 };   // mayfly plates each #59 / #21 / #50 check asserted on, for POST.ephSeen
 let ephSeenPlates = 0, ephHindPlates = 0;   // mayfly plates (with a hindwing) in the run, counted by the seed loop whichever checks are selected
 const EPH_MIN = 20;   // mayfly plates a run needs before a #59 check that never ran fails rather than being reported
 // geometry for the #59 checks (wing-local polylines)
@@ -554,6 +584,12 @@ const PRE = {
       if (o.wingPlans !== undefined && Object.values(o.wingPlans).some(f => Object.keys(o.wingPlans).includes(f))) f('wingPlans maps a family onto another mapped family: ' + JSON.stringify(o.wingPlans));
       if (o.chaetae !== undefined && Object.values(o.chaetae).some(c => !(o.chaetaeKinds || {})[c.kind] || !(c.p > 0 && c.p <= 1))) f('chaetae is not { fam: { kind (a chaetaeKinds key), p in (0, 1] } }: ' + JSON.stringify(o.chaetae));
       if (o.wingSetFams !== undefined && Object.values(o.wingSetFams).some(w => Object.keys(w).some(k => !(o.wingSets || {})[k]))) f('wingSetFams weighs a set wingSets does not have');
+      // #50 the mayfly's opt-ins: legSexes keyed by sex; tails with a splay band per class and a count and length per family;
+      // hindwing weighing only its size classes (or absent)
+      if (o.legSexes !== undefined && Object.keys(o.legSexes).some(k => !['male', 'female'].includes(k))) f('legSexes keys something other than male / female: ' + Object.keys(o.legSexes));
+      if (o.tails !== undefined && (!o.tails.splay || Object.keys(o.tails.splays || {}).some(k => !range2(o.tails.splay[k])) || !range2(o.tails.curve) || Object.values(o.tails.fams || {}).some(t => !(t.n === 2 || t.n === 3) || !range2(t.len))))
+        f('tails is not { splay: { class: [min, max] }, splays: { class: w }, curve: [min, max], fams: { fam: { n: 2 | 3, len: [min, max] } } }');
+      if (o.hindwing !== undefined && Object.values(o.hindwing.fams || {}).some(w => Object.keys(w).some(k => k !== 'absent' && !range2((o.hindwing.len || {})[k])))) f('hindwing.fams weighs a class hindwing.len has no range for');
       if (o.antFit !== undefined && !(o.antFit && o.antFit.scale > 0 && o.antFit.width > 0)) f('antFit is not { scale, width } (both > 0): ' + JSON.stringify(o.antFit));
       if (typeof o.wings !== 'function') f('wings is not a function');
       const nb = namesBad(o.names); if (nb) f('names: ' + nb);
@@ -569,6 +605,7 @@ const PRE = {
         for (const k of ['thoraxAnchors', 'abdAnchors']) if (!Array.isArray(P[k]) || P[k].length < 3 || P[k].some(a => !Array.isArray(a) || a.length !== 2)) f('proportions leaves P.' + k + ' unset or malformed');
       }
       for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['famScale', o.famScale || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}], ['wingSetFams', o.wingSetFams || {}], ['wingPlans', o.wingPlans || {}], ['chaetae', o.chaetae || {}],
+        ['tails.fams', (o.tails && o.tails.fams) || {}], ['hindwing.fams', (o.hindwing && o.hindwing.fams) || {}], ['foreFams', o.foreFams || {}],
         ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
@@ -1491,7 +1528,8 @@ const CHECKS = {
     if (!f) return fail('mayfly plate has no meta.mayfly.fore');
     const P = f.outline, Lx = Math.max(...P.map(p => p[0])), yT = Math.min(...P.map(p => p[1])), yB = Math.max(...P.map(p => p[1])), W = yB - yT;
     const apex = P.find(p => p[0] === Lx), lowest = P.find(p => p[1] === yB);
-    if (Lx / W < EPH.aspect[0] || Lx / W > EPH.aspect[1]) fail('mayfly forewing length to width ' + (Lx / W).toFixed(2) + ' outside ' + EPH.aspect.join('-'));
+    const aspect = meta.mayfly.fam === 'caenid' ? EPH_HAB.caenidAspect : EPH.aspect;   // #50: the caenid's broad forewing
+    if (Lx / W < aspect[0] || Lx / W > aspect[1]) fail('mayfly forewing length to width ' + (Lx / W).toFixed(2) + ' outside ' + aspect.join('-'));
     if ((apex[1] - yT) / W > EPH.apex) fail('mayfly forewing apex not at the costal corner: ' + ((apex[1] - yT) / W).toFixed(2) + ' of the width behind the front (max ' + EPH.apex + ')');
     if (lowest[0] / Lx < EPH.deep[0] || lowest[0] / Lx > EPH.deep[1]) fail('mayfly hind margin deepest at ' + (lowest[0] / Lx).toFixed(2) + ' of the length (want ' + EPH.deep.join('-') + ')');
     // the costa from sagFrom to sagTo of the length, where the rounded apex (#21) begins: the chord to the apex point
@@ -1659,11 +1697,115 @@ const CHECKS = {
       if (g[i] > EPH.open * med) return fail('mayfly open cell in strip ' + k + ': rungs at ' + u[i].toFixed(3) + ' and ' + u[i + 1].toFixed(3) + ', ' + (g[i] / med).toFixed(1) + 'x the strip\'s median gap (max ' + EPH.open + ')');
     }
   },
+  // #50 the family habitus, on the drawn outlines (meta.thorax / meta.abdomen profiles, meta.head, meta.mayfly.fore)
+  ephFamily(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephFamily++;
+    const m = meta.mayfly || {}, fam = m.fam;
+    if (!EPH_HAB.fams.includes(fam)) return fail('mayfly plate has no known family on meta.mayfly: ' + fam);
+    if (meta.fam !== fam) fail('mayfly meta.fam not the drawn family: ' + meta.fam + ' vs ' + fam);
+    ephHab.fams[fam] = (ephHab.fams[fam] || 0) + 1;
+    if (!['male', 'female'].includes(m.sex)) return fail('mayfly plate has no sex on meta.mayfly: ' + m.sex);
+    ephHab.sex[m.sex] = (ephHab.sex[m.sex] || 0) + 1;
+    const thW = maxHw(meta.thorax.profile), abW = maxHw(meta.abdomen.profile), headHw = meta.head.W / 2;
+    const ap = meta.abdomen.profile, abLen = ap[ap.length - 1][0] - ap[0][0], fL = m.fore ? Math.max(...m.fore.outline.map(p => p[0])) : null;
+    if (fam === 'heptageniid') {
+      if (headHw < EPH_HAB.headBroad * thW) fail('heptageniid head not broad: ' + (headHw / thW).toFixed(2) + 'x the thorax (want >= ' + EPH_HAB.headBroad + ')');
+      if (abW < EPH_HAB.abdBroad * thW) fail('heptageniid abdomen not flattened: ' + (abW / thW).toFixed(2) + 'x the thorax (want >= ' + EPH_HAB.abdBroad + ')');
+    }
+    if (fam === 'baetid' && abW > EPH_HAB.abdSlender * thW) fail('baetid abdomen not slender: ' + (abW / thW).toFixed(2) + 'x the thorax (want <= ' + EPH_HAB.abdSlender + ')');
+    if (fam === 'caenid' && fL && abLen > EPH_HAB.caenidAbd * fL) fail('caenid abdomen not short: ' + (abLen / fL).toFixed(2) + 'x the forewing (want <= ' + EPH_HAB.caenidAbd + ')');
+    if (fam === 'ephemerid' && fL && abLen < EPH_HAB.ephemeridAbd * fL) fail('ephemerid abdomen not long: ' + (abLen / fL).toFixed(2) + 'x the forewing (want >= ' + EPH_HAB.ephemeridAbd + ')');
+  },
+  // #50 the hindwing size class: one the family may draw; absent draws none, small and large are their share of the forewing
+  ephHindSize(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephHindSize++;
+    const m = meta.mayfly || {}, c = m.hindClass;
+    if (!['large', 'small', 'absent'].includes(c)) return fail('mayfly plate has no known hindwing class on meta.mayfly: ' + c);
+    ephHab.hind[c] = (ephHab.hind[c] || 0) + 1;
+    if (EPH_HAB.hindFams[m.fam] && !EPH_HAB.hindFams[m.fam].includes(c)) fail('mayfly hindwing class not its family\'s: ' + m.fam + ' draws ' + c + ' (want ' + EPH_HAB.hindFams[m.fam].join(' / ') + ')');
+    if (c === 'absent') { if (m.hind) fail('mayfly with an absent hindwing draws one'); return; }
+    if (!m.hind) return fail('mayfly with a ' + c + ' hindwing draws none');
+    const Lx = Math.max(...m.hind.outline.map(p => p[0])), Lf = Math.max(...m.fore.outline.map(p => p[0])), band = EPH_HAB.hind[c];
+    if (Lx / Lf < band[0] || Lx / Lf > band[1]) fail('mayfly hindwing out of its size class: ' + c + ' ' + (Lx / Lf).toFixed(2) + ' of the forewing (want ' + band.join('-') + ')');
+    if (c === 'small') {
+      const ys = m.hind.outline.map(p => p[1]), W = Math.max(...ys) - Math.min(...ys), nV = m.hind.lanes.filter(l => l.id !== 'Sc').length;
+      if (Lx / W < EPH_HAB.smallAspect[0] || Lx / W > EPH_HAB.smallAspect[1]) fail('mayfly small hindwing length to width: ' + (Lx / W).toFixed(2) + ' (want ' + EPH_HAB.smallAspect.join('-') + ')');
+      if (nV < EPH_HAB.smallVeins[0] || nV > EPH_HAB.smallVeins[1]) fail('mayfly small hindwing veins behind Sc: ' + nV + ' (want ' + EPH_HAB.smallVeins.join('-') + ')');
+    }
+  },
+  // #50 the tails (cerci and the median filament): the family's count, each drawn 0.8-2.5 abdomen lengths long, the outer
+  // tail's chord off straight back in its splay class, and every point inside the plate's box (the fit counts them)
+  ephTails(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephTails++;
+    const m = meta.mayfly || {}, t = m.tails;
+    if (!t || !t.pts || !t.pts.length) return fail('mayfly plate has no tails on meta.mayfly');
+    ephHab.tails[t.n] = (ephHab.tails[t.n] || 0) + 1;
+    if (t.n !== EPH_HAB.tails[m.fam]) fail('mayfly tail count not its family\'s: ' + m.fam + ' has ' + t.n + ' (want ' + EPH_HAB.tails[m.fam] + ')');
+    if (t.pts.length !== (t.n === 3 ? 2 : 1)) fail('mayfly tail lines: ' + t.n + ' tails drawn as ' + t.pts.length + ' lines on the right side');
+    const band = EPH_HAB.splay[t.splay];
+    if (!band) return fail('mayfly tail splay class unknown: ' + t.splay);
+    ephHab.splay[t.splay] = (ephHab.splay[t.splay] || 0) + 1;
+    const ap = meta.abdomen.profile, abLen = ap[ap.length - 1][0] - ap[0][0];
+    for (const pl of t.pts) {
+      let len = 0; for (let i = 1; i < pl.length; i++) len += dist(pl[i], pl[i - 1]);
+      if (len < (EPH_HAB.tailLen[0] - EPH_HAB.tailTol) * abLen || len > (EPH_HAB.tailLen[1] + EPH_HAB.tailTol) * abLen) fail('mayfly tail length: ' + (len / abLen).toFixed(2) + ' abdomen lengths (want ' + EPH_HAB.tailLen.join('-') + ')');
+      const b = meta.bbox;
+      for (const p of pl) if (p[0] < b.minX - 0.01 || p[0] > b.maxX + 0.01 || p[1] < b.minY - 0.01 || p[1] > b.maxY + 0.01) { fail('mayfly tail leaves the plate box at ' + p.map(v => v.toFixed(1)) + ' (the tails count toward the fit)'); break; }
+    }
+    const o = t.pts[0], a = o[0], b = o[o.length - 1], ang = Math.atan2(b[0] - a[0], b[1] - a[1]) * 180 / Math.PI;
+    if (o.some(p => p[0] < a[0] - 0.01)) fail('mayfly outer tail turns in toward the midline (the cerci cross)');
+    if (ang < band[0] - EPH_HAB.splayTol || ang > band[1] + EPH_HAB.splayTol) fail('mayfly outer tail splay: ' + ang.toFixed(1) + ' degrees off straight back (' + t.splay + ': ' + band.join('-') + ')');
+    if (t.n === 3) { const mid = t.pts[1]; if (mid.some(p => Math.abs(p[0]) > 0.5)) fail('mayfly median filament off the midline'); }
+  },
+  // #50 the male's long forelegs held forward along the antennae, the female's short ones (fore leg from the femur over the mid leg's)
+  ephForeLen(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephForeLen++;
+    const m = meta.mayfly || {}, legLen = l => { let s = 0; for (let i = 3; i < l.pts.length; i++) s += dist(l.pts[i], l.pts[i - 1]); return s; };
+    const fore = meta.legs.find(l => l.pair === 'front'), mid = meta.legs.find(l => l.pair === 'mid');
+    if (!fore || !mid) return fail('mayfly plate has no front or mid leg on meta.legs');
+    const r = legLen(fore) / legLen(mid);
+    if (m.sex === 'male') {
+      if (r < EPH_HAB.foreMale) fail('male mayfly foreleg short: ' + r.toFixed(2) + 'x the mid leg (want >= ' + EPH_HAB.foreMale + ')');
+      const headFront = Math.min(...meta.head.outline.map(p => p[1])), tip = fore.pts[fore.pts.length - 1];
+      if (tip[1] > headFront) fail('male mayfly foreleg not held forward: its tip at y ' + tip[1].toFixed(1) + ' behind the head front ' + headFront.toFixed(1));
+    } else if (r > EPH_HAB.foreFemale) fail('female mayfly foreleg long: ' + r.toFixed(2) + 'x the mid leg (want <= ' + EPH_HAB.foreFemale + ')');
+  },
+  // #50 the wing set: the forewing's root-to-apex line (body coordinates, through makeWing's placement) in the set's band
+  ephWingSet(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephWingSet++;
+    const m = meta.mayfly || {}, band = EPH_HAB.sets[m.set];
+    if (!band) return fail('mayfly plate has no known wing set on meta.mayfly: ' + m.set);
+    ephHab.sets[m.set] = (ephHab.sets[m.set] || 0) + 1;
+    const f = m.fore, a = f.th * Math.PI / 180, ap = [f.base[0] + f.apex[0] * Math.cos(a) - f.apex[1] * Math.sin(a), f.base[1] + f.apex[0] * Math.sin(a) + f.apex[1] * Math.cos(a)];
+    const ang = Math.atan2(ap[1] - f.base[1], ap[0] - f.base[0]) * 180 / Math.PI;
+    if (ang < band[0] - EPH_HAB.setTol || ang > band[1] + EPH_HAB.setTol) fail('mayfly forewing sweep outside its set: ' + ang.toFixed(1) + ' degrees (' + m.set + ': ' + band.join('-') + ')');
+  },
+  // #50 the tergite pattern: a known family; the ephemerid's dorsal triangles inside the abdomen outline, apex forward on the midline
+  ephTergites(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephTergites++;
+    const tg = meta.mayfly && meta.mayfly.tergites;
+    if (!tg || !EPH_HAB.tergites.includes(tg.kind)) return fail('mayfly plate has no known tergite pattern on meta.mayfly: ' + (tg && tg.kind));
+    if (tg.kind !== meta.bodyGenes.abd.mark) fail('mayfly tergite pattern not the abdomen mark: ' + tg.kind + ' vs ' + meta.bodyGenes.abd.mark);
+    if ((tg.kind === 'triangles') !== !!(tg.polys && tg.polys.length)) return fail('mayfly tergite pattern and triangles disagree: ' + tg.kind + ' with ' + (tg.polys ? tg.polys.length : 0) + ' triangles');
+    for (const poly of tg.polys || []) {
+      if (poly.length !== 3) return fail('mayfly dorsal triangle corners: ' + poly.length);
+      for (const p of poly) if (Math.abs(p[0]) > profHw(meta.abdomen.profile, p[1]) - EPH_HAB.triIn) return fail('mayfly dorsal triangle outside the abdomen at ' + p.map(v => v.toFixed(1)));
+      const apex = poly[0];
+      if (Math.abs(apex[0]) > 0.01 || !(apex[1] < poly[1][1] && apex[1] < poly[2][1]) || Math.abs(poly[1][0] + poly[2][0]) > 0.01) return fail('mayfly dorsal triangle not apex forward on the midline');
+    }
+  },
   // #59 hindwing (12): about a third of the forewing, a rounded oval with an angular costal process near the base, 7-10
   // veins behind Sc
   ephHind(meta, svg, fail) {
     if (meta.type !== 'mayfly' || !(meta.mayfly && meta.mayfly.hind)) return;
     ephSeen.ephHind++;
+    if (meta.mayfly.hindClass === 'small') return;   // #50: a small hindwing is held by ephHindSize
     const h = meta.mayfly.hind, f = meta.mayfly.fore, E2 = EPH.hind;
     const Lx = Math.max(...h.outline.map(p => p[0])), W = Math.max(...h.outline.map(p => p[1])) - Math.min(...h.outline.map(p => p[1]));
     const Lf = Math.max(...f.outline.map(p => p[0]));
@@ -2275,6 +2417,18 @@ const POST = {
       console.log('#54 fly ' + what + ':', JSON.stringify(counts) + (n < DIP_SET.shareMin ? ' (too few to assert, < ' + DIP_SET.shareMin + ')' : ''));
     }
   },
+  // #50 the run's mayflies: every family, hindwing class, tail count, sex, splay class and wing set on at least EPH_HAB.share of
+  // them, once the run has EPH_HAB.shareMin
+  ephShares(fail) {
+    for (const [what, counts, kinds] of [['families', ephHab.fams, EPH_HAB.fams], ['hindwing classes', ephHab.hind, ['large', 'small', 'absent']], ['tail counts', ephHab.tails, ['2', '3']],
+      ['sexes', ephHab.sex, ['male', 'female']], ['tail splays', ephHab.splay, Object.keys(EPH_HAB.splay)], ['wing sets', ephHab.sets, Object.keys(EPH_HAB.sets)]]) {
+      const n = Object.values(counts).reduce((a, b) => a + b, 0);
+      if (!n) continue;   // its check was not selected
+      const thin = kinds.filter(k => (counts[k] || 0) < EPH_HAB.share * n);
+      if (n >= EPH_HAB.shareMin && thin.length) fail('mayfly ' + what + ' under ' + EPH_HAB.share + ' of the plates: ' + thin.join(', ') + ' ' + JSON.stringify(counts), 'mayfly');
+      console.log('#50 mayfly ' + what + ':', JSON.stringify(counts) + (n < EPH_HAB.shareMin ? ' (too few to assert, < ' + EPH_HAB.shareMin + ')' : ''));
+    }
+  },
   // the #26 checks assert only on cicada plates: once the run has CIC_MIN of them every selected one must have run
   // the #59 checks assert only on mayfly plates: once the run has EPH_MIN of them every selected one must have run
   ephSeen(fail) {
@@ -2333,7 +2487,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 

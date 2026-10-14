@@ -429,6 +429,18 @@ rules for all of them:
    0.8–2.5× the abdomen (the largest silhouette lever on this order), tail splay, male foreleg length and pose
    (held forward along the antennae), abdomen width profile and tergite pattern families. #20 (the reference image
    is a stonefly) and #21 are wing / attachment fixes that should land first or with it.
+   **Done (#50, 2026-10-15)**, grounded in `research-ephemeroptera-habitus.md` (refs `docs/ref/eph-hab-*`): `P.fam`
+   ephemerid / baetid / heptageniid / caenid with family scales, `P.sex` (the male's forelegs 2.1-2.6x the mid leg and
+   held forward, turbinate eyes on male baetids), the hindwing class large / small / absent by family, the tails (2 or 3
+   by family, 0.8-2.5 abdomen lengths, splay close / spread / wide, tapering, drawn last by `drawTails` and shortened to
+   keep the plate at scale 0.7), the wing set forward / square / back, abdomen profiles and the ephemerid's hatched
+   dorsal triangles; `ephFamily`, `ephHindSize`, `ephTails`, `ephForeLen`, `ephTergites`, `ephWingSet` and the
+   `ephShares` audit in `tests/check.js`. `node tests/perceptual.js 60 --type mayfly`, main (c0e86fe) / backlog before
+   (6e8aca7) -> after: seeds 1-60 min 7.91 / 6.45 -> 10.03 (9,17), sheet9 11.37 / 10.83 -> 14.76; seeds 61-120 min
+   6.16 / 5.72 -> 10.44, sheet9 10.73 / 10.57 -> 15.46; `--view body` 1-60 7.39 / 7.47 -> 7.08 (the closest bodies are
+   ephemerid females, 35,36), 61-120 7.97 / 8.03 -> 10.05. The plate minimum clears the floor on both blocks by a hair;
+   the body view does not on 1-60: what still repeats is the ephemerid female's body under a different wing set and
+   tails. More spread there needs the wing pigment (the dark-spotted *Ephemera* wing), outside this step.
 4. **Lacewing: Neuroptera families, #51** (7.77). Four spread wings, long filiform antennae, slender abdomen on every
    plate. Families with their own habitus: chrysopid (as now), hemerobiid (smaller, moniliform antennae, broader
    wings), myrmeleontid (antlion: abdomen 1.3–1.6× the wing length reaching past the wings, short clubbed antennae),

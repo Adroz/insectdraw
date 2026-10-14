@@ -14,7 +14,8 @@ contract for changes.
   `drawTegulae`, `drawLegs`, the order's wing function from its `ORDERS` entry (`wingsLepidoptera`,
   `wingsDiptera`, `wingsNeuroptera`, `wingsCicada`, `wingsEphemeroptera`, `wingsHymenoptera`,
   `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`), then `drawAntennae` (after the wings, so the
-  pose can be checked against their outlines) and `assemblePlate`.
+  pose can be checked against their outlines), `drawTails` (the mayfly's tails, #50: drawn last so they are
+  shortened to the room the plate leaves; no rng) and `assemblePlate`.
   `rollProportions` takes the type and returns `P`; every other section takes one context object `C`
   (`seed`, `type`, `order` (the type's `ORDERS` entry), `dev`, `replay`, `L`, `meta`, `outerBox` from
   the orchestrator; `P`, `B`, `thorax`, `abdomen`, `abdHW`, `headTop`, `headCy` added by `layoutBody`),
@@ -29,7 +30,8 @@ contract for changes.
   everything the engine knows about it under one key: its `proportions` roll, the `abd` / `thorax` /
   `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots` + `wingRootX` (the root's
   x as a fraction of the thorax half-width), the `tegula`, `legThick`, `antFit` and `foreCoxa` (the mayfly's fore coxa behind the head, #21) opt-ins (and the lacewing's #51
-  `famScale`, `prothorax`, `wingSet` sets and `wingFams` family tables), its `wings` function
+  `famScale`, `prothorax`, `wingSet` sets and `wingFams` family tables; the mayfly's #50 `legSexes`, `tails`, `hindwing`, `foreFams`
+  and `wingSets`), its `wings` function
   and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
   first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
   re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs
