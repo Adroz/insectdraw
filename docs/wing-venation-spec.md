@@ -344,7 +344,7 @@ Rules: grown by `growVeins` v2. Lane plan:
 
 Named crossveins through `place`: the **costal ladder** C–Sc every `ladder` (0.022–0.038) of the span,
 leaning toward the apex (20–35 rungs); the **R1–Rs rungs**, `nR1Rs` (2–5) spread over rsFork + 0.1 to 0.86
-and kept 0.012 of the span off the branch roots (`gap`); the **intramedian cell** as two Rs–M rungs at mF − 0.06
+and kept 0.006 of the span off the branch roots (`gap`), placed before the gradates; the **intramedian cell** as two Rs–M rungs at mF − 0.06
 and mF + 0.06, either side of the M fork; the **gradate series** (1–3 at 42–78% of the branches): each rung leaves branch i at t and is
 aimed at branch i+1 at t − `zig` (7–12%), with its own target angle `gradAng` 108–116° (`angT`) so it
 leans more than the ladders and the series reads as a staircase, the next rung leaving branch i+1 at t

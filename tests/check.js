@@ -48,7 +48,10 @@ let beeSeenPlates = 0;   // bee plates in the run, counted by the seed loop whic
 const BEE_MIN = 20;   // bee plates a run needs before a #12 check that never ran fails rather than being reported (~8% of plates are bees; no lattice bee in 20 has odds 0.4^20)
 // #19, from the references (neu-nothochrysa: 2-5 rungs in the R1-Rs strip; M beside Rs for ~45% of the span, then forked,
 // the intramedian cell a small rhombus between Rs and the fork; Chrysopidae forelegs slender walking legs under the prothorax)
-const NEU = { r1rs: [2, 6], forkMin: 0.28, beside: 1.5, imMax: 0.15, poses: ['walking', 'spread'], femurMin: -50 };   // ...; forelegs: a walking or spread pose, the femur at most 50 degrees forward of straight out (raised is 64-88)   // fork at or past forkMin of the span; M at most beside R1-Rs gaps under Rs before it (one cell, as R1-Rs); im cell at most imMax of the span long
+// r1rs: rungs in the R1-Rs strip; forkMin: M forks at or past this fraction of the span; beside: M at most this many R1-Rs
+// gaps under Rs before its fork (one cell, as R1-Rs); imMax: the im cell at most this long (span fractions); poses: the
+// foreleg pose families; femurMin: the fore femur at most 50 degrees toward the head from straight out (raised is 64-88)
+const NEU = { r1rs: [2, 6], forkMin: 0.28, beside: 1.5, imMax: 0.15, poses: ['walking', 'spread'], femurMin: -50 };
 const neuSeen = { neuR1Rs: 0, neuMedia: 0, neuForeleg: 0 };   // lacewing plates each #19 check asserted on, for POST.neuSeen
 let neuSeenPlates = 0;   // lacewing plates in the run, counted by the seed loop whichever checks are selected
 const NEU_MIN = 20;   // lacewing plates a run needs before a #19 check that never ran fails rather than being reported (~8% of plates)

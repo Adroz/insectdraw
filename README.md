@@ -214,11 +214,12 @@ margin-terminating vein ends on an outline sample.
   wider, finer toward the apex; the folded hindwing fan as radiating lanes with
   ladder rungs.
 - **Lacewing** — Sc, R1 and Rs as smooth offsets under the costa (Rs rooted on
-  R1 near the base), a costal ladder of 20–35 placed crossveins, the intramedian
-  cell closed by two rungs at the root of Rs, 8–14 pectinate branches forking
-  off Rs toward the hind margin with twigged ends, 1–3 gradate series stepping
-  through the branches as zigzag staircases, sparse grown rungs in between, M
-  and Cu short to the hind margin.
+  R1 near the base), a costal ladder of 20–35 placed crossveins, 2–5 rungs in
+  the R1–Rs strip, M beside Rs to its fork (MP to the hind margin, MA on past
+  it) with the intramedian cell a small rhombus between Rs and the fork, 8–14
+  pectinate branches forking off Rs past the im cell toward the hind margin
+  with twigged ends, 1–3 gradate series stepping through the branches as zigzag
+  staircases, sparse grown rungs in between, Cu to the hind margin under M.
 - **Cicada** — Sc+R, M, CuA, CuP as bowed lanes (M and CuA on a short common
   stem) to a nodal line that is one chain of crossveins at a single slant, the
   apical veins leaving the nodal nodes through short stems and ending on the

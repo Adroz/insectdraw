@@ -3980,7 +3980,7 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
   const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: order.wingRoots[1], hind: true }, { L: Lw, k: 1, th: theta, t: order.wingRoots[0], hind: false }];
   const s = G.sharp;
   const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0 };
-  let foreGrown = null, media = null;
+  let foreGrown = null, foreR1Rs = 0, media = null;
   for (const d of defs) {
     const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * order.wingRootX;
     const X = f => f * d.L, Y = f => f * d.L * G.hw * d.k;
@@ -4054,14 +4054,15 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
     rngSync();   // the ladder draws one jitter per rung, and a device plate has fewer rungs
     const im = [imA, imB].map(u => ({ a: 'Rs', ua: u, b: 'M', reach: 0.02, sw: SW.D, bow: 0 }));   // intramedian cell: an Rs-M rung either side of the M fork
     named.push(...im);
+    // the R1-Rs strip: nR1Rs named rungs spread along it, clear of the branch roots on Rs (#19: as sites at a sparse spacing the
+    // strip came out empty on most wings, the rungs having nowhere to land between the roots, and Sc / R1 / Rs read as ruled parallels);
+    // placed before the gradates, whose last step lands on Rs and would leave the outer rungs no clear point
+    const r1rs = [];
+    for (let q = 0; q < G.nR1Rs; q++) { const nv = { a: 'R1', ua: lerp(G.rsFork + 0.1, 0.86, (q + 0.5) / G.nR1Rs) * jitter(0.03), b: 'Rs', reach: 0.04, bow: 0, gap: 0.006 }; r1rs.push(nv); named.push(nv); }
     // gradate series: each rung leaves branch i at t and lands on branch i+1 nearer Rs (guess t - zig; the slide settles it
     // at the series' own target angle, steeper than the ladders), and the next rung leaves branch i+1 at t again, below
     // where the last one landed, so rung / riser / rung reads as a zigzag staircase through the branches (ref neu-nothochrysa)
     for (const g0 of G.grad) { let t = g0; for (let i = 0; i < nB; i++) { named.push({ a: 'B' + i, ua: lerp(uf[i], ut[i], t), b: i + 1 < nB ? 'B' + (i + 1) : 'Rs', ub: lerp(uf[i + 1], ut[i + 1], Math.max(0.08, t - G.zig)), reach: 0.03, sw: SW.D, bow: 0, angT: G.gradAng }); t = Math.min(0.9, t + G.drift); } }
-    // the R1-Rs strip: nR1Rs named rungs spread along it, clear of the branch roots on Rs (#19: as sites at a sparse spacing the
-    // strip came out empty on most wings, the rungs having nowhere to land between the roots, and Sc / R1 / Rs read as ruled parallels)
-    const r1rs = [];
-    for (let q = 0; q < G.nR1Rs; q++) { const nv = { a: 'R1', ua: lerp(G.rsFork + 0.1, 0.86, (q + 0.5) / G.nR1Rs) * jitter(0.03), b: 'Rs', reach: 0.04, bow: 0, gap: 0.012 }; r1rs.push(nv); named.push(nv); }
     for (let q = 0; q < G.nmc; q++) named.push({ a: 'M', ua: lerp(0.25, 0.85, (q + 0.5) / G.nmc) * (uF + G.cuX), b: 'Cu', reach: 0.03, sw: SW.F });   // m-cu rungs
     const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.05, angle: G.angle, lean: G.lean, bowAmt: 0.02, grad: 0.15, stubProb: 0, stubLen: 0.08,
       noPair: [['C', 'Sc'], ['Sc', 'R1'], ['C', 'R1'], ['C', 'Rs'], ['R1', 'Rs'], ['Rs', 'M']] });   // the costal ladder, the R1-Rs rungs and the im cell are named; the subcostal field is empty
@@ -4071,7 +4072,7 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum;
     if (!d.hind) {
-      foreGrown = grown; foreGrown.r1rs = r1rs.filter(nv => nv.pl).length;
+      foreGrown = grown; foreR1Rs = r1rs.filter(nv => nv.pl).length;
       // M as drawn (#19): its fork and margin end, how far under Rs it runs before the im cell (in R1-Rs gaps), whether MP
       // ends on the outline, and the im cell's two rungs (span fractions, null where a rung was not placed)
       const mp = grown.lanes.find(l => l.id === 'Mp'), mpEnd = mp && mp.pl[mp.pl.length - 1];
@@ -4080,7 +4081,7 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
       media = { fork: uF, end: mEnd[0] / d.L, beside, mpMargin: !!mpEnd && poly.indexOf(mpEnd) >= 0, im: im.map(nv => nv.pl ? nv.uMid : null) };
     }
   }
-  meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, r1rs: foreGrown.r1rs, media };
+  meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, r1rs: foreR1Rs, media };
   meta.wingSig = ['neu', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), G.nB, G.grad.length, Math.round(G.mF * 20), Math.round(G.maX * 20), G.nmc, foreGrown.joins.length, Math.round(G.hw * 50), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.bowB * 50),
     Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100), Math.round(G.costal * 50), Math.round(G.k * 4), G.nR1Rs].join(',');
 }
