@@ -29,7 +29,8 @@ Three pages, one engine:
   English common name, drawn
   from a separate PRNG stream so the drawing is unaffected. They are rendered
   as a Victorian plate caption below the insect and exposed as `meta.name`
-  / `insectName(seed, type, variant)`.
+  / `insectName(seed, type, variant, fam)` (`fam`, the drawn family `meta.fam`,
+  picks the noun where the order's names table has `famNouns`).
 
 ## Use
 
@@ -175,6 +176,10 @@ margin-terminating vein ends on an outline sample.
   tip and trailing edge, no free ends; libellulid-small to aeshnid-large by the
   `cells` gene; after
   [Hoffmann et al. 2018, PNAS](https://www.pnas.org/doi/10.1073/pnas.1721248115).
+  The discoidal triangle (dragonfly) or quadrilateral (damselfly, square under
+  the arculus) and the subnodus are on every wing; a damselfly is a
+  coenagrionid with exactly two antenodals or a calopterygid with a ladder,
+  and its common name follows (#17).
 - **Butterfly / moth** — Comstock–Needham layout grown as lanes: closed discal
   cell whose discocellular is three crossveins placed by the angle rule (a soft
   chevron pointing at the base, M1 and M2 leaving its bends), Sc+R1 along the

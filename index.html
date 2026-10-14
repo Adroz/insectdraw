@@ -1944,7 +1944,7 @@ const COMMON_ADJ = ['Lesser', 'Greater', 'Banded', 'Spotted', 'Velvet', 'Marsh',
   'Striped', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Scarce', 'Brindled', 'Clouded', 'Bronze', 'Silver', 'Ruddy', 'Small',
   'Large', 'Variable', 'Four-spotted', 'Dark', 'Pale', 'Hairy', 'Black-tailed', 'White-legged', 'Emerald', 'Scarlet', 'Twin-spot', 'Chalk', 'River'];
 
-function insectName(seed, type, variant) {
+function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta.fam); a names table with famNouns takes its noun from it
   const r = mulberry32((((seed >>> 0) ^ 0x9E3779B9) >>> 0));   // private PRNG: never touches the drawing's rng
   const pk = arr => arr[Math.floor(r() * arr.length)];
   const order = ORDERS[type] || ORDERS.beetle, names = (variant && order.variantNames && order.variantNames[variant]) || order.names;
@@ -1980,8 +1980,9 @@ function insectName(seed, type, variant) {
   // common name: <Adjective> <Noun> [<Base>], never repeating a word
   const c = names.common;
   const adjs = c.adj || COMMON_ADJ;
-  let adj = pk(adjs), noun = pk(c.nouns);
-  for (let i = 0; i < 8 && (adj === noun || adj.split(/[ -]/).includes(noun) || noun.split(/[ -]/).includes(adj)); i++) noun = pk(c.nouns);
+  const nouns = (fam && c.famNouns && c.famNouns[fam]) || c.nouns;
+  let adj = pk(adjs), noun = pk(nouns);
+  for (let i = 0; i < 8 && (adj === noun || adj.split(/[ -]/).includes(noun) || noun.split(/[ -]/).includes(adj)); i++) noun = pk(nouns);
   const common = [adj, noun, c.base].filter(Boolean).join(' ');
 
   return { genus, species, common, binomial: genus + ' ' + species };
@@ -2350,6 +2351,7 @@ const ORDERS = {
     names: {
       tails: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
       common: { nouns: ['Demoiselle', 'Bluet', 'Spreadwing', 'Damsel', 'Featherleg', 'Jewelwing', 'Bluetail', 'Redtail'], base: '',
+        famNouns: { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'] },   // the noun follows the drawn antenodals (#17)
         adj: ['Azure', 'Large Red', 'Small Red', 'Scarce', 'Emerald', 'Banded', 'White-legged', 'Variable', 'Northern', 'Blue-tailed', 'Willow', 'Dainty', 'Dusky', 'Southern', 'Copper'] },
     },
   },
@@ -2753,7 +2755,7 @@ function layoutBody(C) {
   const B = rollBodyGenes(type, P);
   meta.antenna = B.ant.kind;
   meta.recipe = P.fam;
-  meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam
+  meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam; the damselfly wing block sets it (its antenodal family, #17)
   meta.bodyGenes = B;
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   P.thoraxAnchors = B.thorax.anchors;
@@ -4380,6 +4382,9 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
     Math.round(G.uOpen * 10), Math.round(G.theta / 6), Math.round(G.spread / 6), Math.round(G.tipY * 6), Math.round(G.sharp * 2), Math.round(G.bulge * 10), Math.round(G.xStig * 10), Math.round(G.xMarg * 20), Math.round(G.len * 10)].join(',');
 }
 
+const DAM_LADDER = 0.3;   // share of damselflies drawn as calopterygids (antenodal ladder); the rest are coenagrionids (#17)
+const DAM_ARC = 0.08;   // the damselfly arculus, span fraction past the end of the stalk
+const ODO_STRUCT = [75, 179];   // junction band of the structural odonate crossveins (discoidal sides, Ax1 / Ax2, the damselfly arculus): wide, so they are never dropped
 function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   const { type, order, L, meta, P, B, thorax } = C;
   // ---- Odonata (docs/wing-venation-spec.md; refs odo-dragonfly, odo-anax-ris1921, odo-damsel-ris1921).
@@ -4401,16 +4406,22 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     ps0: randRange(0.72, 0.85), psL: randRange(0.05, 0.11), psStyle: pick(['solid', 'solid', 'cross', 'axis']), psLean: randRange(18, 38),
     // cells: libellulid (small) .. aeshnid (large); k ladder spacing / strip width; angle, lean, zig: junction genes
     cells: dam ? randRange(1.0, 1.5) : randRange(0.7, 1.3), k: randRange(1.0, 1.4), angle: randRange(108, 124), lean: rng() < 0.6 ? -1 : 1, zig: randRange(0.14, 0.24),
-    triangle: rng() < 0.8, bridge: rng() < 0.5, subnodus: rng() < 0.85,
+    ladderR: rng(), bridge: rng() < 0.5, spare: rng(),   // ladderR picks the damselfly antenodal regime; spare: the old subnodus roll, kept so no later draw moves (#17)
     len: randRange(0.88, 1.12), heavy: rng() < 0.35,
   };
+  // antenodal regime, the damselfly family cue (#17): Coenagrionidae carry exactly two antenodals (Ax1, Ax2; odo-damsel-ris1921),
+  // Calopterygidae a ladder on a wing that barely narrows to a stalk; every dragonfly a ladder. It names the plate (meta.fam).
+  G.ladder = !dam || G.ladderR < DAM_LADDER;
+  const fam = dam ? (G.ladder ? 'calopterygid' : 'coenagrionid') : null;
+  if (dam) meta.fam = fam;
+  if (fam === 'calopterygid') G.petiole = lerp(0.07, 0.11, (G.petiole - 0.12) / 0.14);   // the same roll, mapped onto a short stalk
   const Lw = P.wingLen * G.len, nodusX = Lw * G.nodus;
   const [tF, tH] = order.wingRoots;   // forewing / hindwing roots along the thorax (the damselfly's hind pair sits a little further forward)
   const wingDefs = dam
     ? [{ t: tF, theta: randRange(-16, -1), w: Lw * G.wF, baseW: 0.05, hind: false }, { t: tH, theta: randRange(2, 16), w: Lw * G.wF * G.wH, baseW: 0.05, hind: true }]
     : [{ t: tF, theta: randRange(-14, -1), w: Lw * G.wF, baseW: 0.14, hind: false }, { t: tH, theta: randRange(3, 18), w: Lw * G.wF * G.wH, baseW: G.anal, hind: true }];
   const ss = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
-  const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
+  const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0, discoidal: 0, subnodus: 0, antMin: Infinity, antMax: 0, qGap: 0, triOff: Infinity };
   for (const wd of wingDefs) {
     const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * order.wingRootX;
     const w = wd.w, s = G.sharp, bl = G.bulge;
@@ -4454,8 +4465,12 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
       return pl;
     };
     const veins = [];
-    veins.push(costaVein((u, x) => 1.0 + 0.05 * w * Math.sin(Math.PI * u), scTarget, 0, 0));                                                        // Sc: to the nodus
-    veins.push(costaVein((u, x) => 1.8 + w * (x < nodusX ? 0.1 * ss((x - x0) / (0.3 * Lw)) : lerp(0.1, 0.07, ss((x - nodusX) / (0.1 * Lw)))), r1Target, G.und * 0.4, 1));   // R1: to the apex
+    const scOff = u => 1.0 + 0.05 * w * Math.sin(Math.PI * u);
+    veins.push(costaVein(scOff, scTarget, 0, 0));                                                        // Sc: to the nodus
+    // R1 keeps at least 0.8 below Sc: on a stalked (damselfly) wing Sc's bow outran R1's ease-in and the two crossed just past
+    // the stalk, which dropped every antenodal there (#17)
+    const scOffAt = x => scOff(Math.max(0, Math.min(1, (x - x0) / (scTarget[0] - x0))));
+    veins.push(costaVein((u, x) => x < nodusX ? Math.max(1.8 + w * 0.1 * ss((x - x0) / (0.3 * Lw)), scOffAt(x) + 0.8) : 1.8 + w * lerp(0.1, 0.07, ss((x - nodusX) / (0.1 * Lw))), r1Target, G.und * 0.4, 1));   // R1: to the apex
     // the fan hangs off R1: R2 runs one cell under it (absolute gap, so that strip stays a one-row ladder as on the
     // plates); R3..A1 are laid out as fractions of the depth from R1 to the hind margin so they bow with the outline,
     // each easing to the margin by a power curve, steeper for the upper veins (which hug the costa longest)
@@ -4494,10 +4509,19 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     lanes.push({ id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false }, ...petiole);
     const g = wingGraph(wing, Lw), named = [], gaps = [];
     // antenodal crossveins: aligned C-Sc-R1 pairs from the base to the nodus, the first two heavier (primary antenodals)
+    // (a coenagrionid draws the same jitters, so nothing after the ladder moves, and keeps only Ax1, just past the stalk,
+    // and Ax2 over the arculus, both heavy)
+    const antSpecs = [], ant = (u, sw, ang) => ({ a: 'C', ua: u, b: 'Sc', ub: u - G.lean * 0.012, reach: 0.01, sw, ang, then: ['R1'] });
     let kA = 0;
-    for (let u = dam ? G.petiole + 0.03 : 0.09, asp = floorFrac(G.antStep, Lw); u < G.nodus - 0.012; u += asp * jitter(0.08), kA++) named.push({ a: 'C', ua: u, b: 'Sc', ub: u - G.lean * 0.012, reach: 0.01, sw: kA < 2 && !dam ? SW.D : SW.F, then: ['R1'] });
+    for (let u = dam ? G.petiole + 0.03 : 0.09, asp = floorFrac(G.antStep, Lw); u < G.nodus - 0.012; u += asp * jitter(0.08), kA++) if (G.ladder) antSpecs.push(ant(u, kA < 2 && !dam ? SW.D : SW.F));
     rngSync();   // one jitter per antenodal, and a device plate has fewer
-    if (G.subnodus) named.push({ a: 'C', ua: G.nodus, b: 'R1', ub: G.nodus + 0.012, reach: 0.008, sw: SW.O });   // subnodus: the nodal crossvein C-R1
+    const arcU = dam ? G.petiole + DAM_ARC : 0.17;   // the arculus, span fraction
+    if (!G.ladder) antSpecs.push(ant(G.petiole + 0.025, SW.D, ODO_STRUCT), ant(arcU, SW.D, ODO_STRUCT));
+    named.push(...antSpecs);
+    let xSub = nodusX - Lw * 0.006;   // the subnodus leaves Sc where Sc still runs clear (1 unit) under the costa's wall lane, which it meets at the nodus
+    for (let k = 0; k < 20; k++, xSub -= Lw * 0.002) { const y = plYAt(veins[0], xSub); if (y !== null && y > topAt(wing, xSub, 0.3) + 1) break; }
+    const subSpec = { a: 'Sc', ua: xSub / Lw, b: 'R1', ub: xSub / Lw + 0.004, reach: 0.008, sw: SW.O, ang: [60, 179] };   // subnodus: Sc-R1 under the nodus, oblique, on every wing (#17)
+    named.push(subSpec);
     // pterostigma between C and R1 with slanted end crossveins (lower end distal); no other crossvein under it
     const r1y = x => { const y = plYAt(veins[1], x); return y === null ? topAt(wing, x, 3) : y; };
     const psx0 = Lw * G.ps0, psx1 = psx0 + Lw * G.psL, psMid = (psx0 + psx1) / 2;
@@ -4507,15 +4531,20 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     gaps.push(['C', 'R1', (psx0 - 1) / Lw, (psx1 + psSkew + 1) / Lw]);
     // arculus: a heavy crossvein stepping from R2 through the fan to the median lane; the discoidal triangle (dragonfly)
     // or quadrilateral (damselfly) just below it; the bridge vein, an oblique from R1 to R2 behind the subnodus
-    const jF = Math.min(nV - 1, 1 + (nV >> 1)), xa = Lw * (dam ? G.petiole + 0.06 : 0.17);
-    named.push({ a: vId(1), ua: xa / Lw, b: vId(2), ub: xa / Lw + 0.008, reach: 0.015, sw: SW.O, then: jF > 2 ? Array.from({ length: jF - 2 }, (_, i) => vId(i + 3)) : undefined });
-    if (G.triangle) {
-      const xT = Lw * (wd.hind ? 0.14 : 0.2) + (dam ? Lw * G.petiole : 0), xT2 = xT + Lw * (wd.hind ? 0.07 : 0.05);
-      named.push({ a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT / Lw, reach: 0.012, sw: SW.D });
-      if (dam) named.push({ a: vId(jF), ua: xT2 / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.D });                        // quadrilateral: two rungs
-      else named.push({ a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.D, ang: [95, 178] });            // triangle: the oblique side
-      gaps.push([vId(jF), vId(jF + 1), (xT - 1) / Lw, (xT2 + 1) / Lw]);
-    }
+    // (a damselfly's arculus stands square, a structural crossvein with its own band, and the quadrilateral's proximal side
+    // straight under it, as on odo-damsel-ris1921)
+    const jF = Math.min(nV - 1, 1 + (nV >> 1)), xa = Lw * arcU;
+    const arcSpec = { a: vId(1), ua: xa / Lw, b: vId(2), ub: xa / Lw + (dam ? 0 : 0.008), reach: 0.015, sw: SW.O, ang: dam ? ODO_STRUCT : undefined, then: jF > 2 ? Array.from({ length: jF - 2 }, (_, i) => vId(i + 3)) : undefined };
+    named.push(arcSpec);
+    // the discoidal triangle / quadrilateral, on every wing (#17): the triangle distal to the arculus (the hindwing's sat
+    // 0.03 of the span basal to it), the quadrilateral straight under it; drawn heavy so the diagnostic cell reads; its sides are
+    // structural, with their own wide band, so they are always placed (the rung band dropped one side on ~6% of plates). Read back (placed or not) for wingStats.
+    const xT = dam ? xa : xa + Lw * (wd.hind ? 0.02 : 0.03), xT2 = xT + Lw * (wd.hind ? 0.07 : 0.05);
+    const discSpecs = [{ a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT / Lw, reach: 0.012, sw: SW.O, ang: ODO_STRUCT },
+      dam ? { a: vId(jF), ua: xT2 / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.O, ang: ODO_STRUCT }   // quadrilateral: two rungs
+        : { a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.O, ang: ODO_STRUCT }];   // triangle: the oblique side
+    named.push(...discSpecs);
+    gaps.push([vId(jF), vId(jF + 1), (xT - 1) / Lw, (xT2 + 1) / Lw]);
     if (G.bridge) { named.push({ a: 'R1', ua: G.nodus + 0.03, b: vId(1), ub: G.nodus + 0.06, reach: 0.01, sw: SW.D, ang: [95, 178] }); gaps.push(['R1', vId(1), G.nodus + 0.025, G.nodus + 0.065]); }
     // cell size (R-H): base x cells gene, shrinking toward the tip and the trailing edge; the postnodal ladder has its own step
     const base = Lw * 0.03;
@@ -4527,9 +4556,16 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle);
     S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi;
+    if (discSpecs.every(nv => nv.pl)) S.discoidal++;
+    if (subSpec.pl) S.subnodus++;
+    const nAnt = antSpecs.filter(nv => nv.pl).length; S.antMin = Math.min(S.antMin, nAnt); S.antMax = Math.max(S.antMax, nAnt);
+    if (!dam) S.triOff = Math.min(S.triOff, arcSpec.pl && discSpecs[0].pl ? discSpecs[0].uMid - arcSpec.uMid : -Infinity);
+    if (dam) S.qGap = Math.max(S.qGap, arcSpec.pl && discSpecs[0].pl ? Math.abs(discSpecs[0].uMid - arcSpec.uMid) : Infinity);
   }
-  meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi };
-  meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, S.multi, G.psStyle, G.triangle ? 1 : 0, G.bridge ? 1 : 0, G.subnodus ? 1 : 0, Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
+  meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi,
+    discoidal: S.discoidal, subnodus: S.subnodus,   // wings (of 2) whose discoidal triangle / quadrilateral and subnodus were placed
+    antMin: S.antMin, antMax: S.antMax, ...(dam ? { qGap: S.qGap } : { triOff: S.triOff }) };   // antenodals placed on the sparest / densest wing; arculus to the quadrilateral (damselfly, largest) or to the triangle's base (dragonfly, smallest), span fractions
+  meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, S.multi, G.psStyle, G.ladder ? 1 : 0, G.bridge ? 1 : 0, Math.round(G.psL * 100), Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
     Math.round(G.pow0 * 4), Math.round(G.antStep * 100), Math.round(G.ps0 * 20), Math.round(G.cells * 3), Math.round(G.wH * 5), Math.round(G.anal * 5), Math.round(G.period * 50)].join(',');
 }
 
@@ -4737,7 +4773,7 @@ function assemblePlate(C) {
   const plateH = 600 - CAPTION_H;             // drawing is centred within the top 555px
   const s = Math.min((600 - 2 * margin) / bw, (plateH - 2 * margin) / bh, 1.3);
   const tx = 300, ty = plateH / 2 - (box.minY + box.maxY) / 2 * s;
-  meta.name = insectName(seed, type, P.variant);
+  meta.name = insectName(seed, type, P.variant, meta.fam);
   meta.bodySig = B.sig.join(',');
   meta.scale = s;
   meta.bbox = { minX: -halfW, maxX: halfW, minY: box.minY, maxY: box.maxY };
