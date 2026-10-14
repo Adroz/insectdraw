@@ -121,7 +121,11 @@ contract for changes.
   plan, then proportions, legs, head, then wings. Adding or removing `rng()` calls inside a block
   only changes what follows that block for the same seed; the body plan and everything drawn
   earlier stay put.
-- Names use their own PRNG (`insectName`) and must never touch the drawing's `rng`.
+- Names use their own PRNG (`insectName`) and must never touch the drawing's `rng`. A new epithet stem
+  is written out in `tests/names.js` `FORMS` too (check.js `epithets`); only adjectives are declined. The common name
+  reads the plate (#28): a family's noun from `famNouns`, a gene word for the marking or a rare antenna kind; a new
+  marking or antenna adjective goes into `GENE_MARK_ADJ` / `GENE_ANT_ADJ` and `tests/names.js` `MARK_CLAIMS` /
+  `ANT_CLAIMS`, never into a general adjective list (check.js `nameFamilies`, `nameFamily`, `nameGenes`).
 - Per-seed variation is the whole point. Each winged body plan rolls a "wing genes" object
   (outline shape, vein counts, cell plan, crossvein spacing ...) at the top of its wing block and
   exposes a discrete `meta.wingSig`. `tests/check.js` fails if one signature covers more than 10%
@@ -149,7 +153,10 @@ contract for changes.
   no point lies inside a wing, elytron or tegmen outline (`meta.wingOutlines`, pushed by `makeWing`
   and the elytra). A leg or wing hit is sticky: every later attempt is forward and nearly straight (a swept pose
   can only lie across them) and walks toward straight ahead, shortening a plume that has no clear pose at full
-  length; re-roll, then a known-good pose shortened until it clears. `tests/check.js` asserts it on
+  length; re-roll, then a known-good pose shortened until it clears. A family's `ant` entry may reshape a pose (`poses`, e.g. the longhorn's
+  sweep, #25); a `back` sweep leaves the head already turned back and is never straightened: a leg hit turns its root
+  further back, a wing hit turns it less, and after half the attempts it searches the pose's `alt` on a grid (a steep root
+  that turns out past the elytral shoulders); its tip stays within `ANT_BACK_OUT` of the covers' half width. `tests/check.js` asserts it on
   `meta.antennae.pts` and `.lines`. The legs block holds up its end: `legsOk` keeps every leg ahead of the head
   off the antenna socket by that clearance (`socket`), so a foreleg can never stand where no antenna fits.
   Curvature is signed outward-positive; keep inward curvature tiny or the long kinds will cross.
@@ -185,6 +192,7 @@ node tests/check.js 3000                 # invariants + determinism + wing uniqu
 node tests/check.js 300 --only antennae  # just the named checks (a,b,...), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists them
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster
+node tests/names.js                      # names audit: every epithet stem x gender; repeated-stem, gene-disagreeing and duplicate common names over seeds 1-3000 (a few minutes)
 node tests/pages.js                      # the three pages in headless Chromium: chrome, panes, hash, redirect
 node tests/snapshot.js write|check f.json 3000 [--engine old.html]   # byte-identity fixture for engine refactors (write on the old engine, check on the new)
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it

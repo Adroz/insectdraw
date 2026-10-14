@@ -16,6 +16,7 @@
 'use strict';
 const { loadEngine, engineContract } = require('./engine');
 const raster = require('./raster');
+const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX } = require('./names');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
@@ -108,6 +109,9 @@ const rightmostAt = (poly, y) => {
 };
 const leftmostAt = (poly, y) => { const m = rightmostAt(poly.map(p => [-p[0], p[1]]), y); return m === null ? null : -m; };
 const distToPl = (p, pl) => { let d = Infinity; for (let i = 0; i + 1 < pl.length; i++) { const a = pl[i], b = pl[i + 1], v = [b[0] - a[0], b[1] - a[1]], L2 = v[0] * v[0] + v[1] * v[1] || 1e-9, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * v[0] + (p[1] - a[1]) * v[1]) / L2)); d = Math.min(d, Math.hypot(p[0] - a[0] - t * v[0], p[1] - a[1] - t * v[1])); } return d; };
+// #28 names: the names table a plate's common name comes from (the variant's, else the order's), and the run's common names
+const namesTable = (type, variant) => { const o = E.ORDERS[type]; return (variant && o.variantNames && o.variantNames[variant]) || o.names; };
+const commons = [];
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 // #17, from the references (odo-damsel-ris1921: a coenagrionid, two antenodals and the quadrilateral from the arculus;
 // Calopterygidae carry an antenodal ladder) and the common names of each family, stated here rather than read from the engine
@@ -198,6 +202,28 @@ const elyStyles = {};   // style -> beetle plates, for POST.elytraTexture
 const ROVE = { ely: [0.8, 1.3], trunc: 0.6, edge: 0.04, tipT: 0.95, tipK: 0.45, exposed: 3 };
 let roveSeen = 0, beetlePlates = 0;   // rove plates roveBody asserted on, and beetle plates in the run (counted by the seed loop)
 const beetleRun = { n: 0, wl: [Infinity, -Infinity], pe: [Infinity, -Infinity] };   // over the run: the ranges seen, for the report
+// #25 beetle head and antennae, stated from the references, not read from the engine:
+// - no beetle has ocelli (beetleOcelli; the audit found a median ocellus on a rove);
+// - the weevil's antennae insert on the rostrum (head-col-weevil: the scape leaves the side of the rostrum about a quarter
+//   of the way from the head on a long Curculio rostrum, nearer the middle on a short one), so the socket
+//   (meta.antennae.base) lies on the rostrum's side (within WEEVIL.edge body units of its half width) between
+//   WEEVIL.along of its length ahead of the capsule front (meta.head.top; the rostrum's tip is top - rostrum.len);
+// - a carabid (the ground family) draws two sickle mandibles (head-col-carabus: stout jaws from the front corners that
+//   hook inward to tips at the midline, the labrum and palps showing in the open space between them, never a closed
+//   leaf): meta.head.mand holds each jaw's outline (closed polyline, body units); each jaw reaches CARABID.len head widths
+//   ahead of the capsule front, its tip within CARABID.tipX head widths of the midline, its base outside CARABID.baseX,
+//   and at half the jaws' length their inner edges stand at least CARABID.gap head widths apart;
+// - a longhorn's antenna (ant-longhorn-dorcadion: thick, segmented, about the body's length, swept back beside the
+//   elytra): the shaft as drawn at most LONGHORN.len[1] (at least LONGHORN.len[0]) body lengths (head front to abdomen tip),
+//   the shaft at its narrowest at least the detail stroke wide on the plate (LONGHORN.minPx plate px, so never a
+//   hairline) and at its base at least LONGHORN.baseW head widths, the pose 'swept', no point ahead of the head's front,
+//   the tip beside the elytra (between their top and LONGHORN.tipBack of their length past their end, and within
+//   LONGHORN.tipOut elytral half widths of the midline)
+const WEEVIL = { along: [0.15, 0.7], edge: 1.5 };
+const CARABID = { len: [0.22, 0.55], tipX: 0.12, baseX: 0.22, gap: 0.12 };
+const LONGHORN = { len: [0.7, 1.3], minPx: 0.8, baseW: 0.1, tipBack: 0.15, tipOut: 1.9 };
+const colSeen = { beetleOcelli: 0, weevilSocket: 0, carabidMandibles: 0, longhornAntenna: 0 };   // beetle plates each #25 check asserted on, for POST.colSeen
+const COL_MIN = 40;   // beetle plates a run needs before a #25 check that never ran fails rather than being reported (a family is 1/6 of beetles: no weevil in 40 has odds 0.0007)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -344,6 +370,34 @@ const PRE = {
       }
       for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
+    }
+  },
+  // Latin agreement (#29): every epithet stem x genus gender the engine declines (E.EPITHETS) is written out once in
+  // tests/names.js FORMS, from the Latin, and none ends -oris / -ore (saltator is a noun, not a class B adjective)
+  epithets(fail) {
+    for (const msg of epithetProblems(E.EPITHETS)) fail('epithet: ' + msg);
+  },
+  // Family nouns (#28): a names table whose order rolls two or more families (per variant) has a noun list per family
+  // (common.famNouns) keyed only by families it rolls, the lists disjoint (so a noun names one family), and holding the
+  // nouns the ticket names (tests/names.js FAM_NOUN_SPEC: an ichneumonid is an Ichneumon, a papilionid a Swallowtail)
+  nameFamilies(fail) {
+    E.generateInsect(1);   // seeds the module rng so proportions can be rolled outside a plate
+    const rolled = {};   // names-table key (variant or type) -> Set of families
+    for (const type of E.TYPES) for (let i = 0; i < 400; i++) {
+      const P = { variant: null, fam: null, abdOverlap: 8 };
+      E.ORDERS[type].proportions(P);
+      const key = (P.variant && E.ORDERS[type].variantNames && E.ORDERS[type].variantNames[P.variant]) ? P.variant : type;
+      (rolled[key] ||= { type, variant: key === type ? null : P.variant, fams: new Set() }).fams.add(P.fam);
+    }
+    for (const key in rolled) {
+      const { type, variant, fams } = rolled[key], c = namesTable(type, variant).common, fn = c.famNouns || {}, f = msg => fail('names ' + key + ': ' + msg);
+      const real = [...fams].filter(Boolean);
+      if (real.length >= 2) for (const fam of real) if (!Array.isArray(fn[fam]) || !fn[fam].length) f('no family nouns for ' + fam);
+      for (const fam of Object.keys(fn)) if (!real.includes(fam) && type !== 'damselfly')   // the damselfly's families are its antenodal plans, set by the wing block (#17)
+        f('famNouns.' + fam + ' keys a family the order never rolls');
+      const owner = {};
+      for (const fam of Object.keys(fn)) for (const n of fn[fam]) { if (owner[n] && owner[n] !== fam) f('noun ' + n + ' is in both ' + owner[n] + ' and ' + fam); owner[n] = fam; }
+      for (const fam in (FAM_NOUN_SPEC[key] || {})) for (const n of FAM_NOUN_SPEC[key][fam]) if (!(fn[fam] || c.nouns).includes(n)) f(fam + ' has no noun ' + n);
     }
   },
 };
@@ -1099,6 +1153,58 @@ const CHECKS = {
     if (exposed.length < ROVE.exposed) fail('rove abdomen shows ' + exposed.length + ' tergites past the elytra (want >= ' + ROVE.exposed + ')');
     if (exposed.some(seg => !seg.some(m => m.k === 'hatch'))) fail('a rove tergite past the elytra is not hatched');
   },
+  // #25: no ocelli on a beetle
+  beetleOcelli(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    colSeen.beetleOcelli++;
+    if (meta.head.ocelli.length) fail('beetle draws ocelli: ' + meta.head.ocelli.length + ' (' + meta.fam + ')');
+  },
+  // #25: the weevil's antenna socket on the rostrum (WEEVIL)
+  weevilSocket(meta, svg, fail) {
+    if (meta.type !== 'beetle' || meta.fam !== 'weevil') return;
+    colSeen.weevilSocket++;
+    const h = meta.head, ro = h.rostrum, b = meta.antennae.base;
+    if (!ro) return fail('weevil without a rostrum on meta.head');
+    const along = (h.top - b[1]) / ro.len;
+    if (along < WEEVIL.along[0] || along > WEEVIL.along[1]) fail('weevil antenna socket not on the rostrum: ' + along.toFixed(2) + ' of its length ahead of the head (want ' + WEEVIL.along.join('-') + ')');
+    if (Math.abs(Math.abs(b[0]) - ro.w / 2) > WEEVIL.edge) fail('weevil antenna socket off the rostrum side: x ' + b[0].toFixed(1) + ', rostrum half width ' + (ro.w / 2).toFixed(1));
+  },
+  // #25: a carabid's two sickle mandibles (CARABID)
+  carabidMandibles(meta, svg, fail) {
+    if (meta.type !== 'beetle' || meta.fam !== 'ground') return;
+    colSeen.carabidMandibles++;
+    const h = meta.head, M = h.mand, W = h.W;
+    if (!Array.isArray(M) || M.length !== 2 || M.some(j => !Array.isArray(j) || j.length < 8)) return fail('carabid without two mandible outlines on meta.head.mand');
+    let reach = Infinity;
+    for (const j of M) {
+      const ys = j.map(p => p[1]), tipY = Math.min(...ys), tip = j[ys.indexOf(tipY)], len = (h.top - tipY) / W;
+      reach = Math.min(reach, h.top - tipY);
+      if (len < CARABID.len[0] || len > CARABID.len[1]) fail('carabid mandible length: ' + len.toFixed(2) + ' head widths (want ' + CARABID.len.join('-') + ')');
+      if (Math.abs(tip[0]) > CARABID.tipX * W) fail('carabid mandible tip off the midline: ' + (Math.abs(tip[0]) / W).toFixed(2) + ' head widths (want <= ' + CARABID.tipX + ')');
+      if (Math.max(...j.map(p => Math.abs(p[0]))) < CARABID.baseX * W) fail('carabid mandible base inside ' + CARABID.baseX + ' head widths of the midline');
+    }
+    // the open space between the jaws at half their reach: the inner edges (the jaw points nearest the midline at that y)
+    const y = h.top - reach / 2, inner = M.map(j => { let best = Infinity; for (let i = 0; i < j.length; i++) { const a = j[i], c = j[(i + 1) % j.length]; if ((a[1] - y) * (c[1] - y) <= 0 && a[1] !== c[1]) best = Math.min(best, Math.abs(a[0] + (c[0] - a[0]) * (y - a[1]) / (c[1] - a[1]))); } return best; });
+    if (!(Math.min(...inner) * 2 >= CARABID.gap * W)) fail('carabid jaws close into one shape: the gap at half their length ' + (Math.min(...inner) * 2 / W).toFixed(2) + ' head widths (want >= ' + CARABID.gap + ')');
+  },
+  // #25: a longhorn's antenna, thick, about body length and swept back beside the elytra (LONGHORN)
+  longhornAntenna(meta, svg, fail) {
+    if (meta.type !== 'beetle' || meta.fam !== 'longhorn') return;
+    colSeen.longhornAntenna++;
+    const an = meta.antennae, h = meta.head, Y = meta.elytra;
+    if (!an || !(an.wTip > 0) || !Y) return fail('no longhorn shaft widths (meta.antennae.wTip) or elytra on meta');
+    const pl = an.lines[0].pl; let len = 0;
+    for (let i = 1; i < pl.length; i++) len += Math.hypot(pl[i][0] - pl[i - 1][0], pl[i][1] - pl[i - 1][1]);
+    const bl = meta.abdomen.yBot - h.top, k = len / bl;
+    if (k < LONGHORN.len[0] || k > LONGHORN.len[1]) fail('longhorn antenna length: ' + k.toFixed(2) + ' body lengths (want ' + LONGHORN.len.join('-') + ')');
+    if (an.wTip * meta.scale < LONGHORN.minPx) fail('longhorn antenna a hairline: ' + (an.wTip * meta.scale).toFixed(2) + ' plate px at its narrowest (want >= ' + LONGHORN.minPx + ')');
+    if (an.lines[0].w < LONGHORN.baseW * h.W) fail('longhorn antenna base too thin: ' + (an.lines[0].w / h.W).toFixed(2) + ' head widths (want >= ' + LONGHORN.baseW + ')');
+    if (an.pose !== 'swept') fail('longhorn antenna not swept: ' + an.pose);
+    if (an.pts.some(p => p[1] < h.top)) fail('longhorn antenna reaches ahead of the head (' + an.pose + ')');
+    const ys = Y.outline.map(p => p[1]), y0 = Math.min(...ys), y1 = Math.max(...ys), ehw = Math.max(...Y.outline.map(p => p[0]));
+    if (an.tip[1] < y0 || an.tip[1] > y1 + LONGHORN.tipBack * (y1 - y0)) fail('longhorn antenna tip not beside the elytra: ' + ((an.tip[1] - y0) / (y1 - y0)).toFixed(2) + ' of their length');
+    if (an.tip[0] > LONGHORN.tipOut * ehw) fail('longhorn antenna tip too far out: ' + (an.tip[0] / ehw).toFixed(2) + ' elytral half widths (want <= ' + LONGHORN.tipOut + ')');
+  },
   // #24: the puncture style gene and its marks on the striae (ELY_STYLES), on the default plate and on the device plate
   elytraTexture(meta, svg, fail, { dev }) {
     if (meta.type !== 'beetle') return;
@@ -1172,6 +1278,29 @@ const CHECKS = {
     const c = LEP_WIN >> 1, xy = at < 0 ? '' : (at % ink.w + c) + ',' + (Math.floor(at / ink.w) + c);
     if (share >= LEP_TONE_SHARE) fail('lep wing solid at 1 bit from its tone layers: a ' + LEP_WIN + 'x' + LEP_WIN + ' window at ' + ink.win[at].toFixed(3) + ' ink (max ' + LEP_INK_MAX + '), ' + share.toFixed(3) + ' of it tone (max ' + LEP_TONE_SHARE + '), centred at ' + xy + ' px');
   },
+  // the common name never repeats a stem (#29): no two of its words equal ignoring case, nor one the start of another
+  // when the shorter has 4+ letters ("Dark Darkling", "Blue-tailed Bluet"); tests/names.js repeatedStem
+  nameStems(meta, svg, fail) {
+    const r = repeatedStem(meta.name.common);
+    if (r) fail('common name repeats a stem: "' + meta.name.common + '" (' + r.join(' / ') + ')');
+  },
+  // the common name's noun is the drawn family's (#28): a table with family nouns gives the plate one of meta.fam's and
+  // none of another family's (an ichneumonid is never a "Gall Wasp", a papilionid never a "Brown")
+  nameFamily(meta, svg, fail) {
+    const fn = namesTable(meta.type, meta.variant).common.famNouns;
+    if (!fn || !meta.fam) return;
+    if (!fn[meta.fam]) return fail('names table has no family nouns for the drawn ' + meta.fam);
+    const common = meta.name.common;
+    if (!fn[meta.fam].some(n => hasPhrase(common, n))) fail('common name has no ' + meta.fam + ' noun: "' + common + '"');
+    for (const fam in fn) if (fam !== meta.fam) for (const n of fn[fam]) if (hasPhrase(common, n)) fail('common name carries the ' + fam + ' noun ' + n + ' on a ' + meta.fam + ': "' + common + '"');
+  },
+  // the common name agrees with the body genes (#28): no marking or antenna word the plate does not draw, and a gene word
+  // whenever the plate has one to give (tests/names.js geneProblems: a marking other than plain, a rare antenna kind)
+  nameGenes(meta, svg, fail) {
+    commons.push(meta.name.common);
+    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(E.ORDERS, meta.type, meta.bodyGenes.fam, meta.antenna)))
+      fail('common name disagrees with the genes: ' + p + ' ("' + meta.name.common + '")');
+  },
 };
 
 // ---- whole-run checks after the seed loop: (fail) => void, fail(msg, type) records a seed-0 finding ----
@@ -1200,6 +1329,12 @@ const sigRule = (sigs, what, distinctFloor, fail) => {
   }
 };
 const POST = {
+  // duplicate common names (#28): under DUP_MAX of the run's plates share a common name with an earlier plate
+  nameGenes(fail) {
+    const share = duplicateShare(commons);
+    if (share >= DUP_MAX) fail('common names repeat: ' + (share * 100).toFixed(1) + '% of ' + commons.length + ' plates share an earlier plate\'s name (max ' + DUP_MAX * 100 + '%)');
+    console.log('common names: ' + new Set(commons).size + ' distinct in ' + commons.length + ' plates (' + (share * 100).toFixed(1) + '% repeat)');
+  },
   // Diptera wing outline (#9): the median forewing W/L per family within 0.05 of its reference (dip-eristalis 0.40 for
   // the muscid / syrphid / tabanid plan, dip-asilid-photo 0.30, dip-limonia 0.30, and no crane fly median above 0.35;
   // the nematoceran flies have no reference image and take 0.35, between the brachycerans and the crane fly), and the
@@ -1310,6 +1445,14 @@ const POST = {
     console.log('#22 grasshopper checks asserted on (of ' + n + ' grasshopper plates):', Object.keys(orthSeen).filter(k => ran.has(k)).map(k => k + ' ' + orthSeen[k]).join(', ') +
       (n < ORTH_MIN ? '; too few grasshopper plates (' + n + ' < ' + ORTH_MIN + ') to require every check' : ''));
   },
+  // the #25 checks assert only on beetle plates (three of them on one family each): once the run has COL_MIN beetle plates
+  // every selected one must have run
+  colSeen(fail) {
+    const n = beetlePlates, idle = Object.keys(colSeen).filter(k => ran.has(k) && !colSeen[k]);
+    if (idle.length && n >= COL_MIN) fail('#25 beetle checks that never ran in ' + n + ' beetle plates: ' + idle.join(', '), 'beetle');
+    console.log('#25 beetle checks asserted on (of ' + n + ' beetle plates):', Object.keys(colSeen).filter(k => ran.has(k)).map(k => k + ' ' + colSeen[k]).join(', ') +
+      (n < COL_MIN ? '; too few beetle plates (' + n + ' < ' + COL_MIN + ') to require every check' : ''));
+  },
   // #26 the run's cicadas: the median plate scale at least CIC.scale (0.81 before #26), once the run has CIC_MIN of them
   cicScale(fail) {
     const n = cicRun.scales.length, m = median(cicRun.scales);
@@ -1373,7 +1516,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen) };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen) };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 

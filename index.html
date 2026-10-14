@@ -529,6 +529,7 @@ const ANT_POSES = {
 // legs block holds it on the legs around the socket (legsOk 'socket'), with ANT_LEAN more for the lean of a near-straight
 // shaft; tests/check.js asserts the result. antBaseW is the shaft width at the socket, the one width both blocks share.
 const ANT_CLEAR = 3, ANT_LEAN = 2;
+const ANT_BACK_OUT = 1.8;   // a back sweep's tip (#25) at most this many times the covers' half width from the midline (antOk 'wide', the alt search)
 const antBaseW = (hw, wK) => Math.max(1.3, hw * 0.05) * wK;
 // After a leg or wing hit the antenna pose is straightened (R-D): per reason, the known-good fallback pose and the bound
 // the re-roll walks toward (straight ahead is -90). A plume or bristle with no clear pose at full length is shortened
@@ -549,21 +550,21 @@ function rollAntGenes(type, P) {
   A.clubK = A.club === 'abrupt' ? randRange(0.15, 0.22) : randRange(0.2, 0.3);   // club length / antenna length
   A.hookSide = rng() < 0.6 ? 1 : -1;
   A.hookDeg = A.club === 'hooked' ? (A.slim ? randRange(110, 150) : randRange(80, 120)) : A.club === 'upcurved' ? randRange(25, 45) : 0;
-  A.wK = randRange(0.85, 1.2);
+  A.wK = randRange(0.85, 1.2) * (F.thick || 1);   // thick: the family's shaft-width factor (the longhorn's, #25)
   const long = F.rami !== 'short';   // rami: count, longest ramus / length, where the longest sits, sweep toward the tip
   A.rami = { n: randInt(long ? 26 : 20, long ? 44 : 34), maxK: long ? randRange(0.2, 0.3) : randRange(0.08, 0.14), peak: randRange(0.3, 0.5), sweep: randRange(0.25, 0.6) };
   A.lamellae = { n: randInt(3, 7), spread: rng() < 0.7 ? randRange(14, 40) : randRange(3, 8), clubK: randRange(0.3, 0.45) };
   A.scapeK = rr(F.scape || [0.28, 0.42]); A.elbow = randRange(45, 80);
   A.arista = F.arista ? (F.aristas ? weightedPick(F.aristas) : F.arista) : 'bare'; A.aristaK = randRange(1.0, 1.6);
   A.annuli = F.annuli ? randInt(F.annuli[0], F.annuli[1]) : 0; A.styleK = randRange(0.3, 0.6);
-  A.whorls = !!F.whorls; A.taper = randRange(0.4, 0.6);
+  A.whorls = !!F.whorls; A.taper = randRange(...(F.taper || [0.4, 0.6]));   // tip width / base width of a filiform shaft
   const sock = A.club === 'hooked' && !A.slim && type === 'moth' ? [0.24, 0.3] : F.socket;   // skipper bases are widely separated
   A.socket = [sock[0] * randRange(0.82, 1.22), sock[1] + randRange(-0.04, 0.04)];   // position jittered in proportion, so a fly's forward socket stays off the midline
   A.sr = Math.max(1, Math.min(2.5, hw * randRange(0.03, 0.045)));
   const longK = ['filiform', 'moniliform', 'serrate', 'plumose'].includes(A.kind);
   A.pose = A.kind === 'aristate' || A.kind === 'stylate' ? 'face' : !longK ? (['clubbed', 'pectinate', 'bipectinate'].includes(A.kind) ? 'costal' : 'wide')
     : A.len <= 2.5 * hw ? 'v' : A.len <= 0.65 * bl ? 'arc' : 'swept';
-  const R = ANT_POSES[A.pose];
+  const R = A.poseR = Object.assign({}, ANT_POSES[A.pose], F.poses && F.poses[A.pose]);   // the family may reshape a pose (#25: the weevil's scape, the longhorn's sweep)
   A.ang = rr(R.ang); A.curve = rr(R.curve); A.droop = rr(R.droop);
   return A;
 }
@@ -605,7 +606,7 @@ function antennaGeom(A, base, hw, pose) {
     G.pLen = pLen; G.pts.push(...G.pl, ...G.lam.map(l => l.far)); G.tip = G.lam[Math.floor(n / 2)].far;
   } else {
     const swept = A.pose === 'swept';
-    G.pl = shaft(base, pose.ang, len, pose.curve, swept ? 24 : 14, { front: swept ? 2.4 : 0, droop: pose.droop });   // swept: most of the turn in the first third, then a near-straight run back beside the body
+    G.pl = shaft(base, pose.ang, len, pose.curve, swept ? 24 : 14, { front: swept ? (A.poseR.front !== undefined ? A.poseR.front : 2.4) : 0, droop: pose.droop });   // swept: most of the turn in the first third, then a near-straight run back beside the body
     G.pts.push(...G.pl);
     if (A.kind === 'clubbed') {
       // the club sits on the last clubK of the length: gradual thickening, an abrupt knob, a skipper's hook or a swallowtail's upcurve
@@ -1957,7 +1958,9 @@ const NAME_PREFIX = ['Chryso', 'Callo', 'Lepto', 'Macro', 'Micro', 'Ortho', 'Neu
   'Eury', 'Poly', 'Hetero', 'Aniso', 'Cteno', 'Dolicho', 'Brachy', 'Trachy', 'Tricho', 'Erythro', 'Leuco', 'Cyano', 'Chloro',
   'Phaeo', 'Sphaero', 'Rhino', 'Acantho', 'Hoplo', 'Dory', 'Cosmo', 'Pseudo', 'Para', 'Proto', 'Meta', 'Hemi', 'Oxy', 'Dasy', 'Lasio',
   'Calli', 'Nemo', 'Hydro', 'Helio', 'Argyro', 'Stigmo', 'Campto', 'Cyclo', 'Lio', 'Gono'];
-// species epithets: [stem, declension]  A = -us/-a/-um, B = -is/-is/-e, X = invariable, M = minor/minus style
+// species epithets: [stem, declension]  A = -us/-a/-um, B = -is/-is/-e, X = invariable, M = minor/minus style. Only
+// adjectives go in A / B: a noun such as saltator (a leaper) is not declined (it gave "saltatoris"), its adjective
+// saltatorius is (#29). tests/names.js FORMS writes out every stem x gender; tests/check.js `epithets` holds this to it.
 const EPITHET = [
   ['fuscat', 'A'], ['aurat', 'A'], ['maculat', 'A'], ['punctat', 'A'], ['striat', 'A'], ['marginat', 'A'], ['fasciat', 'A'], ['lineat', 'A'],
   ['obscur', 'A'], ['flav', 'A'], ['ruf', 'A'], ['cinere', 'A'], ['livid', 'A'], ['pallid', 'A'], ['splendid', 'A'], ['venust', 'A'], ['hirt', 'A'],
@@ -1968,18 +1971,59 @@ const EPITHET = [
   ['limbat', 'A'], ['nigrocinct', 'A'], ['pulchell', 'A'], ['bicolor', 'X'], ['concolor', 'X'], ['tricolor', 'X'],
   ['vulgar', 'B'], ['boreal', 'B'], ['austral', 'B'], ['oriental', 'B'], ['occidental', 'B'], ['sylvestr', 'B'], ['pratens', 'B'], ['arvens', 'B'],
   ['palustr', 'B'], ['fluviatil', 'B'], ['lacustr', 'B'], ['campestr', 'B'], ['nigricorn', 'B'], ['flavicorn', 'B'], ['tenu', 'B'], ['gracil', 'B'],
-  ['agil', 'B'], ['virid', 'B'], ['lugubr', 'B'], ['nobil', 'B'], ['mirabil', 'B'], ['moll', 'B'], ['brev', 'B'], ['grand', 'B'], ['saltator', 'B'],
+  ['agil', 'B'], ['virid', 'B'], ['lugubr', 'B'], ['nobil', 'B'], ['mirabil', 'B'], ['moll', 'B'], ['brev', 'B'], ['grand', 'B'], ['saltatori', 'A'],
   ['flavipes', 'X'], ['rufipes', 'X'], ['longipes', 'X'], ['nigripes', 'X'], ['albipes', 'X'], ['elegans', 'X'], ['nitens', 'X'], ['splendens', 'X'],
   ['virens', 'X'], ['lucens', 'X'], ['rutilans', 'X'], ['fulgens', 'X'], ['repens', 'X'], ['nigricans', 'X'], ['albicans', 'X'], ['flavescens', 'X'],
   ['rufescens', 'X'], ['minor', 'M'], ['major', 'M'],
 ];
 // epithets built from the genus syllable table: lowercase prefix + tail
 const EPITHET_TAIL = [['pter', 'A'], ['som', 'A'], ['cephal', 'A'], ['dactyl', 'A'], ['not', 'A'], ['pus', 'X'], ['gnath', 'A'], ['cer', 'A']];
-const COMMON_ADJ = ['Lesser', 'Greater', 'Banded', 'Spotted', 'Velvet', 'Marsh', 'Heath', 'Northern', 'Southern', 'Common', 'Dusky', 'Golden',
-  'Striped', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Scarce', 'Brindled', 'Clouded', 'Bronze', 'Silver', 'Ruddy', 'Small',
-  'Large', 'Variable', 'Four-spotted', 'Dark', 'Pale', 'Hairy', 'Black-tailed', 'White-legged', 'Emerald', 'Scarlet', 'Twin-spot', 'Chalk', 'River'];
+// the epithet in agreement with the genus gender (m / f / n)
+function declineEpithet(stem, cls, gender) {
+  if (cls === 'A') return stem + (gender === 'm' ? 'us' : gender === 'f' ? 'a' : 'um');
+  if (cls === 'B') return stem + (gender === 'n' ? 'e' : 'is');
+  if (cls === 'M') return gender === 'n' ? stem.slice(0, -2) + 'us' : stem;   // minor -> minus, major -> majus
+  return stem;
+}
+// every stem x gender the namer can produce, exported read-only for tests/names.js; a tail stem is written '-pter'
+const EPITHETS = Object.freeze([...EPITHET, ...EPITHET_TAIL.map(([t, cls]) => ['-' + t, cls])].map(([stem, cls]) => {
+  const s = stem.replace(/^-/, '');
+  return Object.freeze({ stem, m: declineEpithet(s, cls, 'm'), f: declineEpithet(s, cls, 'f'), n: declineEpithet(s, cls, 'n') });
+}));
+// The common name is [qualifier] <adjective> <noun> [base] (#28). The adjective is a gene word whenever the plate has one
+// to give: its abdominal marking (B.abd.mark; plain gives none) or an antenna kind its family draws on under half its
+// plates, so a banded abdomen is "Banded" or "Ringed" and a bipectinate moth "Feathered". Otherwise it comes from the
+// order's `adj` list (else COMMON_ADJ), from which every marking and antenna word is kept out: a plate is never named for
+// a marking it does not draw. The qualifier (size, range, rarity) widens the pool so plates seldom share a name.
+// tests/names.js MARK_CLAIMS / ANT_CLAIMS hold the claim vocabulary these must stay inside.
+const GENE_MARK_ADJ = {
+  banded: ['Banded', 'Ringed', 'Girdled', 'Belted'],
+  spotted: ['Spotted', 'Four-spotted', 'Six-spotted', 'Twin-spot', 'Dotted'],
+  striped: ['Striped', 'Lined', 'Streaked'],
+  tipdark: ['Black-tailed', 'Dark-tipped', 'Black-tipped'],
+  hairy: ['Hairy', 'Downy', 'Velvet', 'Woolly', 'Shaggy'],
+};
+const GENE_ANT_ADJ = { moniliform: ['Bead-horned'], lamellate: ['Fan-horned'], serrate: ['Saw-horned'], pectinate: ['Comb-horned'], bipectinate: ['Feathered'], plumose: ['Plumed'], clubbed: ['Club-horned'] };
+const COMMON_ADJ = ['Marsh', 'Heath', 'Dusky', 'Golden', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Brindled', 'Clouded', 'Bronze',
+  'Silver', 'Ruddy', 'Variable', 'Dark', 'Pale', 'White-legged', 'Scarlet', 'Chalk', 'River', 'Tawny', 'Sooty', 'Amber', 'Grey', 'Moorland',
+  'Hedgerow', 'Orchard', 'Ashy', 'Smoky', 'Glossy', 'Sandy', 'Violet'];
+const NAME_QUAL = ['Lesser', 'Greater', 'Small', 'Large', 'Little', 'Common', 'Scarce', 'Rare', 'Northern', 'Southern', 'Western', 'Eastern',
+  'Alpine', 'Lowland', 'Upland', 'Dwarf', 'Giant', 'Island', 'Coastal', 'Continental'];
+const NAME_QUAL_P = 0.85;   // share of names with a qualifier
+const GENE_WORDS = new Set([...Object.values(GENE_MARK_ADJ), ...Object.values(GENE_ANT_ADJ)].flat());
 
-function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta.fam); a names table with famNouns takes its noun from it
+// two common-name parts repeat a stem: a word of one equals a word of the other ignoring case, or starts it when the
+// shorter has 4+ letters (tests/names.js repeatedStem states the same rule independently)
+function nameClash(a, b) {
+  const words = s => (s || '').toLowerCase().split(/[ -]+/).filter(Boolean);
+  const wb = words(b);
+  return words(a).some(x => wb.some(y => x === y || (x.length >= 4 && y.startsWith(x)) || (y.length >= 4 && x.startsWith(y))));
+}
+
+// fam: the drawn family (meta.fam), which picks the noun (and base) from a table with famNouns (famBase); genes: the
+// plate's { mark: B.abd.mark, ant: B.ant.kind }, which give the adjective (#28). Without them (a name by seed alone)
+// the adjective comes from the general list.
+function insectName(seed, type, variant, fam, genes) {
   const r = mulberry32((((seed >>> 0) ^ 0x9E3779B9) >>> 0));   // private PRNG: never touches the drawing's rng
   const pk = arr => arr[Math.floor(r() * arr.length)];
   const order = ORDERS[type] || ORDERS.beetle, names = (variant && order.variantNames && order.variantNames[variant]) || order.names;
@@ -1993,12 +2037,6 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
   genus = genus.charAt(0).toUpperCase() + genus.slice(1).toLowerCase();
 
   // species epithet: either a Latin adjective or one built from the same syllable tables; agree with genus gender
-  const decline = (stem, cls) => {
-    if (cls === 'A') return stem + (gender === 'm' ? 'us' : gender === 'f' ? 'a' : 'um');
-    if (cls === 'B') return stem + (gender === 'n' ? 'e' : 'is');
-    if (cls === 'M') return gender === 'n' ? stem.slice(0, -2) + 'us' : stem;   // minor -> minus, major -> majus
-    return stem;
-  };
   let species;
   if (r() < 0.25) {
     let p2 = pk(NAME_PREFIX);
@@ -2006,19 +2044,36 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
     const [t2, cls] = pk(EPITHET_TAIL);
     let stem = p2.toLowerCase();
     if (/[aeiou]$/.test(stem) && /^[aeiou]/.test(t2)) stem = stem.slice(0, -1);
-    species = decline(stem + t2, cls);
+    species = declineEpithet(stem + t2, cls, gender);
   } else {
     const [stem, cls] = pk(EPITHET);
-    species = decline(stem, cls);
+    species = declineEpithet(stem, cls, gender);
   }
 
-  // common name: <Adjective> <Noun> [<Base>], never repeating a word
-  const c = names.common;
-  const adjs = c.adj || COMMON_ADJ;
-  const nouns = (fam && c.famNouns && c.famNouns[fam]) || c.nouns;
+  // common name: [<Qualifier>] <Adjective> <Noun> [<Base>] (#28), drawn after the binomial so the binomial's draws are
+  // unchanged. Never repeating a stem across the parts (#29): no word equal to another ignoring case, nor the start of
+  // another when the shorter has 4+ letters ("Dark Darkling", "Blue-tailed Bluet"). The noun re-rolls, then is picked
+  // from the nouns that clear, and the adjective too if none does; a qualifier that clashes is dropped. The name PRNG is
+  // private, so none of this moves a drawing.
+  const c = names.common, famNouns = (fam && c.famNouns) || {};
+  const nouns = famNouns[fam] || c.nouns, base = (fam && c.famBase && c.famBase[fam]) || c.base;
+  const otherNouns = new Set(Object.keys(famNouns).filter(f => f !== fam).flatMap(f => famNouns[f]));   // another family's noun is no adjective here
+  const g = genes || {}, antT = order.ant, antKinds = Object.assign({}, antT.base, antT[fam] || {}).kinds;
+  const antTot = Object.values(antKinds).reduce((x, w) => x + w, 0);
+  const antRare = (antKinds[g.ant] || 0) < 0.5 * antTot;   // only a kind the family draws on under half its plates sets this one apart
+  const geneAdj = [...(GENE_MARK_ADJ[g.mark] || []), ...(antRare ? GENE_ANT_ADJ[g.ant] || [] : [])];
+  const adjs = geneAdj.length ? geneAdj : (c.adj || COMMON_ADJ).filter(a => !GENE_WORDS.has(a) && !otherNouns.has(a));
+  const fits = (a, n) => !nameClash(a, n) && !nameClash(a, base) && !nameClash(n, base);
   let adj = pk(adjs), noun = pk(nouns);
-  for (let i = 0; i < 8 && (adj === noun || adj.split(/[ -]/).includes(noun) || noun.split(/[ -]/).includes(adj)); i++) noun = pk(nouns);
-  const common = [adj, noun, c.base].filter(Boolean).join(' ');
+  for (let i = 0; i < 8 && !fits(adj, noun); i++) noun = pk(nouns);
+  if (!fits(adj, noun)) {
+    const ok = nouns.filter(n => fits(adj, n));
+    if (ok.length) noun = pk(ok);
+    else { const pairs = adjs.flatMap(a => nouns.filter(n => fits(a, n)).map(n => [a, n])); if (pairs.length) [adj, noun] = pk(pairs); }
+  }
+  let qual = r() < NAME_QUAL_P ? pk(c.qual || NAME_QUAL) : '';
+  if ([adj, noun, base].some(x => nameClash(qual, x))) qual = '';
+  const common = [qual, adj, noun, base].filter(Boolean).join(' ');
 
   return { genus, species, common, binomial: genus + ' ' + species };
 }
@@ -2063,7 +2118,9 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
 //   wings: the wing section function (hoisted declarations below; the elytra and the orthopteran tegmen draw into
 //     `covers`).
 //   names: tails: genus tails with grammatical gender (m/f/n) so epithets can agree; common: the common-name nouns
-//     and base (adj overrides the shared COMMON_ADJ list); variantNames: the same tables per variant.
+//     and base (adj overrides the shared COMMON_ADJ list, qual the NAME_QUAL qualifiers); famNouns / famBase: the nouns
+//     (and base) per drawn family, required when the order rolls two or more families, the lists disjoint (#28;
+//     tests/check.js nameFamilies); variantNames: the same tables per variant.
 // the odonate leg plan, shared by dragonfly and damselfly: the prey basket (all legs forward, spread wide) or, #48, tucked:
 // every pair folded forward close against the thorax and the back of the head, as at rest (poseAng: the order's own angles
 // for that pose, per pair, over LEG_POSES'; legs folded under the thorax out of sight would leave only half-hidden tarsi)
@@ -2096,11 +2153,11 @@ const ORDERS = {
     thorax: { front: [1.0, 1.5], peak: [0.3, 0.55], hump: [0, 0], waist: [0, 0], lenK: [0.85, 1.15] },
     head: { outline: 'round', ratio: [1.1, 1.35], flat: 0.5, cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.2, 0.28], cy: [-0.06, 0.02], dent: [0.3, 0.45], dentAt: -125, ocelli: 0, mand: [0.1, 0.2], labrum: [1, 1], styles: { stipple: 2, plain: 2, lattice: 1 }, stripe: 0.4 },
     headFams: {
-      ground: { outline: 'elongate', ratio: [0.85, 1.05], flat: 0, frontK: [0.75, 0.9], capK: [0.86, 0.93], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.24], cy: [0.08, 0.2], dent: [0, 0], mand: [0.4, 0.6], mandCross: 0.5, serr: 0.3, palps: 0.8, furrow: 1, styles: { plain: 3, stipple: 2 } },
-      rove: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.8, 0.92], capK: [0.88, 0.94], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.22], cy: [0.02, 0.14], dent: [0, 0], mand: [0.3, 0.45], mandCross: 0.4, palps: 0.6, ocelli: [0, 1], oc: 'median', styles: { plain: 3, stipple: 2 } },
+      ground: { outline: 'elongate', ratio: [0.85, 1.05], flat: 0, frontK: [0.75, 0.9], capK: [0.86, 0.93], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.24], cy: [0.08, 0.2], dent: [0, 0], mand: [0.28, 0.4], mandCross: 0.5, serr: 0.3, palps: 0.8, furrow: 1, styles: { plain: 3, stipple: 2 } },
+      rove: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.8, 0.92], capK: [0.88, 0.94], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.22], cy: [0.02, 0.14], dent: [0, 0], mand: [0.3, 0.45], mandCross: 0.4, palps: 0.6, styles: { plain: 3, stipple: 2 } },
       scarab: { ratio: [1.2, 1.45], flat: 0.7, dent: [0, 0.15], mand: [0.08, 0.15], clypeus: 0.7 },
       longhorn: { ratio: [1.0, 1.2], flat: 0.3, dent: [0.35, 0.5], dentAt: -105, mand: [0.12, 0.22] },
-      weevil: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.6, 0.75], rostrum: [0.6, 1.8], rostW: [0.15, 0.25], cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.18, 0.26], cy: [-0.02, 0.1], dent: [0, 0], mand: [0.04, 0.06], labrum: [0, 0], stripe: 0 },
+      weevil: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.6, 0.75], rostrum: [0.6, 1.8], rostW: [0.15, 0.25], antOn: [0.2, 0.55], cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.18, 0.26], cy: [-0.02, 0.1], dent: [0, 0], mand: [0.04, 0.06], labrum: [0, 0], stripe: 0 },
     },
     legs: { base: { tarsomeres: [4, 5], spines: 0.4, spurs: [1, 2], hindSafe: [18, 26, 58, 72] },   // hindSafe: [coxa, femur, tibia, tarsus] dirs of the last-resort hind leg (#24)
       ground: { lenK: [1.0, 1.2], wk: [1.0, 1.15], poses: { spread: 3, walking: 3, tucked: 0.5 } },
@@ -2112,8 +2169,14 @@ const ORDERS = {
       ground: { kinds: { filiform: 5, moniliform: 2 }, len: [1.6, 2.4] },
       rove: { kinds: { moniliform: 3, filiform: 2, clubbed: 1 }, club: 'gradual', len: [0.9, 1.4] },
       scarab: { kinds: { lamellate: 1 }, len: [0.6, 0.9] },
-      longhorn: { kinds: { filiform: 1 }, ref: 'bl', len: [0.8, 1.6], socket: [0.28, 0.34] },            // 1-2x body, swept back beside the body
-      weevil: { kinds: { geniculate: 1 }, club: 'abrupt', len: [0.8, 1.2], socket: [0.08, 0.1] } },   // elbowed, clubbed, on the rostrum
+      // #25 (ant-longhorn-dorcadion): thick and segmented, about the body's length, swept back from the head beside the
+      // pronotum and the elytra (the sweep leaves the head already turned back, `back`, so it never crosses the forelegs ahead of it)
+      longhorn: { kinds: { filiform: 1 }, ref: 'bl', len: [0.7, 0.95], socket: [0.28, 0.34], thick: 3.5, taper: [0.6, 0.8],
+        poses: { swept: { ang: [40, 55], curve: [35, 50], front: 1.5, back: true,
+          alt: { ang: [55, 90], curve: [-60, -10], droop: [10, 80] } } } },   // alt: after half the attempts, a steep root over the pronotum that turns out past the elytral shoulders and back (the forelegs or elytra left no room for the sweep), searched on a 5-degree grid (droop every 10)
+      // elbowed, clubbed; the socket is set on the rostrum's side from the head gene antOn (#25), and the scape leaves it
+      // sideways (head-col-weevil), the funicle turning forward at the elbow
+      weevil: { kinds: { geniculate: 1 }, club: 'abrupt', len: [0.8, 1.2], socket: [0.08, 0.1], poses: { wide: { ang: [-25, 0] } } } },
     headScaleP5: 1.3,
     // #24 (optional): the pronotum held to docs/research-thorax.md (1.1-1.5x wider than long, 0.55-0.9 of the elytral width):
     // rollBodyGenes soft-clips the drawn ratios into these slightly narrower bands (no rng); tests/check.js asserts the research ones
@@ -2131,7 +2194,11 @@ const ORDERS = {
     names: {
       tails: [['cera', 'f'], ['soma', 'n'], ['notus', 'm'], ['derus', 'm'], ['morpha', 'f'], ['gnathus', 'm'], ['cephala', 'f'], ['pus', 'm'],
         ['dactylus', 'm'], ['carabus', 'm'], ['phagus', 'm'], ['bius', 'm'], ['nychus', 'm'], ['stomus', 'm'], ['chila', 'f'], ['phorus', 'm'], ['ella', 'f']],
-      common: { nouns: ['Ground', 'Leaf', 'Soldier', 'Jewel', 'Longhorn', 'Click', 'Darkling', 'Chafer', 'Rove', 'Tiger', 'Flower', 'Bark'], base: 'Beetle' },
+      common: { nouns: ['Ground', 'Leaf', 'Soldier', 'Jewel', 'Longhorn', 'Click', 'Darkling', 'Chafer', 'Rove', 'Tiger', 'Flower', 'Bark'], base: 'Beetle',
+        famNouns: { ground: ['Ground', 'Tiger', 'Bombardier', 'Darkling', 'Snail-hunting', 'Caterpillar-hunter'], rove: ['Rove', 'Cocktail', 'Short-winged', 'Coach-horse'],
+          scarab: ['Chafer', 'Dung', 'Scarab', 'Dor', 'Rhinoceros', 'Flower'], longhorn: ['Longhorn', 'Musk', 'Timberman', 'Sawyer', 'Capricorn', 'Wasp'],
+          weevil: ['Acorn', 'Nut', 'Vine', 'Pea', 'Leaf', 'Snout', 'Clover', 'Figwort'] },
+        famBase: { weevil: 'Weevil' } },   // a weevil is named "... Weevil" (#28)
     },
   },
   moth: {
@@ -2171,12 +2238,18 @@ const ORDERS = {
     names: {
       tails: [['ptera', 'f'], ['phora', 'f'], ['noctua', 'f'], ['phila', 'f'], ['mera', 'f'], ['chroa', 'f'], ['stigma', 'n'], ['psyche', 'f'],
         ['pyga', 'f'], ['lepis', 'f'], ['pteryx', 'f'], ['thyris', 'f'], ['morpha', 'f'], ['ptilia', 'f']],
-      common: { nouns: ['Carpet', 'Pug', 'Wave', 'Underwing', 'Tiger', 'Footman', 'Rustic', 'Quaker', 'Thorn', 'Prominent', 'Hawk', 'Emerald', 'Wainscot', 'Dart', 'Brocade'], base: 'Moth' },
+      common: { nouns: ['Carpet', 'Pug', 'Wave', 'Underwing', 'Tiger', 'Footman', 'Rustic', 'Quaker', 'Thorn', 'Prominent', 'Hawk', 'Emerald', 'Wainscot', 'Dart', 'Brocade'], base: 'Moth',
+        famNouns: { noctuid: ['Underwing', 'Rustic', 'Dart', 'Wainscot', 'Brocade', 'Arches', 'Sallow', 'Chestnut', 'Clay'], geometrid: ['Carpet', 'Pug', 'Wave', 'Thorn', 'Emerald', 'Beauty', 'Umber', 'Looper'],
+          arctiid: ['Tiger', 'Footman', 'Ermine', 'Tussock', 'Crimson'], saturniid: ['Emperor', 'Silk', 'Moon', 'Atlas', 'Royal'], sphingid: ['Hawk', 'Sphinx', 'Hummingbird Hawk', 'Elephant Hawk', 'Bee Hawk'],
+          plain: ['Prominent', 'Quaker', 'Drab', 'Kitten', 'Lappet', 'Eggar', 'Hook-tip', 'Lutestring'] } },
     },
     variantNames: { butterfly: {
       tails: [['ptera', 'f'], ['nympha', 'f'], ['pteryx', 'f'], ['chroma', 'n'], ['psyche', 'f'], ['thyra', 'f'], ['cera', 'f'], ['phora', 'f'],
         ['chrysa', 'f'], ['lepis', 'f'], ['nais', 'f']],
-      common: { nouns: ['Fritillary', 'Skipper', 'Blue', 'Copper', 'Hairstreak', 'Argus', 'Brown', 'White', 'Admiral', 'Tortoiseshell', 'Swallowtail', 'Ringlet'], base: '' },
+      common: { nouns: ['Fritillary', 'Skipper', 'Blue', 'Copper', 'Hairstreak', 'Argus', 'Brown', 'White', 'Admiral', 'Tortoiseshell', 'Swallowtail', 'Ringlet'], base: '',
+        famNouns: { nymphalid: ['Fritillary', 'Admiral', 'Tortoiseshell', 'Comma', 'Peacock', 'Checkerspot', 'Crescent', 'Emperor'], satyrine: ['Brown', 'Ringlet', 'Heath', 'Grayling', 'Wood-nymph', 'Satyr', 'Arctic'],
+          pierid: ['White', 'Yellow', 'Sulphur', 'Orange-tip', 'Brimstone', 'Wood White'], lycaenid: ['Blue', 'Copper', 'Hairstreak', 'Argus', 'Elfin', 'Metalmark'],
+          papilionid: ['Swallowtail', 'Apollo', 'Birdwing', 'Kite', 'Festoon'] } },
     } },
   },
   fly: {
@@ -2208,7 +2281,10 @@ const ORDERS = {
     names: {
       tails: [['myia', 'f'], ['pogon', 'm'], ['cera', 'f'], ['phora', 'f'], ['soma', 'n'], ['rhina', 'f'], ['phaga', 'f'], ['nema', 'n'],
         ['ptera', 'f'], ['cnemis', 'f'], ['merus', 'm'], ['pus', 'm']],
-      common: { nouns: ['Hover', 'Soldier', 'Snipe', 'Dance', 'Robber', 'Bee', 'Flesh', 'Dung', 'Picture-winged', 'Long-legged', 'Stiletto', 'Thick-headed', 'Flat-footed'], base: 'Fly' },
+      common: { nouns: ['Hover', 'Soldier', 'Snipe', 'Dance', 'Robber', 'Bee', 'Flesh', 'Dung', 'Picture-winged', 'Long-legged', 'Stiletto', 'Thick-headed', 'Flat-footed'], base: 'Fly',
+        famNouns: { muscid: ['House', 'Flesh', 'Dung', 'Blow', 'Stable', 'Cluster', 'Face', 'Root-maggot'], nemato: ['Dance', 'Fungus', 'March', 'Window', 'Moth', 'Gall', 'Black'],
+          syrphid: ['Hover', 'Drone', 'Flower', 'Marmalade', 'Narcissus', 'Bulb'], tabanid: ['Horse', 'Deer', 'Cleg', 'Greenhead', 'Band-eyed'],
+          asilid: ['Robber', 'Assassin', 'Bee-killer', 'Hornet Robber', 'Hanging'] } },
     },
   },
   bee: {
@@ -2278,10 +2354,10 @@ const ORDERS = {
     wings: wingsOdonata,
     names: {
       tails: [['gomphus', 'm'], ['lestes', 'm'], ['themis', 'f'], ['ptera', 'f'], ['cordulia', 'f'], ['aeschna', 'f'], ['neura', 'f'],
-        ['agrion', 'n'], ['cordia', 'f'], ['libellula', 'f'], ['cnemis', 'f'], ['anax', 'm']],
+        ['agrion', 'n'], ['cordia', 'f'], ['libellula', 'f'], ['cnemis', 'f'], ['anax', 'm']],   // -agrion is neuter: see the damselfly's names
       common: { nouns: ['Hawker', 'Darter', 'Skimmer', 'Emperor', 'Chaser', 'Clubtail', 'Emerald', 'Goldenring'], base: '',
         famNouns: { aeshnid: ['Hawker', 'Emperor', 'Darner'], libellulid: ['Darter', 'Skimmer', 'Chaser'], gomphid: ['Clubtail'], corduliid: ['Emerald'] },   // the noun follows the drawn family (#48)
-        adj: ['Northern', 'Southern', 'Common', 'Migrant', 'Brown', 'Hairy', 'Ruddy', 'Black', 'Four-spotted', 'Scarce', 'Keeled', 'Broad-bodied', 'Lesser', 'Vagrant', 'Emerald', 'Moorland', 'Downy'] },
+        adj: ['Migrant', 'Brown', 'Ruddy', 'Black', 'Keeled', 'Broad-bodied', 'Vagrant', 'Emerald', 'Moorland', 'Golden-ringed', 'Yellow-winged', 'Red-veined', 'White-faced', 'Blue-eyed', 'Amber-winged'] },
     },
   },
   grasshopper: {
@@ -2309,7 +2385,10 @@ const ORDERS = {
     names: {
       tails: [['locusta', 'f'], ['acris', 'f'], ['cerus', 'm'], ['tettix', 'm'], ['pus', 'm'], ['notus', 'm'], ['tropis', 'f'], ['soma', 'n'],
         ['cephala', 'f'], ['morpha', 'f'], ['phyma', 'n'], ['dera', 'f']],
-      common: { nouns: ['Field', 'Meadow', 'Heath', 'Marsh', 'Bush', 'Dune', 'Band-winged', 'Stripe-winged', 'Toothed', 'Pygmy', 'Rufous'], base: 'Grasshopper' },
+      common: { nouns: ['Field', 'Meadow', 'Heath', 'Marsh', 'Bush', 'Dune', 'Band-winged', 'Stripe-winged', 'Toothed', 'Pygmy', 'Rufous'], base: 'Grasshopper',
+        famNouns: { acridid: ['Field', 'Meadow', 'Heath', 'Marsh', 'Dune', 'Band-winged', 'Stripe-winged', 'Rufous', 'Slant-faced', 'Mottled'],
+          tettigoniid: ['Oak', 'Bog', 'Great Green', 'Saddle-backed', 'Cone-headed', 'Sickle-bearing', 'Wart-biter'], tetrigid: ['Slender', 'Pygmy', 'Sand', 'Hooded', 'Mud', "Cepero's"] },
+        famBase: { tettigoniid: 'Bush-cricket', tetrigid: 'Groundhopper' } },   // a long-horned katydid and a groundhopper are not grasshoppers (#28)
     },
   },
   cranefly: {
@@ -2333,7 +2412,7 @@ const ORDERS = {
     wings: wingsDiptera,
     names: {
       tails: [['tipula', 'f'], ['limnobia', 'f'], ['ptera', 'f'], ['phlebia', 'f'], ['cera', 'f'], ['myia', 'f'], ['peza', 'f'], ['nephria', 'f'], ['pus', 'm']],
-      common: { nouns: ['Meadow', 'Tiger', 'Phantom', 'Winter', 'Giant', 'Fen', 'Bog', 'Spotted', 'Short-palped', 'Hairy-eyed'], base: 'Crane Fly' },
+      common: { nouns: ['Meadow', 'Tiger', 'Phantom', 'Winter', 'Fen', 'Bog', 'Marbled', 'Short-palped', 'Hairy-eyed', 'Cabbage', 'Leatherjacket'], base: 'Crane Fly' },
     },
   },
   lacewing: {
@@ -2387,7 +2466,7 @@ const ORDERS = {
     wings: wingsCicada,
     names: {
       tails: [['cicada', 'f'], ['tettix', 'm'], ['tibicen', 'm'], ['cephala', 'f'], ['psaltria', 'f'], ['soma', 'n'], ['neura', 'f'], ['ptera', 'f'], ['cerus', 'm'], ['notus', 'm']],
-      common: { nouns: ['Harvest', 'Dog-day', 'Dusk', 'Scissor', 'Floury', 'Bladder', 'Hill', 'Hairy', 'Bush', 'Mountain', 'Grass'], base: 'Cicada' },
+      common: { nouns: ['Harvest', 'Dog-day', 'Dusk', 'Scissor', 'Floury', 'Bladder', 'Hill', 'Bush', 'Mountain', 'Grass', 'Drummer', 'Squeaker', 'Ticker'], base: 'Cicada' },
     },
   },
   wasp: {
@@ -2417,7 +2496,10 @@ const ORDERS = {
     wings: wingsHymenoptera,
     names: {
       tails: [['vespa', 'f'], ['sphex', 'm'], ['crabro', 'm'], ['cerus', 'm'], ['gaster', 'f'], ['pompilus', 'm'], ['pelta', 'f'], ['cera', 'f'], ['bia', 'f'], ['lestes', 'm']],
-      common: { nouns: ['Digger', 'Mason', 'Potter', 'Paper', 'Spider', 'Sand', 'Ruby-tailed', 'Gall', 'Ichneumon', 'Wood', 'Cuckoo', 'Thread-waisted'], base: 'Wasp' },
+      common: { nouns: ['Digger', 'Mason', 'Potter', 'Paper', 'Spider', 'Sand', 'Ruby-tailed', 'Gall', 'Ichneumon', 'Wood', 'Cuckoo', 'Thread-waisted'], base: 'Wasp',
+        famNouns: { vespid: ['Paper', 'Potter', 'Mason', 'Tree', 'Median', 'Pollen', 'Hornet'], ichneumonid: ['Ichneumon', 'Sabre', 'Darwin', 'Ophion', 'Long-tailed'],
+          sawfly: ['Turnip', 'Rose', 'Pine', 'Birch', 'Gooseberry', 'Hawthorn', 'Willow', 'Stem'], chalcid: ['Chalcid', 'Fig', 'Seed', 'Jewel', 'Fairy', 'Torymid'] },
+        famBase: { sawfly: 'Sawfly' } },   // a sawfly is no wasp by name (#28)
     },
   },
   damselfly: {
@@ -2445,11 +2527,14 @@ const ORDERS = {
     legThick: 0.62,
     wings: wingsOdonata,
     names: {
+      // -agrion is neuter (#29), as the modern genera built on it are: Coenagrion hastulatum / pulchellum / mercuriale,
+      // Ceriagrion tenellum, Pseudagrion microcephalum, Megalagrion pacificum. "Agrion puella" (Fabricius) is no evidence of
+      // a feminine: puella is a noun in apposition and does not agree. The dragonfly's tails share this entry's reading.
       tails: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
       common: { nouns: ['Demoiselle', 'Bluet', 'Spreadwing', 'Damsel', 'Featherleg', 'Jewelwing', 'Bluetail', 'Redtail'], base: '',
         famNouns: { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'],
           lestid: ['Spreadwing', 'Reedling'], platycnemidid: ['Featherleg', 'Threadtail'] },   // the noun follows the drawn family (#17, #48)
-        adj: ['Azure', 'Large Red', 'Small Red', 'Scarce', 'Emerald', 'Banded', 'White-legged', 'Variable', 'Northern', 'Blue-tailed', 'Willow', 'Dainty', 'Dusky', 'Southern', 'Copper'] },
+        adj: ['Azure', 'Red', 'Emerald', 'White-legged', 'Variable', 'Blue-tailed', 'Willow', 'Dainty', 'Dusky', 'Copper', 'Red-eyed', 'Orange', 'Familiar', 'Slender', 'Sedge'] },
     },
   },
   mayfly: {
@@ -2472,8 +2557,8 @@ const ORDERS = {
     wings: wingsEphemeroptera,
     names: {
       tails: [['phlebia', 'f'], ['ephemera', 'f'], ['nema', 'n'], ['baetis', 'f'], ['genia', 'f'], ['ptera', 'f'], ['neura', 'f'], ['philus', 'm'], ['bius', 'm'], ['urus', 'm'], ['cercus', 'm']],
-      common: { nouns: ['Dun', 'Spinner', 'Drake'], base: '',
-        adj: ['Pale', 'Dark', 'Olive', 'Large', 'Small', 'Summer', 'Autumn', 'Blue-winged', 'Claret', 'Sepia', 'Yellow', 'Brook', 'Lake', 'Grey', 'Evening', 'Dusky', 'Iron', 'Green'] },
+      common: { nouns: ['Dun', 'Spinner', 'Drake', 'Olive', 'Upright', 'Watery', 'Brown'], base: '',   // angler's names: Large Dark Olive, Pale Watery, Yellow Upright
+        adj: ['Pale', 'Dark', 'Summer', 'Autumn', 'Blue-winged', 'Claret', 'Sepia', 'Yellow', 'Brook', 'Lake', 'Grey', 'Evening', 'Dusky', 'Iron', 'Green', 'March', 'Medium'] },
     },
   },
 };
@@ -2713,7 +2798,6 @@ function rollBodyGenes(type, P) {
         if (HF.oc === 'odo') { pos.push([0, -G.bump.h * randRange(0.2, 0.35)]); pos.push([randRange(0.07, 0.1), randRange(0.1, 0.16)], null); }   // median on the frons bump, laterals at the seam front
         else if (HF.oc === 'behind') { pos.push(null, [G.eye.cx * randRange(0.7, 0.8), Math.min(0.82, 0.5 + G.eye.cy + G.eye.ry + 0.06)], null); }     // moth: one behind each eye
         else if (HF.oc === 'lateral') { pos.push(null, [randRange(0.09, 0.13), randRange(0.16, 0.24)], null); }                            // grasshopper: beside the antennal bases
-        else if (HF.oc === 'median') pos.push([0, randRange(0.55, 0.7)]);
         else {
           const y0 = HF.ocY ? rr(HF.ocY) : G.holoptic ? randRange(0.76, 0.82) : randRange(0.55, 0.66);
           const dx = HF.ocDx ? rr(HF.ocDx) : G.holoptic ? randRange(0.04, 0.06) : randRange(0.07, 0.1), dy = HF.ocDy ? rr(HF.ocDy) : randRange(0.06, 0.12);
@@ -2721,7 +2805,7 @@ function rollBodyGenes(type, P) {
           pos.push([0, y0], [dx, line ? y0 : y0 + dy], line ? 'line' : null);
         }
         if (n === 2) pos[0] = null;
-        if (n === 1 && HF.oc !== 'median') pos[1] = null;
+        if (n === 1) pos[1] = null;
       }
       G.ocelli = n ? { n, r, median: pos[0], lateral: pos[1], arr: pos[2] || 'triangle' } : null;
     }
@@ -2732,7 +2816,10 @@ function rollBodyGenes(type, P) {
     G.clypeus = HF.clypeus && rng() < HF.clypeus ? randRange(0.05, 0.12) : 0;      // bow depth / H
     G.palps = HF.palps && rng() < HF.palps ? { len: randRange(0.1, 0.2), segs: randInt(2, 3) } : null;
     G.coil = HF.coil && rng() < HF.coil ? { r: randRange(0.1, 0.16), turns: randRange(1.5, 2.5) } : null;
-    G.rostrum = HF.rostrum ? { len: rr(HF.rostrum), w: rr(HF.rostW), curve: randRange(0, 0.25) } : null;
+    // rostrum: length and width (head widths); curve is its lateral curvature, which a dorsal plate does not show (the tube is
+    // drawn straight, so the mirrored antennae sit on both sides of it); antOn, the antennal insertion as a fraction of its
+    // length ahead of the capsule front (#25, head-col-weevil: the scape leaves the side of the rostrum, never the capsule)
+    G.rostrum = HF.rostrum ? { len: rr(HF.rostrum), w: rr(HF.rostW), curve: randRange(0, 0.25), antOn: rr(HF.antOn) } : null;
     G.snout = HF.snout ? rr(HF.snout) : 0;
     G.notch = HF.notch && rng() < HF.notch ? randRange(0.06, 0.12) : 0;            // occipital notch at the rear
     G.dish = !!HF.dish;
@@ -2748,6 +2835,10 @@ function rollBodyGenes(type, P) {
   // ---- antennae: kind, counts, club / rami / lamellae / arista parameters, pose family and socket (rollAntGenes; the pose angles are
   // checked and re-rolled in the antennae block, which also pushes the antenna genes onto B.sig) ----
   B.ant = rollAntGenes(type, P);
+  if (B.head.rostrum) {   // a weevil's antenna inserts on the side of the rostrum, antOn of its length ahead of the capsule (#25); no rng
+    const p = rostrumPoint(B.head.rostrum, P.headW, P.headH, 0, B.head.rostrum.antOn);
+    B.ant.socket = [p[0] / P.headW, p[1] / P.headH];
+  }
   // ---- legs ----
   // The leg family (the wing family where the order has one, else the body family) sets the ranges: overall length
   // and thickness, femur swelling and tibial flare, segment ratios (saltatorial hind femur, reduced nymphalid
@@ -3246,6 +3337,20 @@ function drawThorax(C) {
 }
 
 // ---------- head ----------
+// The weevil's rostrum seen from above (G = B.head.rostrum, head width W, depth H): its right side as one cubic Bezier
+// from its root inside the capsule to the tip (the tube is drawn straight: its curvature is lateral). No rng: drawHead
+// draws the tube from it and rostrumPoint finds the antennal insertion on it.
+function rostrumSide(G, W, H, headTop) {
+  const len = G.len * W, w = G.w * W / 2, tip = headTop - len;
+  return [[w, headTop + H * 0.3], [w * 0.9, headTop - len * 0.45], [w * 0.8, tip + len * 0.3], [w * 0.7, tip]];
+}
+// the point on the rostrum's right side `at` of its length ahead of the capsule front (headTop), where the antenna inserts (#25)
+function rostrumPoint(G, W, H, headTop, at) {
+  const c = rostrumSide(G, W, H, headTop), y = headTop - at * G.len * W;   // y falls monotonically along the side: bisect for it
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (bez3(c, m)[1] > y) lo = m; else hi = m; }
+  return bez3(c, (lo + hi) / 2);
+}
 function drawHead(C) {
   const { type, order, L, meta, P, B, headTop, headCy } = C;
   // head: capsule outline from B.head (docs/research-head-eyes.md), mouthparts that show from above drawn first so the
@@ -3257,24 +3362,29 @@ function drawHead(C) {
     const outlinePl = sampleSmooth(outline, true, 1, 3);
     const hwAt = y => polyMaxXAt(outlinePl, y);
     const yFrontAt = x => { const r = outlineYRange(outlinePl, x); return r ? r[0] : headTop; };
+    let mand = null;   // the two jaw outlines (closed polylines) when the head draws prognathous mandibles, for meta.head.mand
     // --- mouthparts and projections in front of the capsule ---
     if (G.rostrum) {   // weevil: a tube from the front of the capsule, tiny mandibles at its tip
-      const len = G.rostrum.len * W, w = G.rostrum.w * W / 2, y0 = headTop + H * 0.3, tip = headTop - len, bend = G.rostrum.curve * len;
-      HE.push(pathEl(cubicBezierPath([[w, y0], [w * 0.9, headTop - len * 0.45], [w * 0.8 + bend, tip + len * 0.3], [w * 0.7 + bend, tip], [w * 0.3 + bend, tip - w * 0.4], [-w * 0.3 + bend, tip - w * 0.4], [-w * 0.7 + bend, tip],
-        [-w * 0.8 + bend, tip + len * 0.3], [-w * 0.9, headTop - len * 0.45], [-w, y0]], false), SW.O, '#fff'));
-      HE.push(pathEl(cubicBezierPath([[0, headTop - len * 0.3], [bend * 0.25, tip + len * 0.5], [bend * 0.75, tip + len * 0.28], [bend, tip + len * 0.12]], false), SW.F));   // dorsal carina along the curve
-      for (const s of [-1, 1]) HE.push(lineEl([s * w * 0.35 + bend, tip - w * 0.3], [s * w * 0.15 + bend, tip - w * 0.3 - G.mand.len * W], SW.D));
+      const len = G.rostrum.len * W, w = G.rostrum.w * W / 2, tip = headTop - len, side = rostrumSide(G.rostrum, W, H, headTop);
+      HE.push(pathEl(cubicBezierPath(side.concat([[w * 0.3, tip - w * 0.4], [-w * 0.3, tip - w * 0.4]], side.slice().reverse().map(p => [-p[0], p[1]])), false), SW.O, '#fff'));
+      HE.push(lineEl([0, headTop - len * 0.3], [0, tip + len * 0.12], SW.F));   // dorsal carina
+      for (const s of [-1, 1]) HE.push(lineEl([s * w * 0.35, tip - w * 0.3], [s * w * 0.15, tip - w * 0.3 - G.mand.len * W], SW.D));
     }
-    if (G.mand && !G.rostrum) {   // prognathous mandibles: closed sickles from the front corners, curving inward, tips crossing on some ground beetles
-      const len = G.mand.len * W, mw = G.mand.w * W, bx = hwAt(headTop + H * 0.1) * 0.78, by = headTop + H * 0.12;
+    if (G.mand && !G.rostrum) {   // prognathous mandibles (head-col-carabus, #25): stout sickles from the front corners that run
+      // forward and hook inward to tips at the midline (crossing on some ground beetles), leaving an open space between the
+      // jaws where the transverse labrum shows; never a closed leaf
+      const len = G.mand.len * W, mw = Math.max(G.mand.w * W, W * 0.12), by = headTop + H * 0.22, bx = hwAt(by) * 0.72;
+      const xo = bx + mw * 0.4, xi = Math.max(W * 0.08, bx - mw * 0.8);   // the jaw's base (under the capsule's front corner), outer and inner edge
+      mand = [];
       for (const s of [-1, 1]) {
-        const tipX = s * (G.mand.cross ? -0.05 * W : bx * (1 - G.mand.curve) * 0.5), tipY = headTop - len * (G.mand.cross ? 0.75 : 0.95);
-        const outer = [[s * (bx + mw * 0.5), by], [s * (bx + mw * 0.5), headTop - len * 0.45], [tipX + s * mw * 0.4, tipY + len * 0.2], [tipX, tipY]];
-        const inner = [[tipX, tipY], [tipX - s * mw * 0.1, tipY + len * 0.15], [s * (bx - mw * 0.5) * 0.85, headTop - len * 0.3], [s * (bx - mw * 0.5), by]];
+        const tipX = s * (G.mand.cross ? -0.05 : 0.02 + 0.04 * (1 - G.mand.curve)) * W, tipY = headTop - len;
+        const outer = [[s * xo, by], [s * xo * 1.2, headTop - len * 0.4], [s * xo * 0.9, headTop - len * 1.1], [tipX, tipY]];   // convex outer edge hooking in to the tip
+        const inner = [[tipX, tipY], [tipX + s * W * 0.1, tipY + len * 0.04], [s * xi, headTop - len * 0.55], [s * xi, by]];
         HE.push(pathEl(cubicBezierPath(outer.concat(inner.slice(1)), false), SW.D, '#fff'));
+        mand.push(sampleBezier(outer.concat(inner.slice(1)), 10));
         if (G.mand.serr) { const sp = sampleBezier(inner, 6); for (let k = 1; k < 5; k += 1) { const p = sp[k], q = sp[k + 1], d = sub(q, p), n = perp(d); HE.push(lineEl(p, add(p, mul(n, -s * 0.9 / (vlen(n) || 1) * mw * 0.35)), SW.F)); } }
       }
-      if (G.labrum) HE.push(pathEl(cubicBezierPath([[-W * 0.1, headTop + 1], [-W * 0.08, headTop - W * 0.05], [W * 0.08, headTop - W * 0.05], [W * 0.1, headTop + 1]], false), SW.D, '#fff'));   // labrum between the jaws
+      if (G.labrum) HE.push(pathEl(cubicBezierPath([[-xi * 0.85, headTop + 1], [-xi * 0.7, headTop - W * 0.06], [xi * 0.7, headTop - W * 0.06], [xi * 0.85, headTop + 1]], false), SW.D, '#fff'));   // transverse labrum between the jaw bases
     }
     if (G.mandTips) {   // hypognathous head: only the jaw tips show below the clypeus
       for (const s of [-1, 1]) HE.push(pathEl(cubicBezierPath([[s * W * 0.14, headTop + 1.5], [s * W * 0.13, headTop - G.mandTips * W * 0.5], [s * W * 0.07, headTop - G.mandTips * W], [s * W * 0.02, headTop - G.mandTips * W * 0.9]], false), SW.D));
@@ -3349,7 +3459,7 @@ function drawHead(C) {
     }
     if (type === 'beetle' || type === 'grasshopper' || type === 'cicada') L.thoraxHead.unshift(...HE); else L.thoraxHead.push(...HE);
     meta.headOutline = outlinePl;
-    meta.head = { W, H, top: headTop, cy: headCy, outline: outlinePl, eyes, ocelli: ocelli.map(p => [p[0], p[1], G.ocelli.r]), rostrum: G.rostrum ? { len: G.rostrum.len * W, w: G.rostrum.w * W } : null };
+    meta.head = { W, H, top: headTop, cy: headCy, outline: outlinePl, eyes, ocelli: ocelli.map(p => [p[0], p[1], G.ocelli.r]), rostrum: G.rostrum ? { len: G.rostrum.len * W, w: G.rostrum.w * W } : null, mand };
   }
 }
 
@@ -3507,11 +3617,12 @@ function drawLegs(C) {
 function drawAntennae(C) {
   const { L, meta, outerBox, P, B, thorax, abdomen, headTop, order } = C;
   {
-    const A = B.ant, R = ANT_POSES[A.pose];
+    const A = B.ant, R = A.poseR;
     const fit = order.antFit;   // the order's own antenna fit, if any (#23: a grasshopper's never shrinks the plate under 1.0, nor reaches past 1.3x the body box)
     const base = [P.headW * A.socket[0], headTop + P.headH * A.socket[1]];
     const ob = outerBox;   // everything drawn so far: body, legs and wings
     const wings = meta.wingOutlines = wingPolys;   // every outline makeWing (and the elytron) pushed for this plate, right side, body coordinates
+    const wingsHw = Math.max(0, ...wings.map(poly => Math.max(...poly.map(p => p[0]))));   // the covers' half width, the bound of a back sweep's tip
     // leg segments reaching ahead of the thorax (#7): every leg from the femur on, in every pose (spread and walking
     // forelegs reach ahead of the head too), the right side and the skewed left set (each pair rotated about its coxa
     // by its skew before mirroring), each with its half width
@@ -3543,6 +3654,7 @@ function drawAntennae(C) {
         if (maxX > fit.width * hw0) return 'fit';
       }
       for (const poly of wings) for (const p of G.pts) if (pointInPoly(p, poly)) return 'wing';   // the left side is the mirror image
+      if (R.back && G.tip[0] > ANT_BACK_OUT * wingsHw) return 'wide';   // a back sweep ends beside the covers (#25), not out past the legs
       if (legSegs.length) for (const ln of G.lines) for (let i = 0; i + 1 < ln.pl.length; i++) {
         const a = ln.pl[i], b = ln.pl[i + 1];
         if (a[1] > thorax.yTop && b[1] > thorax.yTop) continue;   // beside the body the antenna lies over the legs, as on a plate
@@ -3567,6 +3679,28 @@ function drawAntennae(C) {
       const shrink = straight && attempt >= ANT_SHRINK.from && (why === 'legs' || (why === 'cross' && G.rami));
       pose = { ang: rr(R.ang), curve: rr(R.curve), droop: rr(R.droop), lenK: why === 'fit' ? prev.lenK * 0.92 : shrink ? Math.max(ANT_SHRINK.floor, prev.lenK * ANT_SHRINK.step) : prev.lenK };
       if (why === 'cross') { pose.curve = Math.abs(pose.curve); A.hookSide = 1; }
+      if (R.back) {   // a sweep that leaves the head turned back (#25) is never straightened forward: a leg hit turns it further back
+        // at the root (clear of the forelegs ahead of the thorax) and turns less after it, so its run beside the body keeps its
+        // heading; a wing hit keeps the root and turns less (clear of the elytra), or once it barely turns, leaves the root further out;
+        // a tip out past ANT_BACK_OUT of the covers' half width ('wide') turns back sooner
+        // From half the attempts on, the pose's alt (R.alt): a steep root (clear of the forelegs) that turns outward (curve < 0)
+        // past the elytral shoulders, the droop bringing the tip back beside the elytra. Searched on a fixed grid (no rng) for
+        // the clear pose whose tip stays nearest the body, within ANT_BACK_OUT of the covers' half width; none, the fallback
+        if (R.alt && attempt >= 11) {
+          let best = null;
+          for (let ang = R.alt.ang[0]; ang <= R.alt.ang[1] + 1e-9; ang += 5) for (let curve = R.alt.curve[0]; curve <= R.alt.curve[1] + 1e-9; curve += 5)
+            for (let droop = R.alt.droop[0]; droop <= R.alt.droop[1] + 1e-9; droop += 10) {
+              const q = { ang, curve, droop, lenK: pose.lenK }, g = antennaGeom(A, base, P.headW, q);
+              if ((!best || g.tip[0] < best.G.tip[0]) && !antOk(g)) best = { pose: q, G: g };
+            }
+          if (best) { pose = best.pose; G = best.G; why = null; }
+          break;
+        }
+        if (why === 'legs') { const d = randRange(4, 10); pose.ang = Math.min(80, prev.ang + d); pose.curve = Math.max(0, prev.curve - d); }
+        if (why === 'wing') { pose.ang = prev.curve < 5 ? Math.max(0, prev.ang - randRange(4, 10)) : prev.ang; pose.curve = prev.curve * 0.7; }
+        if (why === 'wide') { pose.ang = prev.ang; pose.curve = prev.curve + randRange(4, 10); }   // turn back sooner
+        continue;
+      }
       if (ANT_HIT[why]) straight = true;
       if (straight) {   // back off a little from the midline after a cross, else on toward straight ahead (a fit or cross hit while straightened keeps the wing's bound)
         pose.ang = why === 'cross' ? Math.min(-45, prev.ang + randRange(5, 15)) : Math.max((ANT_HIT[why] || ANT_HIT.wing).minAng, Math.min(prev.ang, -45) - randRange(5, 20));
@@ -3580,17 +3714,20 @@ function drawAntennae(C) {
       // An order with antFit whose antenna still does not fit (a katydid's, longer than the body, #23) is laid forward
       // (ANT_FIT_FB) from full length and shortened until it fits, never curled into a stub.
       const fitFb = why === 'fit' && !!fit;
-      const fb = fitFb ? ANT_FIT_FB : ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
-      pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: 0, lenK: fitFb ? 1 : Math.min(pose.lenK, 0.8) };
+      const fb = R.back ? { ang: 75, curve: -45, droop: 30 } : fitFb ? ANT_FIT_FB : ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
+      pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: fb.droop || 0, lenK: fitFb ? 1 : Math.min(pose.lenK, 0.8) };
       A.hookSide = 1; G = antennaGeom(A, base, P.headW, pose);
-      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && fit)); k++) {
-        if (r === 'legs') { pose.ang = Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') pose.lenK *= ANT_SHRINK.fbStep; else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
+      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && fit) || ((r === 'wing' || r === 'wide') && R.back)); k++) {
+        if (r === 'wing') pose.curve -= 6;   // a back sweep into the elytra turns further out after its root
+        else if (r === 'wide') pose.droop += 6;   // ... and one ending out past the covers turns its tip back
+        else if (r === 'legs') { pose.ang = R.back ? Math.min(80, pose.ang + 4) : Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') pose.lenK *= ANT_SHRINK.fbStep; else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
         G = antennaGeom(A, base, P.headW, pose);
       }
     }
     L.antennae.push(...antennaEls(A, G, P.headW));
     G.pts.forEach(bb);
     meta.antennae = { kind: A.kind, pose: A.pose, club: A.club, pts: G.pts, lines: G.lines, tip: G.tip, base, attempts: attempt + 1, why, reasons, lenK: pose.lenK,
+      wTip: A.kind === 'filiform' ? G.w0 * A.taper : null,   // a filiform shaft's width at its tip (antennaEls tapers it from G.w0), for tests/check.js (#25)
       box0: { minX: ob.minX, maxX: ob.maxX, minY: ob.minY, maxY: ob.maxY }, fam: P.fam, headW: P.headW };   // box0: the plate box before the antennae, for the fit checks
     B.sig.push(A.kind, A.club || '-', A.pose, Math.round(A.nSeg / 4), A.kind === 'lamellate' ? A.lamellae.n : (A.kind === 'pectinate' || A.kind === 'bipectinate') ? Math.round(A.rami.n / 6) : 0,
       Math.round(pose.ang / 10), Math.round(pose.curve / 15), Math.round(G.len / P.headW * 2), Math.round(A.socket[0] * 20));
@@ -5067,7 +5204,7 @@ function assemblePlate(C) {
   const plateH = 600 - CAPTION_H;             // drawing is centred within the top 555px
   const s = Math.min((600 - 2 * margin) / bw, (plateH - 2 * margin) / bh, 1.3);
   const tx = 300, ty = plateH / 2 - (box.minY + box.maxY) / 2 * s;
-  meta.name = insectName(seed, type, P.variant, meta.fam);
+  meta.name = insectName(seed, type, P.variant, meta.fam, { mark: B.abd.mark, ant: B.ant.kind });
   meta.bodySig = B.sig.join(',');
   meta.scale = s;
   meta.bbox = { minX: -halfW, maxX: halfW, minY: box.minY, maxY: box.maxY };
@@ -5146,7 +5283,7 @@ function generatePart(seed, type, part, size) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName, dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H };
+  module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName, EPITHETS, dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H };
 }
 </script>
 
