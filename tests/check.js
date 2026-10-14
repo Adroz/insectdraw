@@ -62,6 +62,35 @@ const NEU = { r1rs: [2, 6], forkMin: 0.28, beside: 1.5, imMax: 0.15, poses: ['wa
 const neuSeen = { neuR1Rs: 0, neuMedia: 0, neuForeleg: 0 };   // lacewing plates each #19 check asserted on, for POST.neuSeen
 let neuSeenPlates = 0;   // lacewing plates in the run, counted by the seed loop whichever checks are selected
 const NEU_MIN = 20;   // lacewing plates a run needs before a #19 check that never ran fails rather than being reported (~8% of plates)
+// #51 Neuroptera families (docs/research-neuroptera-families.md, refs neu-myrmeleon, neu-libelloides, neu-mantispa,
+// neu-osmylus, neu-hemerobius), stated from the references rather than read from the engine's tables. fams: the families a
+// lacewing plate rolls; famsAll: a run with this many lacewing plates has drawn every family
+const NEU_FAMS = { fams: ['chrysopid', 'hemerobiid', 'myrmeleontid', 'ascalaphid', 'mantispid', 'osmylid'], famsAll: 60 };
+// ant: per family, the antenna kinds drawn, the club (clubbed kinds) and the drawn length in body lengths (head top to
+// abdomen tip): the hemerobiid's moniliform, the antlion's short gradual club, the owlfly's body-long antenna with an
+// abrupt club, the mantidfly's short antenna
+const NEU_ANT = { chrysopid: { kinds: ['filiform', 'moniliform'], len: [0.4, 1] }, hemerobiid: { kinds: ['moniliform'], len: [0.3, 0.65] },
+  myrmeleontid: { kinds: ['clubbed'], club: 'gradual', len: [0.12, 0.35] }, ascalaphid: { kinds: ['clubbed'], club: 'abrupt', len: [0.7, 1.1] },
+  mantispid: { kinds: ['moniliform', 'filiform'], len: [0.1, 0.35] }, osmylid: { kinds: ['filiform'], len: [0.3, 0.7] } };
+// abdWing: the abdomen's length over the forewing's (root to the farthest outline point): the antlion's 1.3-1.6
+// (the ticket's; neu-myrmeleon measures about 1.25 on a set specimen, a female or a short male), its tip past every wing by past body units;
+// every other family's wings longer than the abdomen (chrysopids 0.37-0.67 before #51)
+const NEU_ABD = { antlion: [1.25, 1.65], past: 2, other: [0.3, 0.9] };
+// pron: the pronotum's length (the pronotal collar, meta.bodyGenes.thorax.lines[0].t, a fraction of the thorax) on every
+// lacewing, the mantidfly's long prothorax (neu-mantispa: the prothorax as long as the pterothorax or longer) and every
+// other family's short one; the wing roots and the mid and hind coxae on the pterothorax behind it
+const NEU_PRON = { all: [0.1, 0.6], mantispid: [0.38, 0.6], other: [0.1, 0.25] };
+// raptor: the mantidfly's raptorial forelegs (neu-mantispa): the femur raised toward the head at least femur degrees from
+// straight out, the tibia folded back against it (at least fold degrees between the femur's and the tibia's directions),
+// the femur stout (at most stout times as long as its widest)
+const NEU_RAPTOR = { femur: -30, fold: 120, stout: 4.2 };
+// spots: the osmylid's stippled forewing spots (neu-osmylus): at least n spots of at least dots dots each, every dot inside
+// a wing outline; no other family's wings are spotted
+const NEU_SPOTS = { n: 3, dots: 4 };
+// eyes: the owlfly's and the mantidfly's large eyes (neu-libelloides, neu-mantispa): each eye at least eye of the head's
+// width across (meta.head: eyes[].rx, W), larger than a chrysopid's (0.22-0.28)
+const NEU_EYES = { big: ['ascalaphid', 'mantispid'], eye: 0.3 };
+const neuFamRun = {};   // family -> lacewing plates of it in the run, for POST.neuFamilies
 const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 // #22 grasshopper, from the references (orth-grasshopper: the hindwing folds under the tegmen, the tegmina overlap along
 // the inner margin and their apices part; the archedictyon is rows of near-rectangular cells; thorax-orth-grasshopper and
@@ -89,7 +118,29 @@ const ORTH_MIN = 20;   // grasshopper plates a run needs before a #22 check that
 // (degrees, 0 straight out, negative toward the head): forward of the first bound, back of the second, out between; at
 // least two classes each on poseShare of the cicada plates; midline: no forewing point nearer the midline than this
 const CIC = { sweep: [30, 45], tol: 1, scale: 0.95, trunks: ['ScR', 'M', 'CuA', 'CuP'], stem: 'MCu', heavy: 2.5, femur: 3, teeth: 2, tibia: [-60, 0], poseShare: 0.15, midline: 2 };
-const cicSeen = { cicSweep: 0, cicScale: 0, cicTrunks: 0, cicForeleg: 0, cicHindRoot: 0 };   // cicada plates each #26 check asserted on, for POST.cicSeen
+// #49 cicada wing set (docs/research-cicada-habitus.md, refs hab-cic-*): a set specimen spreads its tegmina (#26's
+// 30-45 degrees), a half-open one holds them at 50-66, and at rest (the roofed set, the pose of most cicada photographs)
+// the tegmina lie back over the abdomen, the root-to-apex line within 10 degrees of straight back, their inner (claval)
+// margins meeting along the midline and the hindwings hidden under them. sweep: the forewing's root-to-apex line per set
+// (CIC.tol either side); roofMid: on a roofed plate the tegmen's inner margin lies within this of the midline beside the
+// whole abdomen and no nearer than roofIn (it meets its mirror image, never crosses it), its outer margin covers the
+// abdomen's side; share: every set, forewing shape, family and marking on at least this share of a run's cicadas,
+// asserted once the run has shareMin of them (a 300-seed run has about 25, too few to hold a 1-in-4 kind to 15%)
+const CIC_SET = { sweep: { spread: [30, 45], half: [50, 66], roofed: [80, 100] }, roofMid: 1.5, roofIn: 0.3, share: 0.15, shareMin: 100 };
+// #49 forewing shape (refs: Cicadettini tegmina about 3x as long as wide, narrow with a pointed apex; Platypleurini and
+// the broad Cicadini 2-2.6x, the apex rounded): on a spread or half-open plate the forewing's depth across its
+// root-apex line, per that line's length, at most narrow[1] on a narrow wing and at least broad[0] on a broad one
+const CIC_SHAPE = { narrow: [0, 0.33], broad: [0.35, 1] };
+// #49 family habitus (docs/research-cicada-habitus.md): cicadine abdomen at least `broad` x the thorax's widest, with
+// the tymbal covers drawn at the abdomen base (within `tymbalT` of its length) and reaching past its outline;
+// cicadettine abdomen at most `slender` x the thorax's widest and the head at most `head` x it; platypleurine pronotal
+// collar (the thorax ahead of `collarT` of its length) flared to at least `flange` x the head's half width
+const CIC_HAB = { fams: ['cicadine', 'cicadettine', 'platypleurine'], broad: 0.9, slender: 0.9, head: 0.95, flange: 1.12, collarT: 0.45, tymbalT: 0.3 };
+// #49 mesonotum markings (refs: the paired obconical spots and the M mark of the cicada mesonotum): every mark a closed
+// hatched shape inside the thorax outline (in by `in`), behind the pronotal collar and ahead of the cruciform elevation
+const CIC_MARKS = { kinds: ['none', 'obconic', 'M', 'both'], in: 0.5 };
+const cicSet = { sets: {}, shapes: {}, fams: {}, marks: {} };   // over the run, for POST.cicShares
+const cicSeen = { cicSweep: 0, cicScale: 0, cicTrunks: 0, cicForeleg: 0, cicHindRoot: 0, cicWingSet: 0, cicWingShape: 0, cicHabitus: 0, cicMarks: 0 };   // cicada plates each #26 check asserted on, for POST.cicSeen
 let cicSeenPlates = 0;   // cicada plates in the run, counted by the seed loop whichever checks are selected
 const CIC_MIN = 20;   // cicada plates a run needs before a #26 check that never ran fails, and before the run medians are asserted (~8% of plates)
 const cicRun = { scales: [], tibia: { forward: 0, out: 0, back: 0 } };   // over the run, for POST.cicScale / POST.cicForeleg
@@ -250,7 +301,7 @@ const ELY_SHAPE = { par: 0.9, oval: { at: [0.28, 0.62], ends: 0.88 }, round: 0.7
 //   units of its outline), every hatch segment's middle inside a region, and the hatch lines ELY_PITCH px apart at plate
 //   scale on the default and the device plate (measured across the lines, which are parallel on one elytron)
 const ELY_PATTERNS = ['none', 'spots', 'bands', 'stripe', 'dark'], ELY_IN = 0.6;
-// - the pronotal pattern (meta.bodyGenes.thorax.pron, on bodySig as 'pp' + its initial; the ladybird's spots and dark
+// - the pronotal pattern (meta.bodyGenes.thorax.pronPat, on bodySig as 'pp' + its initial; the ladybird's spots and dark
 //   disc, a leaf beetle's vittae): none, disc (one dark disc), sides (dark sides round a pale disc, two regions), spots
 //   (two), vittae (two), drawn as hatched shapes (meta.thorax.pattern) inside the pronotum's outline (meta.thorax.profile,
 //   within ELY_IN), the hatch ELY_PITCH px apart at plate scale on the default and the device plate
@@ -425,7 +476,11 @@ const PRE = {
       if (o.elytra !== undefined && (!o.elytra || !o.elytra.styles || !range2(o.elytra.pitch) || !range2(o.elytra.dash) || Object.values(o.elytra.fams || {}).some(e => e.len !== undefined && !range2(e.len)))) f('elytra is not { styles, pitch: [min, max], dash: [min, max], fams?: { fam: { len?: [min, max], truncate?, outlines?, square? } } }');
       if (o.pronotum !== undefined && (!o.pronotum || !range2(o.pronotum.wl) || !range2(o.pronotum.ely))) f('pronotum is not { wl: [min, max], ely: [min, max] }: ' + JSON.stringify(o.pronotum));
       if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
-      if (o.wingSet !== undefined && (!o.wingSet || !range2(o.wingSet.fw) || !range2(o.wingSet.hw) || Object.values(o.wingSet.fams || {}).some(w => (w.fw && !range2(w.fw)) || (w.hw && !range2(w.hw))))) f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } }: ' + JSON.stringify(o.wingSet));
+      // #51: or named sets { name: { w, fw, hw } } with abdWing, the family's sets replacing the order's
+      const setsBad = w => !w.sets || !range2(w.abdWing) || Object.values(w.sets).some(v => !(v.w > 0) || !range2(v.fw) || !range2(v.hw));
+      if (o.wingSet !== undefined && (!o.wingSet || (o.wingSet.sets ? setsBad(o.wingSet) || Object.values(o.wingSet.fams || {}).some(w => (w.sets || w.abdWing) && setsBad(Object.assign({}, o.wingSet, w)))
+        : !range2(o.wingSet.fw) || !range2(o.wingSet.hw) || Object.values(o.wingSet.fams || {}).some(w => (w.fw && !range2(w.fw)) || (w.hw && !range2(w.hw))))))
+        f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } } nor { abdWing, sets: { set: { w, fw, hw } }, fams? }: ' + JSON.stringify(o.wingSet));
       if (o.antFit !== undefined && !(o.antFit && o.antFit.scale > 0 && o.antFit.width > 0)) f('antFit is not { scale, width } (both > 0): ' + JSON.stringify(o.antFit));
       if (typeof o.wings !== 'function') f('wings is not a function');
       const nb = namesBad(o.names); if (nb) f('names: ' + nb);
@@ -440,7 +495,7 @@ const PRE = {
         for (const k of P_FIELDS) if (!(typeof P[k] === 'number' && P[k] > 0)) f('proportions leaves P.' + k + ' unset: ' + P[k]);
         for (const k of ['thoraxAnchors', 'abdAnchors']) if (!Array.isArray(P[k]) || P[k].length < 3 || P[k].some(a => !Array.isArray(a) || a.length !== 2)) f('proportions leaves P.' + k + ' unset or malformed');
       }
-      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}],
+      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['famScale', o.famScale || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}],
         ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
@@ -516,8 +571,11 @@ const CHECKS = {
     if (!roots) fail('no registry entry for the type');
     const th = meta.thorax;
     if (!th.profile || th.profile.length < 3) fail('no thorax profile');
-    if (roots && JSON.stringify(th.wingRoots) !== JSON.stringify(roots)) fail('meta.thorax.wingRoots is not the registry\'s: ' + JSON.stringify(th.wingRoots));
-    for (const t of roots || []) {
+    // #51 an entry with a prothorax gene keeps its roots on the pterothorax behind the rolled pronotum (T.pron, laid out for
+    // T.pron0): a root at t sits at pron + (t - pron0)(1 - pron)/(1 - pron0)
+    const T = meta.bodyGenes.thorax, want = reg && reg.prothorax ? roots.map(t => T.pron + (t - T.pron0) * (1 - T.pron) / (1 - T.pron0)) : roots;
+    if (want && th.wingRoots.some((t, i) => Math.abs(t - want[i]) > 1e-9) || (want && th.wingRoots.length !== want.length)) fail('meta.thorax.wingRoots is not the registry\'s: ' + JSON.stringify(th.wingRoots));
+    for (const t of th.wingRoots || []) {
       const hw = profHw(th.profile, th.yTop + t * (th.yBot - th.yTop), 0.11);
       if (hw <= 4) fail('thorax too narrow at a wing root: hw ' + hw.toFixed(1) + ' at t=' + t);
     }
@@ -976,7 +1034,7 @@ const CHECKS = {
   // rolled and drawn is walking or spread (never raised), and the femur (trochanter to femur tip, meta.legs[0].pts) points
   // out from the body no more than NEU.femurMin degrees toward the head; on the right legs and the skewed left set.
   neuForeleg(meta, svg, fail) {
-    if (meta.type !== 'lacewing') return;
+    if (meta.type !== 'lacewing' || meta.fam === 'mantispid') return;   // #51: the mantidfly's are raptorial (neuRaptorial)
     neuSeen.neuForeleg++;
     const fr = meta.legs.find(l => l.pair === 'front'), collar = meta.bodyGenes.thorax.lines[0];
     if (!fr || !collar) return fail('lacewing plate has no front leg / pronotal collar');
@@ -987,6 +1045,69 @@ const CHECKS = {
       const a = Math.atan2(pts[3][1] - pts[2][1], pts[3][0] - pts[2][0]) * 180 / Math.PI;
       if (a < NEU.femurMin) fail('lacewing' + label + ' fore femur raised more than ' + (-NEU.femurMin) + ' degrees toward the head: ' + (-a).toFixed(0));
     }
+  },
+  // #51 the lacewing family (P.fam, meta.fam) is one of the Neuroptera families the plate draws, and on the bodySig
+  neuFamily(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    neuFamRun[meta.fam] = (neuFamRun[meta.fam] || 0) + 1;
+    if (!NEU_FAMS.fams.includes(meta.fam)) return fail('lacewing family not one of ' + NEU_FAMS.fams.join(' / ') + ': ' + meta.fam);
+    if (!meta.bodySig.split(',').includes(meta.fam)) fail('lacewing family ' + meta.fam + ' not on the bodySig');
+  },
+  // #51 the lacewing's antenna is its family's (NEU_ANT): kind, club, and drawn length against the body
+  neuAntenna(meta, svg, fail) {
+    if (meta.type !== 'lacewing' || !NEU_ANT[meta.fam]) return;
+    const want = NEU_ANT[meta.fam], an = meta.antennae, A = meta.bodyGenes.ant;
+    const bl = meta.abdomen.yBot - meta.head.top, len = A.len * an.lenK / bl;
+    if (!want.kinds.includes(an.kind)) fail(meta.fam + ' antenna not ' + want.kinds.join(' / ') + ': ' + an.kind);
+    if (want.club && an.club !== want.club) fail(meta.fam + ' antenna club not ' + want.club + ': ' + an.club);
+    if (len < want.len[0] || len > want.len[1]) fail(meta.fam + ' antenna ' + len.toFixed(2) + ' body lengths, not ' + want.len.join('-'));
+  },
+  // #51 the abdomen against the forewing (NEU_ABD): the antlion's reaches past the wings
+  neuAbdomen(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    const w = meta.wingOutlines.slice().sort((a, b) => a[0][1] - b[0][1]), fore = w[0];
+    const foreL = Math.max(...fore.map(p => dist(p, fore[0]))), abdL = meta.abdomen.yBot - meta.abdomen.yTop, r = abdL / foreL;
+    const band = meta.fam === 'myrmeleontid' ? NEU_ABD.antlion : NEU_ABD.other;
+    if (r < band[0] || r > band[1]) fail(meta.fam + ' abdomen ' + r.toFixed(2) + ' forewing lengths, not ' + band.join('-'));
+    const wingBot = Math.max(...w.flat().map(p => p[1]));
+    if (meta.fam === 'myrmeleontid' && !(meta.abdomen.yBot > wingBot + NEU_ABD.past)) fail('antlion abdomen tip does not reach past the wings: tip ' + meta.abdomen.yBot.toFixed(1) + ', wings to ' + wingBot.toFixed(1));
+  },
+  // #51 the pronotum's length (NEU_PRON): the mantidfly's long prothorax, the wings and the mid and hind legs behind it
+  neuPronotum(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    const t = meta.bodyGenes.thorax.lines[0].t, th = meta.thorax, yC = th.yTop + t * (th.yBot - th.yTop);
+    const band = meta.fam === 'mantispid' ? NEU_PRON.mantispid : NEU_PRON.other;
+    if (t < NEU_PRON.all[0] || t > NEU_PRON.all[1] || t < band[0] || t > band[1]) fail(meta.fam + ' pronotum ' + t.toFixed(2) + ' of the thorax, not ' + band.join('-'));
+    for (const r of th.wingRoots) if (!(r > t)) fail(meta.fam + ' wing root at ' + r.toFixed(2) + ' on the pronotum (collar ' + t.toFixed(2) + ')');
+    for (const leg of meta.legs) if (leg.pair !== 'front' && !(leg.y > yC)) fail(meta.fam + ' ' + leg.pair + ' coxa on the pronotum');
+  },
+  // #51 the mantidfly's raptorial forelegs (NEU_RAPTOR), on the right legs and the skewed left set
+  neuRaptorial(meta, svg, fail) {
+    if (meta.type !== 'lacewing' || meta.fam !== 'mantispid') return;
+    const fr = meta.legs.find(l => l.pair === 'front'), deg = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI;
+    for (const [label, pts] of [['', fr.pts], [' skewed', skewedPts(fr)]]) {
+      const aF = deg(pts[2], pts[3]), aT = deg(pts[3], pts[4]), fold = Math.abs(((aT - aF) % 360 + 540) % 360 - 180);
+      if (aF > NEU_RAPTOR.femur) fail('mantidfly' + label + ' fore femur not raised toward the head: ' + aF.toFixed(0) + ' degrees');
+      if (fold < NEU_RAPTOR.fold) fail('mantidfly' + label + ' fore tibia not folded back on the femur: ' + fold.toFixed(0) + ' degrees');
+    }
+    if (fr.femLen / fr.femW > NEU_RAPTOR.stout) fail('mantidfly fore femur not stout: ' + (fr.femLen / fr.femW).toFixed(2) + 'x as long as wide');
+  },
+  // #51 the osmylid's stippled wing spots (NEU_SPOTS, meta.wingStats.spots: { dots: [[x, y] body coords] } per spot)
+  neuSpots(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    const spots = (meta.wingStats && meta.wingStats.spots) || [];
+    if (meta.fam !== 'osmylid') { if (spots.length) fail(meta.fam + ' wings carry osmylid spots'); return; }
+    if (spots.length < NEU_SPOTS.n) fail('osmylid forewing has ' + spots.length + ' stippled spots, want ' + NEU_SPOTS.n + '+');
+    for (const sp of spots) {
+      if (sp.dots.length < NEU_SPOTS.dots) { fail('osmylid wing spot of ' + sp.dots.length + ' dots'); break; }
+      if (sp.dots.some(p => !meta.wingOutlines.some(o => inPoly(p, o)))) { fail('osmylid wing spot dot outside the wings'); break; }
+    }
+  },
+  // #51 the owlfly's and the mantidfly's large eyes (NEU_EYES)
+  neuEyes(meta, svg, fail) {
+    if (meta.type !== 'lacewing' || !NEU_EYES.big.includes(meta.fam)) return;
+    const h = meta.head, k = Math.max(...h.eyes.map(e => 2 * e.rx)) / h.W;
+    if (k < NEU_EYES.eye) fail(meta.fam + ' eye ' + k.toFixed(2) + ' of the head width, want ' + NEU_EYES.eye + '+');
   },
   // #22 the folded hindwing fan (meta.orth.fan, right side, body coordinates) never stands out past the costa of its
   // tegmen (meta.orth.tegmen): at every height the fan reaches no further out than the tegmen's outer edge there, and
@@ -1074,14 +1195,16 @@ const CHECKS = {
     else if (!meta.bodySig.split(',').includes('lc' + kind[0])) fail('grasshopper lateral carina kind ' + kind + ' not in the bodySig');
   },
   // #26 the forewing's sweep: the line from its root to the outline point furthest from it (the apex) lies CIC.sweep
-  // degrees below the horizontal (set specimens; the audited plates held them at 15-25 and the plates came out at 0.81)
+  // degrees below the horizontal (set specimens; the audited plates held them at 15-25 and the plates came out at 0.81);
+  // since #49 the band is the wing set's (CIC_SET.sweep; spread is #26's CIC.sweep)
   cicSweep(meta, svg, fail) {
     if (meta.type !== 'cicada') return;
     cicSeen.cicSweep++;
-    const { fore } = cicWings(meta), root = fore[0];
+    const { fore } = cicWings(meta), root = fore[0], set = meta.cicada && meta.cicada.set, band = CIC_SET.sweep[set];
+    if (!band) return fail('cicada plate has no known wing set on meta.cicada: ' + set);
     let apex = root; for (const p of fore) if (dist(p, root) > dist(apex, root)) apex = p;
     const a = Math.atan2(apex[1] - root[1], apex[0] - root[0]) * 180 / Math.PI;
-    if (a < CIC.sweep[0] - CIC.tol || a > CIC.sweep[1] + CIC.tol) fail('cicada forewing sweep outside ' + CIC.sweep.join('-') + ' degrees below the horizontal: ' + a.toFixed(1));
+    if (a < band[0] - CIC.tol || a > band[1] + CIC.tol) fail('cicada forewing sweep outside ' + band.join('-') + ' degrees below the horizontal (' + set + '): ' + a.toFixed(1));
   },
   // #26 the plate scale, collected for POST.cicScale (the run's median)
   cicScale(meta) {
@@ -1123,6 +1246,7 @@ const CHECKS = {
   // of the forewing base), and the forewing's clavus off the midline (CIC.midline)
   cicHindRoot(meta, svg, fail) {
     if (meta.type !== 'cicada') return;
+    if (meta.cicada && meta.cicada.set === 'roofed') return;   // #49: the hindwing is hidden under the roofed tegmina (cicWingSet)
     cicSeen.cicHindRoot++;
     const { fore, hind } = cicWings(meta), fr = fore[0], hr = hind[0];
     if (!(hr[1] > fr[1])) fail('cicada hindwing root not behind the forewing root: y ' + hr[1].toFixed(1) + ' vs ' + fr[1].toFixed(1));
@@ -1131,6 +1255,88 @@ const CHECKS = {
     if (ahead.length) fail('cicada hindwing edge ahead of its root outside the forewing: ' + ahead.length + ' points, up to ' + Math.max(...ahead.map(p => hr[1] - p[1])).toFixed(1) + ' ahead');
     const mx = Math.min(...fore.map(p => p[0]));
     if (mx < CIC.midline) fail('cicada forewing within ' + CIC.midline + ' of the midline: x ' + mx.toFixed(1));
+  },
+  // #49 the wing set: meta.cicada.set is one of CIC_SET.sweep's (counted for POST.cicShares). A roofed plate draws the
+  // forewing alone (the hindwing hidden under it: any hindwing outline lies wholly inside the forewing's), and wherever
+  // the abdomen runs behind the thorax its side is covered: the tegmen's span at that y reaches from within roofMid of
+  // the midline (never nearer than roofIn) out past the abdomen's edge
+  cicWingSet(meta, svg, fail) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicWingSet++;
+    const set = meta.cicada && meta.cicada.set;
+    if (!CIC_SET.sweep[set]) return fail('cicada plate has no known wing set on meta.cicada: ' + set);
+    cicSet.sets[set] = (cicSet.sets[set] || 0) + 1;
+    if (set !== 'roofed') return;
+    const { fore, hind } = cicWings(meta);
+    if (hind && hind.some(p => !inPoly(p, fore))) fail('roofed cicada hindwing shows from under the tegmen');
+    const ab = meta.abdomen.profile.filter(([y, hw]) => y > meta.thorax.yBot + 2 && hw > 0.5);
+    if (!ab.length) return fail('roofed cicada has no abdomen behind the thorax');
+    let worst = null;
+    for (const [y, hw] of ab) {
+      const lo = leftmostAt(fore, y), hi = rightmostAt(fore, y);
+      const why = lo === null ? 'no tegmen' : lo > CIC_SET.roofMid ? 'inner margin at x ' + lo.toFixed(1) : lo < CIC_SET.roofIn ? 'inner margin over the midline at x ' + lo.toFixed(1) : hi < hw ? 'outer margin ' + hi.toFixed(1) + ' inside the abdomen edge ' + hw.toFixed(1) : null;
+      if (why) { worst = 'y ' + y.toFixed(1) + ': ' + why; break; }
+    }
+    if (worst) fail('roofed cicada tegmen does not cover the abdomen along the midline: ' + worst);
+  },
+  // #49 the forewing's shape: on a spread or half-open plate its depth across the root-apex line per that line's length
+  // within the shape's CIC_SHAPE band (a roofed tegmen is folded over the body, so its outline is not the wing's)
+  cicWingShape(meta, svg, fail) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicWingShape++;
+    const shape = meta.cicada && meta.cicada.shape, band = CIC_SHAPE[shape];
+    if (!band) return fail('cicada plate has no known forewing shape on meta.cicada: ' + shape);
+    cicSet.shapes[shape] = (cicSet.shapes[shape] || 0) + 1;
+    if (meta.cicada.set === 'roofed') return;
+    const { fore } = cicWings(meta), root = fore[0];
+    let apex = root; for (const p of fore) if (dist(p, root) > dist(apex, root)) apex = p;
+    const L = dist(apex, root), u = [(apex[0] - root[0]) / L, (apex[1] - root[1]) / L];
+    const across = fore.map(p => (p[1] - root[1]) * u[0] - (p[0] - root[0]) * u[1]), r = (Math.max(...across) - Math.min(...across)) / L;
+    if (r < band[0] || r > band[1]) fail('cicada ' + shape + ' forewing depth / length ' + r.toFixed(3) + ' outside ' + band.join('-'));
+  },
+  // #49 the family habitus, read off the drawn outlines (meta.thorax.profile, meta.abdomen.profile, meta.head) and the
+  // tymbal covers (meta.cicada.tymbals, right side, body coordinates), against CIC_HAB
+  cicHabitus(meta, svg, fail) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicHabitus++;
+    const c = meta.cicada || {}, fam = c.fam;
+    if (!CIC_HAB.fams.includes(fam)) return fail('cicada plate has no known family on meta.cicada: ' + fam);
+    cicSet.fams[fam] = (cicSet.fams[fam] || 0) + 1;
+    const th = meta.thorax, thW = maxHw(th.profile), abW = maxHw(meta.abdomen.profile), headHw = meta.head.W / 2;
+    const ab0 = meta.abdomen.profile[0][0], abLen = meta.abdomen.profile[meta.abdomen.profile.length - 1][0] - ab0;
+    const ty = c.tymbals || null;
+    if (fam === 'cicadine') {
+      if (abW < CIC_HAB.broad * thW) fail('cicadine abdomen not broad: ' + (abW / thW).toFixed(2) + 'x the thorax (want >= ' + CIC_HAB.broad + ')');
+      if (!ty || ty.length < 4) fail('cicadine plate has no tymbal cover');
+      else {
+        if (ty.some(p => p[1] < ab0 - 2 || p[1] > ab0 + CIC_HAB.tymbalT * abLen)) fail('cicadine tymbal cover outside the abdomen base');
+        if (!ty.some(p => p[0] > profHw(meta.abdomen.profile, p[1]) + 1)) fail('cicadine tymbal cover does not show past the abdomen outline');
+      }
+    } else if (ty && ty.length) fail(fam + ' plate draws tymbal covers (cicadine only)');
+    if (fam === 'cicadettine') {
+      if (abW > CIC_HAB.slender * thW) fail('cicadettine abdomen not slender: ' + (abW / thW).toFixed(2) + 'x the thorax (want <= ' + CIC_HAB.slender + ')');
+      if (headHw > CIC_HAB.head * thW) fail('cicadettine head not narrow: ' + (headHw / thW).toFixed(2) + 'x the thorax (want <= ' + CIC_HAB.head + ')');
+    }
+    if (fam === 'platypleurine') {
+      const yC = th.yTop + CIC_HAB.collarT * (th.yBot - th.yTop), fl = maxHw(th.profile.filter(p => p[0] <= yC));
+      if (fl < CIC_HAB.flange * headHw) fail('platypleurine pronotal collar not flared: ' + (fl / headHw).toFixed(2) + 'x the head half width (want >= ' + CIC_HAB.flange + ')');
+    }
+  },
+  // #49 the mesonotum markings (meta.cicada.marks: { kind, polys }, polys closed, body coordinates, both sides): the kind
+  // one of CIC_MARKS.kinds (counted for POST.cicShares), every shape inside the thorax outline, behind the collar
+  // (meta.cicada.collarY) and ahead of the cruciform elevation (the scutellum's front)
+  cicMarks(meta, svg, fail) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicMarks++;
+    const mk = meta.cicada && meta.cicada.marks;
+    if (!mk || !CIC_MARKS.kinds.includes(mk.kind)) return fail('cicada plate has no known mesonotum marking on meta.cicada: ' + (mk && mk.kind));
+    cicSet.marks[mk.kind] = (cicSet.marks[mk.kind] || 0) + 1;
+    if ((mk.kind === 'none') !== !mk.polys.length) fail('cicada marking ' + mk.kind + ' with ' + mk.polys.length + ' shapes');
+    const yS = Math.min(...meta.thorax.scutellum.map(p => p[1]));
+    for (const poly of mk.polys) for (const p of poly) {
+      if (Math.abs(p[0]) > profHw(meta.thorax.profile, p[1]) - CIC_MARKS.in) return fail('cicada marking outside the thorax outline at ' + p.map(v => v.toFixed(1)));
+      if (p[1] < meta.cicada.collarY || p[1] > yS) return fail('cicada marking outside the mesonotum (collar ' + meta.cicada.collarY.toFixed(1) + ', cruciform ' + yS.toFixed(1) + '): y ' + p[1].toFixed(1));
+    }
   },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {
@@ -1287,7 +1493,7 @@ const CHECKS = {
   // #53: the pronotal pattern (PRON_PATTERNS) as hatched shapes inside the pronotum
   pronotumPattern(meta, svg, fail, { dev }) {
     if (meta.type !== 'beetle') return;
-    const kind = meta.bodyGenes.thorax.pron;
+    const kind = meta.bodyGenes.thorax.pronPat;
     if (!(kind in PRON_PATTERNS)) return fail('pronotal pattern gene ' + kind + ' is not one of ' + Object.keys(PRON_PATTERNS).join('/'));
     if (!meta.bodySig.split(',').includes('pp' + kind[0])) fail('pronotal pattern missing from bodySig');
     tally('pronPattern', kind);
@@ -1666,6 +1872,12 @@ const POST = {
     console.log('#19 lacewing checks asserted on (of ' + n + ' lacewing plates):', Object.keys(neuSeen).filter(k => ran.has(k)).map(k => k + ' ' + neuSeen[k]).join(', ') +
       (n < NEU_MIN ? '; too few lacewing plates (' + n + ' < ' + NEU_MIN + ') to require every check' : ''));
   },
+  // #51 every Neuroptera family is drawn once the run has NEU_FAMS.famsAll lacewing plates
+  neuFamilies(fail) {
+    const n = Object.values(neuFamRun).reduce((a, b) => a + b, 0), missing = NEU_FAMS.fams.filter(f => !neuFamRun[f]);
+    if (n >= NEU_FAMS.famsAll && missing.length) fail('lacewing families never drawn in ' + n + ' lacewing plates: ' + missing.join(', '), 'lacewing');
+    console.log('#51 lacewing families:', JSON.stringify(neuFamRun));
+  },
   // the #22 checks assert only on grasshopper plates: once the run has ORTH_MIN of them every selected one must have run
   orthSeen(fail) {
     const n = orthSeenPlates, idle = Object.keys(orthSeen).filter(k => ran.has(k) && !orthSeen[k]);
@@ -1702,6 +1914,17 @@ const POST = {
     const t = cicRun.tibia, n = t.forward + t.out + t.back, held = Object.keys(t).filter(k => t[k] >= CIC.poseShare * n);
     if (n >= CIC_MIN && held.length < 2) fail('cicada fore tibia held one way: ' + JSON.stringify(t) + ' (want two classes on ' + CIC.poseShare + ' of the plates)', 'cicada');
     console.log('#26 cicada fore tibia classes:', JSON.stringify(t));
+  },
+  // #49 the run's cicadas: every wing set, forewing shape, family and marking on at least CIC_SET.share of them, once
+  // the run has CIC_SET.shareMin
+  cicShares(fail) {
+    for (const [what, counts, kinds] of [['wing sets', cicSet.sets, Object.keys(CIC_SET.sweep)], ['forewing shapes', cicSet.shapes, Object.keys(CIC_SHAPE)], ['families', cicSet.fams, CIC_HAB.fams], ['mesonotum markings', cicSet.marks, CIC_MARKS.kinds]]) {
+      const n = Object.values(counts).reduce((a, b) => a + b, 0);
+      if (!n) continue;   // its check was not selected
+      const thin = kinds.filter(k => (counts[k] || 0) < CIC_SET.share * n);
+      if (n >= CIC_SET.shareMin && thin.length) fail('cicada ' + what + ' under ' + CIC_SET.share + ' of the plates: ' + thin.join(', ') + ' ' + JSON.stringify(counts), 'cicada');
+      console.log('#49 cicada ' + what + ':', JSON.stringify(counts) + (n < CIC_SET.shareMin ? ' (too few to assert, < ' + CIC_SET.shareMin + ')' : ''));
+    }
   },
   // the #26 checks assert only on cicada plates: once the run has CIC_MIN of them every selected one must have run
   cicSeen(fail) {
@@ -1754,7 +1977,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
