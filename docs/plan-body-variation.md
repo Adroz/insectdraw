@@ -406,7 +406,7 @@ rules for all of them:
    length relative to the wing, pronotum length (0.1–0.6 of the thorax), antenna kind per family (the `clubbed` kind
    exists), foreleg family. Wing-outline changes (nemopterid ribbons) are out of scope. #19 corrects the forelegs.
    **Done (#51, 2026-10-14).** The six families, with a wing set gene (spread / forward / swept) and the antlion's
-   abdomen at 1.2–1.6 forewings (the reference measures ~1.25); rules and references in
+   abdomen at 1.3–1.6 forewings (the reference measures ~1.25); rules and references in
    `docs/research-neuroptera-families.md`, checks `neuFamily`, `neuAntenna`, `neuAbdomen`, `neuPronotum`,
    `neuRaptorial`, `neuEyes`, `neuSpots`, `neuFamilies`. `tests/perceptual.js 60 --type lacewing`, before (backlog
    f1abafd, after #19) → after: seeds 1–60 min 8.30 (13,24) → 10.20 (37,57), sheet9 11.77 → 17.42; seeds 61–120

@@ -72,10 +72,10 @@ const NEU_FAMS = { fams: ['chrysopid', 'hemerobiid', 'myrmeleontid', 'ascalaphid
 const NEU_ANT = { chrysopid: { kinds: ['filiform', 'moniliform'], len: [0.4, 1] }, hemerobiid: { kinds: ['moniliform'], len: [0.3, 0.65] },
   myrmeleontid: { kinds: ['clubbed'], club: 'gradual', len: [0.12, 0.35] }, ascalaphid: { kinds: ['clubbed'], club: 'abrupt', len: [0.7, 1.1] },
   mantispid: { kinds: ['moniliform', 'filiform'], len: [0.1, 0.35] }, osmylid: { kinds: ['filiform'], len: [0.3, 0.7] } };
-// abdWing: the abdomen's length over the forewing's (root to the farthest outline point): the antlion's 1.2-1.6
-// (neu-myrmeleon measures about 1.25 on a set specimen; the ticket's 1.3-1.6), its tip past every wing by past body units;
+// abdWing: the abdomen's length over the forewing's (root to the farthest outline point): the antlion's 1.3-1.6
+// (the ticket's; neu-myrmeleon measures about 1.25 on a set specimen, a female or a short male), its tip past every wing by past body units;
 // every other family's wings longer than the abdomen (chrysopids 0.37-0.67 before #51)
-const NEU_ABD = { antlion: [1.15, 1.65], past: 2, other: [0.3, 0.9] };
+const NEU_ABD = { antlion: [1.25, 1.65], past: 2, other: [0.3, 0.9] };
 // pron: the pronotum's length (the pronotal collar, meta.bodyGenes.thorax.lines[0].t, a fraction of the thorax) on every
 // lacewing, the mantidfly's long prothorax (neu-mantispa: the prothorax as long as the pterothorax or longer) and every
 // other family's short one; the wing roots and the mid and hind coxae on the pterothorax behind it

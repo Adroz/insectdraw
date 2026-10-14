@@ -2398,10 +2398,8 @@ const ORDERS = {
         abdAnchors: [[0, 0.8], [0.3, 1], [0.7, 0.85], [0.92, 0.5], [1, 0]],
         antenna: 'filiform', antLen: 110 * jitter(0.15) });
       // #51 Neuroptera families (docs/research-neuroptera-families.md): the chrysopid as before, twice as likely as each other
-      // family; a family's habitus scales the rolled sizes (no rng)
+      // family; the entry's habitus then scales the rolled sizes (rollProportions)
       P.fam = pick(['chrysopid', 'chrysopid', 'hemerobiid', 'myrmeleontid', 'ascalaphid', 'mantispid', 'osmylid']);
-      const K = ORDERS.lacewing.habitus[P.fam];
-      for (const k in K) P[k] *= K[k];
     },
     // habitus (#51): per family, factors on the proportions' rolled sizes (docs/research-neuroptera-families.md). The
     // hemerobiid is the small brown lacewing (every length x0.75, so the plate's 1.3 scale cap leaves it small); the antlion's
@@ -2457,12 +2455,12 @@ const ORDERS = {
     // weight w: theta, the forewing's angle back from straight out (degrees), and spread, the hindwing's further sweep. Sets:
     // spread (the setting-board pose), forward (forewings pushed forward, the hindwings showing behind them) and swept
     // (both pairs swept back along the abdomen, the hindwing under the forewing). A family's sets replace the base's. The
-    // antlion's abdomen is 1.2-1.6 forewings long and its tip reaches past the wings, the forewings held nearly straight
+    // antlion's abdomen is 1.3-1.6 forewings long and its tip reaches past the wings, the forewings held nearly straight
     // out and the hindwings swept back (neu-myrmeleon); the owlfly's spread wide like a butterfly's (neu-libelloides); the
     // brown lacewing's broad forewings nearly straight out (neu-hemerobius)
     wingSet: { base: { abdWing: [0.38, 0.68], sets: { spread: { w: 2, theta: [28, 50], spread: [8, 26] }, forward: { w: 1, theta: [4, 20], spread: [20, 34] }, swept: { w: 1, theta: [52, 64], spread: [3, 10] } } },
       hemerobiid: { abdWing: [0.28, 0.52], sets: { spread: { w: 2, theta: [-4, 18], spread: [12, 32] }, forward: { w: 1, theta: [-18, -6], spread: [26, 40] }, swept: { w: 1, theta: [30, 46], spread: [6, 14] } } },
-      myrmeleontid: { abdWing: [1.2, 1.6], sets: { spread: { w: 2, theta: [6, 20], spread: [22, 34] }, swept: { w: 1, theta: [30, 42], spread: [10, 18] } } },
+      myrmeleontid: { abdWing: [1.3, 1.6], sets: { spread: { w: 2, theta: [6, 20], spread: [22, 34] }, swept: { w: 1, theta: [30, 42], spread: [10, 18] } } },
       ascalaphid: { abdWing: [0.5, 0.72], sets: { spread: { w: 2, theta: [2, 18], spread: [24, 38] }, swept: { w: 1, theta: [34, 48], spread: [8, 16] } } },
       mantispid: { abdWing: [0.45, 0.8], sets: { spread: { w: 2, theta: [22, 40], spread: [8, 22] }, forward: { w: 1, theta: [6, 18], spread: [18, 30] }, swept: { w: 1, theta: [48, 60], spread: [4, 10] } } },
       osmylid: { abdWing: [0.45, 0.6], sets: { spread: { w: 2, theta: [18, 36], spread: [12, 26] }, forward: { w: 1, theta: [2, 14], spread: [22, 34] }, swept: { w: 1, theta: [44, 58], spread: [4, 12] } } } },
@@ -3042,7 +3040,10 @@ function drawPlate(seed, opts, dev) {
 // order's entry into a fresh P.
 function rollProportions(type) {
   const P = { variant: null, fam: null, abdOverlap: 8 };   // fam: the wing family for winged orders (read by the wing block), a body family for beetles and grasshoppers
-  ORDERS[type].proportions(P);
+  const order = ORDERS[type];
+  order.proportions(P);
+  const K = (order.habitus && order.habitus[P.fam]) || {};   // the family's habitus factors on the rolled sizes (#51; no rng)
+  for (const k in K) P[k] *= K[k];
   return P;
 }
 
