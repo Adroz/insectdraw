@@ -16,7 +16,7 @@
 'use strict';
 const { loadEngine, engineContract } = require('./engine');
 const raster = require('./raster');
-const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, duplicateShare, DUP_MAX } = require('./names');
+const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX } = require('./names');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
@@ -109,10 +109,8 @@ const rightmostAt = (poly, y) => {
 };
 const leftmostAt = (poly, y) => { const m = rightmostAt(poly.map(p => [-p[0], p[1]]), y); return m === null ? null : -m; };
 const distToPl = (p, pl) => { let d = Infinity; for (let i = 0; i + 1 < pl.length; i++) { const a = pl[i], b = pl[i + 1], v = [b[0] - a[0], b[1] - a[1]], L2 = v[0] * v[0] + v[1] * v[1] || 1e-9, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * v[0] + (p[1] - a[1]) * v[1]) / L2)); d = Math.min(d, Math.hypot(p[0] - a[0] - t * v[0], p[1] - a[1] - t * v[1])); } return d; };
-// #28 names: the names table a plate's common name comes from (the variant's, else the order's), whether its antenna
-// kind is a gene word to give (the family's antenna table draws it on under half its plates), and the run's common names
+// #28 names: the names table a plate's common name comes from (the variant's, else the order's), and the run's common names
 const namesTable = (type, variant) => { const o = E.ORDERS[type]; return (variant && o.variantNames && o.variantNames[variant]) || o.names; };
-const antRare = (type, fam, kind) => { const T = E.ORDERS[type].ant, k = Object.assign({}, T.base, T[fam] || {}).kinds; return (k[kind] || 0) < 0.5 * Object.values(k).reduce((a, w) => a + w, 0); };
 const commons = [];
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 // #17, from the references (odo-damsel-ris1921: a coenagrionid, two antenodals and the quadrilateral from the arculus;
@@ -1173,7 +1171,7 @@ const CHECKS = {
   // whenever the plate has one to give (tests/names.js geneProblems: a marking other than plain, a rare antenna kind)
   nameGenes(meta, svg, fail) {
     commons.push(meta.name.common);
-    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(meta.type, meta.bodyGenes.fam, meta.antenna)))
+    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(E.ORDERS, meta.type, meta.bodyGenes.fam, meta.antenna)))
       fail('common name disagrees with the genes: ' + p + ' ("' + meta.name.common + '")');
   },
 };

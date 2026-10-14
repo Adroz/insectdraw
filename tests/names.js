@@ -129,11 +129,17 @@ function geneProblems(common, mark, antenna, antDistinct) {
   if (own.length && !own.some(w => hasPhrase(common, w))) out.push('no gene word (' + own.join(' / ') + ') for a ' + mark + ' abdomen' + (antDistinct && ANT_CLAIMS[antenna] ? ' with ' + antenna + ' antennae' : ''));
   return out;
 }
+// Whether a plate's antenna kind is a gene word to give: its family's antenna table (the order's ORDERS entry `ant`, base
+// plus the family's override) draws that kind on under half its plates; a kind the family always draws says nothing.
+function antRare(ORDERS, type, fam, kind) {
+  const T = ORDERS[type].ant, k = Object.assign({}, T.base, T[fam] || {}).kinds;
+  return (k[kind] || 0) < 0.5 * Object.values(k).reduce((a, w) => a + w, 0);
+}
 // The share of plates whose common name an earlier plate already had: (plates - distinct names) / plates
 function duplicateShare(commons) { return commons.length ? (commons.length - new Set(commons).size) / commons.length : 0; }
 const DUP_MAX = 0.1;   // the ticket's ceiling over seeds 1-3000 (21% at main 37a7371, 32% at backlog 14ee739)
 
-module.exports = { FORMS, epithetProblems, repeatedStem, MARK_CLAIMS, ANT_CLAIMS, FAM_NOUN_SPEC, hasPhrase, geneProblems, duplicateShare, DUP_MAX };
+module.exports = { FORMS, epithetProblems, repeatedStem, MARK_CLAIMS, ANT_CLAIMS, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX };
 
 if (require.main === module) {
   const { loadEngine } = require('./engine');
@@ -154,9 +160,7 @@ if (require.main === module) {
     const r = repeatedStem(meta.name.common);
     if (r) hits.push(seed + ' ' + meta.type + ': "' + meta.name.common + '" (' + r.join(' / ') + ')');
     // #28: the name agrees with the marking and antenna genes (tests/check.js nameGenes holds the same rule)
-    const T = E.ORDERS[meta.type].ant, kinds = Object.assign({}, T.base, T[meta.bodyGenes.fam] || {}).kinds;
-    const rare = (kinds[meta.antenna] || 0) < 0.5 * Object.values(kinds).reduce((a, w) => a + w, 0);
-    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, rare)) genes.push(seed + ' ' + meta.type + ': ' + p + ' ("' + meta.name.common + '")');
+    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(E.ORDERS, meta.type, meta.bodyGenes.fam, meta.antenna))) genes.push(seed + ' ' + meta.type + ': ' + p + ' ("' + meta.name.common + '")');
     commons.push(meta.name.common);
     (seen.get(meta.name.common) || seen.set(meta.name.common, []).get(meta.name.common)).push(seed);
   }

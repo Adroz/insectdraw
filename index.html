@@ -1989,10 +1989,9 @@ const EPITHETS = Object.freeze([...EPITHET, ...EPITHET_TAIL.map(([t, cls]) => ['
 }));
 // The common name is [qualifier] <adjective> <noun> [base] (#28). The adjective is a gene word whenever the plate has one
 // to give: its abdominal marking (B.abd.mark; plain gives none) or an antenna kind its family draws on under half its
-// plates, so a
-// banded abdomen is "Banded" or "Ringed" and a bipectinate moth "Feathered". Otherwise it comes from the order's `adj`
-// list (else COMMON_ADJ), from which every marking and antenna word is kept out: a plate is never named for a marking
-// it does not draw. The qualifier (size, range, rarity) widens the pool so plates seldom share a name.
+// plates, so a banded abdomen is "Banded" or "Ringed" and a bipectinate moth "Feathered". Otherwise it comes from the
+// order's `adj` list (else COMMON_ADJ), from which every marking and antenna word is kept out: a plate is never named for
+// a marking it does not draw. The qualifier (size, range, rarity) widens the pool so plates seldom share a name.
 // tests/names.js MARK_CLAIMS / ANT_CLAIMS hold the claim vocabulary these must stay inside.
 const GENE_MARK_ADJ = {
   banded: ['Banded', 'Ringed', 'Girdled', 'Belted'],
