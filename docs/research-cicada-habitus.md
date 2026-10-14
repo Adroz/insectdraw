@@ -50,7 +50,7 @@ prefix (licences in `ref/README.md`); the venation stays as `wing-venation-spec.
 | gene | values | where |
 |---|---|---|
 | family (`P.fam`) | cicadine / cicadettine / platypleurine, 1:1:1 | `proportions` |
-| family scales | cicadine head 0.95-1.05, thorax 1.0-1.1, abdomen length 0.92-1.05, abdomen width (`abdFams.wK`) 1.15-1.35; cicadettine head 0.72-0.8, thorax 0.84-0.92, abdomen length 1.05-1.2, width 0.72-0.86, whole body 0.68-0.8 (small: the plate scale is capped, so it stands smaller); platypleurine head 0.84-0.92, thorax 1.02-1.1, abdomen length 0.78-0.9, width 1.25-1.45 | `habitus`, `abdFams` |
+| family scales | cicadine head 0.95-1.05, thorax 1.0-1.1, abdomen length 0.92-1.05, abdomen width (`abdFams.wK`) 1.15-1.35; cicadettine head 0.72-0.8 (at most 0.86 of the thorax's width), thorax 0.84-0.92, abdomen length 1.05-1.2, width 0.62-0.74 (at most 0.8 of the thorax's width), whole body 0.68-0.8 (small: the plate scale is capped, so it stands smaller); platypleurine head 0.84-0.92, thorax 1.02-1.1, abdomen length 0.78-0.9, width 1.25-1.45 | `habitus`, `abdFams` |
 | tymbal covers | cicadine only: a rounded plate 0.32-0.42 of the abdomen's half width at the abdomen base, standing past its outline | `habitus.tymbals`, `drawAbdomen` |
 | pronotal flange | platypleurine only: the collar flared to 1.3-1.5 x the head's half width, with a fine rim | `habitus.flange`, `rollBodyGenes`, `drawThorax` |
 | abdomen taper | barrel / cone / spindle, family weights | `abdShapes` |

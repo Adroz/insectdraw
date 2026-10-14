@@ -2442,6 +2442,7 @@ const ORDERS = {
       P.fam = pick(Object.keys(O.habitus));
       const H = O.habitus[P.fam];
       P.headW *= randRange(H.headW[0], H.headW[1]); P.thoraxW *= randRange(H.thoraxW[0], H.thoraxW[1]); P.abdLen *= randRange(H.abdLen[0], H.abdLen[1]);
+      if (H.headCap) P.headW = Math.min(P.headW, H.headCap * P.thoraxW);   // a narrow head: never wider than this share of the pronotum
       if (H.size) { const k = randRange(H.size[0], H.size[1]); for (const f of ['headW', 'headH', 'thoraxW', 'thoraxLen', 'abdW', 'abdLen']) P[f] *= k; }   // a small family drawn small: the plate scale is capped, so it stands smaller on the plate
       P.abdShape = weightedPick(H.abdShapes);
       P.abdAnchors = O.abdShapes[P.abdShape].anchors;
@@ -2450,7 +2451,7 @@ const ORDERS = {
     // narrower than the pronotum), platypleurine (stout, the pronotal collar flared into flanges wider than the head)
     habitus: {
       cicadine: { headW: [0.95, 1.05], thoraxW: [1.0, 1.1], abdLen: [0.92, 1.05], abdShapes: { barrel: 3, cone: 2, spindle: 1 }, tymbals: [0.32, 0.42] },
-      cicadettine: { headW: [0.72, 0.8], thoraxW: [0.84, 0.92], abdLen: [1.05, 1.2], size: [0.68, 0.8], abdShapes: { cone: 3, spindle: 3, barrel: 1 } },
+      cicadettine: { headW: [0.72, 0.8], thoraxW: [0.84, 0.92], abdLen: [1.05, 1.2], size: [0.68, 0.8], headCap: 0.86, abdCap: 0.8, abdShapes: { cone: 3, spindle: 3, barrel: 1 } },
       platypleurine: { headW: [0.84, 0.92], thoraxW: [1.02, 1.1], abdLen: [0.78, 0.9], abdShapes: { barrel: 3, cone: 2 }, flange: [1.3, 1.5] },
     },
     // #49 abdomen taper families: barrel (parallel-sided, blunt), cone (widest at the base, straight taper), spindle
@@ -2949,7 +2950,7 @@ function rollBodyGenes(type, P) {
     const wOf = t => Object.fromEntries(Object.keys(t).map(k => [k, t[k].w]));
     B.wing = { set: weighted(wOf(order.wingSets)), shape: weighted(wOf(order.wingShapes)) };
     const H = (order.habitus && order.habitus[fam]) || {};
-    B.habitus = { tymbals: H.tymbals ? rr(H.tymbals) : 0, flange: H.flange ? rr(H.flange) : 0 };
+    B.habitus = { tymbals: H.tymbals ? rr(H.tymbals) : 0, flange: H.flange ? rr(H.flange) : 0, abdCap: H.abdCap || 0 };
     if (B.habitus.flange) {   // the pronotal collar (B.thorax.lines[0]) flared into lateral flanges, flange x the head's half width at the collar
       const T = B.thorax, tc = T.lines[0].t, fF = T.anchors[0][1], F = B.habitus.flange * P.headW / P.thoraxW;
       T.anchors = [[0, fF], [tc * 0.55, lerp(fF, F, 0.75)], [tc, F], [tc + 0.07, lerp(F, 1, 0.55)]].concat(T.anchors.filter(a => a[0] > tc + 0.16));
@@ -3038,6 +3039,7 @@ function layoutBody(C) {
   meta.bodyGenes = B;
   if (B.wing) meta.cicada = { set: B.wing.set, shape: B.wing.shape, fam: P.fam, abdShape: P.abdShape, marks: null, collarY: null, tymbals: null };   // #49, filled in by the thorax and abdomen sections
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
+  if (B.habitus && B.habitus.abdCap) P.abdW = Math.min(P.abdW, B.habitus.abdCap * P.thoraxW);   // a slender family (#49): the abdomen held under this share of the thorax's width
   P.thoraxAnchors = B.thorax.anchors;
   // organic irregularity on profiles
   const wobble = a => a.map(([t, f]) => [t, f === 0 ? 0 : f * jitter(0.03)]);
@@ -4460,6 +4462,7 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
 }
 
 const CIC_CLAVUS = 10;   // degrees the forewing's claval margin runs in from straight back (#26)
+const CIC_UNDER = 3;    // body units the hindwing root keeps outside the forewing's claval line, under the forewing (#49)
 const CIC_MID = 2.5;     // body units a spread or half-open forewing keeps off the midline (tests/check.js CIC.midline is 2)
 function wingsCicada(C) {   // (type === 'cicada')
   const { order, L, meta, thorax, abdomen, B } = C;
@@ -4524,7 +4527,10 @@ function wingsCicada(C) {   // (type === 'cicada')
     : [{ L: LwC * G.hindL, k: G.hindW, th: theta + G.spread, t: order.wingRoots[1], hind: true }, { L: LwC, k: 1, th: theta, t: order.wingRoots[0], hind: false }];
   const s = G.sharp;
   for (const d of defs) {
-    const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * order.wingRootX;
+    const by = thorax.yAt(d.t);
+    // the hindwing roots under the forewing (#26): at least CIC_UNDER outside the claval margin's line at its y (a thorax
+    // narrowing behind a flared collar, #49, would put it inside that line, beside the forewing), on the thorax
+    const bx = d.hind ? Math.min(thorax.hwAt(by) - 0.5, Math.max(thorax.hwAt(by) * order.wingRootX, thorax.hwAt(by0) * order.wingRootX - Math.tan(CIC_CLAVUS * D2R) * (by - by0) + CIC_UNDER)) : thorax.hwAt(by) * order.wingRootX;
     const X = f => f * d.L, Y = f => f * d.L * (roof ? roofPts.hw : G.hw) * d.k;
     // the forewing's clavus (#26): its basal hind margin runs back along the body, CIC_CLAVUS degrees in from straight
     // back, past the hindwing root, so the hindwing root lies under the forewing and the hindwing shows only from under
