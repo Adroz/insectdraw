@@ -322,8 +322,10 @@ Observed:
 - **Costal ladder** of 20–35 crossveins from base to apex between C and Sc; Sc and R1 run
   parallel and fuse near the apex.
 - **Rs** runs below R1 and gives off 8–14 **pectinate branches**, each curving down to the
-  margin and forking at the tip (end-twigging). The **intramedian cell (im)** is a small rhombus
-  at the root of Rs.
+  margin and forking at the tip (end-twigging). **M** runs beside Rs from the base (the audit
+  read ~45% on the reference), then forks; the **intramedian cell (im)** is the small rhombus between Rs and
+  that fork (#19).
+- The **R1–Rs strip** carries 2–5 crossveins, far fewer than the costal ladder (#19).
 - Two **gradate series**: zigzag staircases of crossveins stepping outward through the branches
   (inner at ~50%, outer at ~75% of the branch length).
 - Cells are lozenges: the branches and gradates cross at ~60°.
@@ -336,18 +338,21 @@ Rules: grown by `growVeins` v2. Lane plan:
 | Sc | pre-built offset under the costa: depth 0.025 + `costal` (0.07–0.11) × sin^0.7 of the span, drifting down onto R1 from 0.8 and fusing with it near the apex (`rank` 0, so the lane floor merges Sc into R1, not R1 into Sc; #14) | O |
 | R1 | the same offset plus `sub` (0.04–0.06 of the chord), ending on the costa at 0.978 | D (O when heavy) |
 | Rs | pre-built: rooted on R1 at `rsFork` (0.07–0.12) through `parent` (the root is a junction on both), one cell under R1 (`rsGap` × the Sc–R1 gap, absolute) to the apex | D / O |
-| B0..Bn | forks off Rs at u from rsFork + 0.12 to `rsEnd` (0.78–0.88), aimed at outline nodes along the hind margin from M's end to just short of the apex, trailing edge first; one bowed arc each (`bowB` 0.03–0.09, leaving Rs at a shallow angle) | D; 8–14 (5–11 on the hindwing) |
-| M, Mf | (0.02, 0.36) to the hind margin at `mX` 0.28–0.4, bow −0.06..−0.12; Mf forks off M (odds 0.5) | D |
-| Cu | (0.02, 0.5) to the hind margin at `cuX` 0.16–0.26 | F |
+| B0..Bn | forks off Rs at u from 0.06 past the im cell to `rsEnd` (0.78–0.88), aimed at outline nodes along the hind margin from 0.04 past M's end to just short of the apex, trailing edge first; one bowed arc each (`bowB` 0.03–0.09, leaving Rs at a shallow angle) | D; 8–14 (5–11 on the hindwing) |
+| M, Mp | pre-built (#19): from (0.03, 0.3) up under Rs by rsFork + 0.04, then beside it `mGap` (0.8–1.1) R1–Rs gaps under it to the fork at `mF` (0.3–0.42); over mF ± 0.06 it dips in straight sides to a vertex `mBump` (1.8–2.6) gaps down and back to 1.2, and on as MA to the hind margin `maX` (0.15–0.21) past the fork; Mp forks off the vertex to the hind margin at mF + 0.1 | D |
+| Cu | (0.02, 0.5) to the hind margin `cuX` (0.03–0.06) past the M fork | F |
 
 Named crossveins through `place`: the **costal ladder** C–Sc every `ladder` (0.022–0.038) of the span,
-leaning toward the apex (20–35 rungs); the **intramedian cell** as two Rs–M rungs at rsFork + 0.03 and
-+ 0.12; the **gradate series** (1–3 at 42–78% of the branches): each rung leaves branch i at t and is
+leaning toward the apex (20–35 rungs); the **R1–Rs rungs**, `nR1Rs` (2–5) spread over rsFork + 0.1 to 0.86
+and kept 0.006 of the span off the branch roots (`gap`), placed before the gradates; the **intramedian cell** as two Rs–M rungs at mF − 0.06
+and mF + 0.06, either side of the M fork; the **gradate series** (1–3 at 42–78% of the branches): each rung leaves branch i at t and is
 aimed at branch i+1 at t − `zig` (7–12%), with its own target angle `gradAng` 108–116° (`angT`) so it
 leans more than the ladders and the series reads as a staircase, the next rung leaving branch i+1 at t
-again (`drift`); 1–4 **m-cu** rungs. Sites (`k` 1.4–2.2, `minSep` 0.05) fill the R1–Rs strip and the
-outer parts of the inter-branch strips; `uOpen` 1.0; the subcostal strip, M–Cu, C–R1 and C–Rs are
-`noPair` (the costa's only crossveins are the named costal ladder). Every branch, Rs, M and Cu
+again (`drift`); 1–4 **m-cu** rungs. Sites (`k` 1.4–2.2, `minSep` 0.05) fill the outer parts of the
+inter-branch strips and the M–Cu strip between the m-cu rungs; `uOpen` 1.0; the subcostal strip, C–R1, C–Rs,
+R1–Rs and Rs–M are `noPair` (the costa's only crossveins are the named costal ladder; R1–Rs and the im cell are
+named: as sites at 3.2–4.5× the spacing the R1–Rs strip came out empty on most wings, #19, since a site rung
+kept its junction clearance at that scaled spacing and found no point on Rs clear of the branch roots). Every branch, Rs, M and Cu
 end-twigs on the outline, except a lane the lane floor (#14) ended on a neighbour before the margin
 (its end gave way: `floor(s, W).ends`), which has no margin end to twig. 137 joins per plate, 3 dropped, mean angle 117°.
 
@@ -693,6 +698,9 @@ membrane where it does not, the stigma as a lens, and the weight hierarchy of R7
   `noPair`. The dense rungs were in the R1–Rs strip (the only site strip under the costa). Closed
   by `pairK` on `growVeins`: that pair now takes sites at 3.2–4.5× the costal spacing (`kR1Rs`
   gene, in the signature), leaving 2–5 rungs as on neu-nothochrysa; `check.js` asserts ≤ 6.
+  (Superseded by #19: the scaled spacing also scaled the junction clearance, so the strip came out
+  empty on 16 of 18 audited wings; the rungs are now `nR1Rs` (2–5) named crossveins, `pairK` is gone,
+  and `neuR1Rs` asserts 2–6.)
 - Swallowtail: the note said to aim 2A and Cu2 either side of the tail root. The real cause was
   `marginTargets` sampling the outline by index, so the tail lobe's dense samples pulled three to
   five veins into it. Closed the other way round, following lep-papilio: targets are sampled from
