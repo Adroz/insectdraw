@@ -69,7 +69,7 @@ contract for changes.
   cross set lies over the fan the fan drops every other line; the hatch stops `LEP_HUG` short of the veins, band edges
   and cross-lines and never runs alongside one; the hindwing hatch and fringe keep `LEP_CLEAR` off the forewing's edge.
   The line art holds its own (#67): the veins go through the lane floor (`lepVeinFloor`) with the leading edge as a
-  wall (and, on the hindwing, the forewing's outline over it), so Sc and the R branches merge into the costa instead
+  wall (on the hindwing only the runs that show outside the forewing, with its outline as a second wall), so Sc and the R branches merge into the costa instead
   of running beside it; a cross-line tooth is at least `LEP_TOOTH` hatch pitches wide and no deeper than wide; band
   edges and cross-lines stop `LEP_LINE_CLEAR` short of the costa and the veins; spot rings keep that far apart.
 - Lanes never fuse into a bar (#14): on every `growVeins` order the registry does not opt out (`laneFloor: false`: the beetle), and on the moth's veins (#67), lanes and crossveins are drawn by one

@@ -1087,6 +1087,7 @@ const LEP_HAIR = 2.5, LEP_HAIR_DARK = 3.2;
 const LEP_CLEAR = LEP_HAIR_DARK + 0.8;   // body units: the band beside another wing's edge kept clear, its longest hair plus a gap
 const LEP_HUG = 1.0;     // body units: the hatch's gap either side of a vein, band edge or cross-line (the engraver's hatch stops short of the line)
 const LEP_LINE_CLEAR = 1.6;   // body units: a band edge or cross-line stops this short of the costa and the veins (#67)
+const LEP_RUN_MIN = 6;   // body units: the shortest run of a hindwing vein outside the forewing that is drawn (#67)
 const LEP_TOOTH = 3;     // hatch pitches: the narrowest cross-line tooth (half wave) a cell takes (#67)
 const LEP_HUG_X = 2.0;   // body units: the cross set's gap either side of a vein (where veins converge, a lattice between them fuses)
 const LEP_ALONG = 0.9;   // a hatch stroke within ~25 degrees of a line's heading (|cos| >= this) runs alongside it
@@ -4573,11 +4574,26 @@ function wingsLepidoptera(C) {   // (type === 'moth')
   function lepVeinFloor(wing, veins, mask) {
     const lanes = [{ id: mask ? 'edge' : 'C', noDraw: true, pl: leadingEdge(wing, 0, Infinity) }], items = [];   // to the apex: past the heavy costa the outline still draws the edge
     if (mask) lanes.push({ id: 'fore', noDraw: true, pl: mask.concat([mask[0]]) });   // the forewing's edge over the hindwing
-    for (const v of veins) {
-      const l = { id: v.id, sw: v.sw || SW.D };
-      lanes.push(l); items.push({ pl: v, sw: l.sw, lane: l });
-      for (const p of v) bb(wing.T(p));   // a deferred element draws only inside the bbox the fit already holds
-    }
+    // on the hindwing only what shows: each vein's runs outside the forewing (its white fill hides the rest), each run its
+    // own lane from where it leaves the forewing's edge, so the veins under the forewing (all of them meet at the cell's
+    // corners there) never move what shows; a run shorter than LEP_RUN_MIN (a vein peeking out beside the base) is not
+    // drawn, where its merges into the two edges would close into a black wedge
+    const shown = v => {
+      if (!mask) return [v];
+      const out = (p => !pointInPoly(p, mask)), runs = []; let run = [];
+      const edge = (a, b) => { let lo = 0, hi = 1; for (let k = 0; k < 20; k++) { const m = (lo + hi) / 2; if (out(lerpP(a, b, m)) === out(a)) lo = m; else hi = m; } return lerpP(a, b, (lo + hi) / 2); };
+      for (let i = 0; i < v.length; i++) {
+        if (i && out(v[i]) !== out(v[i - 1])) { const e = edge(v[i - 1], v[i]); if (out(v[i])) run = [e]; else { run.push(e); if (run.length > 1) runs.push(run); run = []; } }
+        if (out(v[i])) run.push(v[i]);
+      }
+      if (run.length > 1) runs.push(run);
+      return runs.filter(r => r.reduce((a, p, i) => i ? a + vlen(sub(p, r[i - 1])) : 0, 0) >= LEP_RUN_MIN);
+    };
+    for (const v of veins) shown(v).forEach((pl, k) => {
+      const l = { id: k ? v.id + '.' + k : v.id, sw: v.sw || SW.D };
+      lanes.push(l); items.push({ pl, sw: l.sw, lane: l });
+      for (const p of pl) bb(wing.T(p));   // a deferred element draws only inside the bbox the fit already holds
+    });
     let memo = null;   // one resolution per plate scale, however many layers (L.wings, meta.lepInk, meta.lepArt) ask
     return (s, Wt) => (memo && memo.s === s && memo.W === Wt ? memo : (memo = { s, W: Wt, els: laneFloor(wing, lanes, items, s, Wt).els })).els;
   }
