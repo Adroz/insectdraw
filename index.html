@@ -2135,6 +2135,13 @@ function insectName(seed, type, variant, fam, genes) {
 //   wingRootX: the root's x as a fraction of the thorax half-width there (thorax.hwAt(y) * wingRootX), read by the wing
 //     block and the tegula; required when the block roots at wingRoots (absent on the elytra and the orthopteran tegmen).
 //   tegula (optional): the order draws a tegula over the forewing root: rx range, optional hairs count range.
+//   famScale (optional, #51): per family, factors rollProportions multiplies the rolled sizes by (no rng).
+//   prothorax (optional, #51): the pronotum's length gene (len, nominal, fams with an optional narrow neck); the wing roots
+//     and the mid and hind legs stay on the pterothorax behind it (prothoraxT), so meta.thorax.wingRoots are the entry's
+//     wingRoots placed there.
+//   wingSet sets (optional, #51): instead of fw / hw, named wing sets { w, fw, hw } picked by weight, and abdWing, the abdomen
+//     over the forewing's length (the lacewing). wingFams (optional, #51): base / family tables of wing-block genes (the
+//     lacewing's hw, sharp, spots).
 //   legThick (optional, default 1): leg thickness factor on top of body size (slender-legged orders < 1).
 //   laneFloor (optional, default true): false opts the order's wings out of growVeins' lane floor (#14) and
 //     tests/check.js laneSep: the beetle (no lanes) and the moth (its own vein drawing; #67).
@@ -2495,15 +2502,79 @@ const ORDERS = {
         thoraxAnchors: [[0, 0.55], [0.3, 1], [0.8, 0.9], [1, 0.55]],
         abdAnchors: [[0, 0.8], [0.3, 1], [0.7, 0.85], [0.92, 0.5], [1, 0]],
         antenna: 'filiform', antLen: 110 * jitter(0.15) });
+      // #51 Neuroptera families (docs/research-neuroptera-families.md): the chrysopid as before, twice as likely as each other
+      // family; the entry's famScale then scales the rolled sizes (rollProportions)
+      P.fam = pick(['chrysopid', 'chrysopid', 'hemerobiid', 'myrmeleontid', 'ascalaphid', 'mantispid', 'osmylid']);
+    },
+    // famScale (#51): per family, factors on the proportions' rolled sizes (docs/research-neuroptera-families.md). The
+    // hemerobiid is the small brown lacewing (every length x0.75, so the plate's 1.3 scale cap leaves it small); the antlion's
+    // abdomen is long and slender (refs neu-myrmeleon); the owlfly's head is broad over its large eyes and its abdomen short
+    // (neu-libelloides); the mantidfly's abdomen is stout (neu-mantispa); the osmylid is a large lacewing.
+    famScale: {
+      chrysopid: {},
+      hemerobiid: { headW: 0.8, headH: 0.8, thoraxW: 0.8, thoraxLen: 0.75, abdW: 0.85, abdLen: 0.75 },
+      myrmeleontid: { headW: 1.1, thoraxW: 1.05, abdW: 0.75, abdLen: 1.45 },
+      ascalaphid: { headW: 1.3, headH: 1.1, thoraxW: 1.15, abdW: 1.05, abdLen: 0.85 },
+      mantispid: { headW: 1.15, abdW: 1.2, abdLen: 0.85, legScale: 1.05 },
+      osmylid: { headW: 1.05, thoraxW: 1.05, abdW: 1.05, abdLen: 1.05 },
     },
     abd: { tips: { rounded: 3, pointed: 1 }, marks: { plain: 3, hairy: 1 }, peak: [0.25, 0.5], wK: [0.85, 1.15], start: [0.05, 0.15], seg: [6, 8], ticks: 0.6 },
+    // #51 the families' abdomen markings (docs/research-neuroptera-families.md): many mantidflies are banded, wasp-like; owlflies
+    // hairy; antlions plain, ringed or spotted along the tergites; the brown lacewings plain or hairy
+    abdFams: { mantispid: { marks: { banded: 3, plain: 1, tipdark: 1 } }, ascalaphid: { marks: { hairy: 3, plain: 1, banded: 1 } },
+      myrmeleontid: { marks: { plain: 2, banded: 1, spotted: 1 }, tips: { rounded: 2, pointed: 1 }, seg: [7, 9] }, hemerobiid: { marks: { plain: 2, hairy: 2, banded: 1 } } },
     thorax: { front: [0.8, 1.1], peak: [0.35, 0.5], hump: [0.03, 0.12], waist: [0, 0], lenK: [0.9, 1.2] },
     head: { outline: 'round', ratio: [1.05, 1.25], genal: [0.05, 0.15], cx: [0.34, 0.37], rx: [0.11, 0.14], ry: [0.3, 0.36], cy: [-0.04, 0.04], ocelli: 0, mandTips: 0.3, styles: { lattice: 3, stipple: 2 } },
+    // #51 the owlfly's large, bulging eyes over a broad head (neu-libelloides) and the mantidfly's (neu-mantispa); the antlion's
+    // a little larger than a chrysopid's (neu-myrmeleon)
+    headFams: { ascalaphid: { ratio: [1.3, 1.55], genal: [0, 0.05], cx: [0.31, 0.33], rx: [0.17, 0.2], ry: [0.4, 0.46], styles: { lattice: 1 } },
+      mantispid: { ratio: [1.25, 1.45], genal: [0, 0.06], cx: [0.32, 0.34], rx: [0.16, 0.18], ry: [0.36, 0.42] },
+      myrmeleontid: { ratio: [1.15, 1.35], cx: [0.33, 0.36], rx: [0.13, 0.15], ry: [0.32, 0.38] } },
     // #19 Chrysopidae forelegs are slender walking legs under the prothorax, never a mantid's raised pair: walking / spread
     // only, the fore coxa on the prothorax (forePronotum), the foreleg held forward and out (foreAng per pose, foreSafe)
     legs: { base: { spurs: [0, 1], poses: { spread: 3, walking: 2 }, forePronotum: [0.35, 0.8],
-      foreAng: { spread: { F: [-40, -16], tib: [-66, -40], T: [-18, -4] }, walking: { F: [-42, -22], tib: [-78, -50], T: [-16, -2] } }, foreSafe: [-34, -28, -62, -72] } },
-    ant: { base: { ref: 'bl', len: [0.45, 0.8], seg: [30, 45], socket: [0.18, 0.28], kinds: { filiform: 5, moniliform: 1 } } },
+      foreAng: { spread: { F: [-40, -16], tib: [-66, -40], T: [-18, -4] }, walking: { F: [-42, -22], tib: [-78, -50], T: [-16, -2] } }, foreSafe: [-34, -28, -62, -72] },
+      // #51 the mantidfly (neu-mantispa): raptorial forelegs at the front of the long prothorax, the stout femur raised toward
+      // the head and the tibia folded back against it in every pose it rolls and in its fallback; a lacewing's mid and hind legs
+      mantispid: { poses: { raised: 1 }, forePronotum: [0.34, 0.46], frontK: [1.0, 1.2], foreRaptor: { stout: [2.8, 3.6], teeth: [4, 7] },
+        foreAng: { raised: { F: [-56, -36], fold: [138, 162], T: [4, 22] }, spread: { F: [-50, -34], fold: [138, 160], T: [4, 20] } }, foreSafe: [-40, -58, 88, 104] },
+      hemerobiid: { lenK: [0.85, 1.0] }, myrmeleontid: { lenK: [0.8, 0.95], spurs: [1, 2] }, ascalaphid: { lenK: [0.8, 0.95], spurs: [1, 2] } },
+    // #51 the families' antennae (docs/research-neuroptera-families.md): the hemerobiid's moniliform, about half the body;
+    // the antlion's short, gradually clubbed (neu-myrmeleon); the owlfly's as long as the body with an abrupt, egg-shaped
+    // club (neu-libelloides); the mantidfly's short and beaded (neu-mantispa); the osmylid's filiform, under half the body
+    ant: { base: { ref: 'bl', len: [0.45, 0.8], seg: [30, 45], socket: [0.18, 0.28], kinds: { filiform: 5, moniliform: 1 } },
+      hemerobiid: { kinds: { moniliform: 1 }, len: [0.38, 0.55], seg: [30, 50] },
+      myrmeleontid: { kinds: { clubbed: 1 }, club: 'gradual', len: [0.17, 0.26], seg: [25, 35] },
+      ascalaphid: { kinds: { clubbed: 1 }, club: 'abrupt', len: [0.8, 1.0], seg: [40, 50] },
+      mantispid: { kinds: { moniliform: 3, filiform: 1 }, len: [0.14, 0.22], seg: [14, 22],   // held forward between the raised forelegs
+        poses: { v: { ang: [-90, -82], curve: [0, 5], droop: [0, 0] }, arc: { ang: [-90, -82], curve: [0, 6], droop: [0, 0] } } },
+      osmylid: { kinds: { filiform: 1 }, len: [0.35, 0.55], seg: [30, 45] } },
+    // prothorax (#51, optional): the pronotum's length gene (the pronotal collar, B.thorax.lines[0].t, as a fraction of the
+    // thorax) rolled in rollBodyGenes: len the range, nominal the pronotum the entry's anchors, wingRoots and leg ranges were
+    // laid out for; the rest of the thorax keeps its proportions on the pterothorax behind it (prothoraxT) and the thorax
+    // grows so the pterothorax keeps its length. fams: a family's own; neck, the prothorax's half width in its middle (a
+    // fraction of the thorax's), widening at the front where the forelegs insert (the mantidfly's, neu-mantispa)
+    prothorax: { len: [0.1, 0.22], nominal: 0.15, fams: { mantispid: { len: [0.4, 0.56], neck: [0.34, 0.44] } } },
+    // wingSet (#48's table, #51's sets): the body-plan genes the wing block reads, rolled in rollBodyGenes (B.wingSet, on
+    // bodySig): abdWing, the abdomen's length over the forewing's (the wing length follows from it), and the set the wings
+    // are held in, picked by weight w: fw, the forewing's angle back from straight out (degrees), and hw, the hindwing's
+    // further sweep. Sets:
+    // spread (the setting-board pose), forward (forewings pushed forward, the hindwings showing behind them) and swept
+    // (both pairs swept back along the abdomen, the hindwing under the forewing). A family's sets replace the base's. The
+    // antlion's abdomen is 1.3-1.6 forewings long and its tip reaches past the wings, the forewings held nearly straight
+    // out and the hindwings swept back (neu-myrmeleon); the owlfly's spread wide like a butterfly's (neu-libelloides); the
+    // brown lacewing's broad forewings nearly straight out (neu-hemerobius)
+    wingSet: { abdWing: [0.38, 0.68], sets: { spread: { w: 2, fw: [28, 50], hw: [8, 26] }, forward: { w: 1, fw: [4, 20], hw: [20, 34] }, swept: { w: 1, fw: [52, 64], hw: [3, 10] } }, fams: {
+      hemerobiid: { abdWing: [0.3, 0.52], sets: { spread: { w: 2, fw: [-4, 18], hw: [12, 32] }, forward: { w: 1, fw: [-18, -6], hw: [26, 40] }, swept: { w: 1, fw: [30, 46], hw: [6, 14] } } },
+      myrmeleontid: { abdWing: [1.3, 1.6], sets: { spread: { w: 2, fw: [6, 20], hw: [22, 34] }, swept: { w: 1, fw: [30, 42], hw: [10, 18] } } },
+      ascalaphid: { abdWing: [0.5, 0.72], sets: { spread: { w: 2, fw: [2, 18], hw: [24, 38] }, swept: { w: 1, fw: [34, 48], hw: [8, 16] } } },
+      mantispid: { abdWing: [0.45, 0.8], sets: { spread: { w: 2, fw: [22, 40], hw: [8, 22] }, forward: { w: 1, fw: [6, 18], hw: [18, 30] }, swept: { w: 1, fw: [48, 60], hw: [4, 10] } } },
+      osmylid: { abdWing: [0.45, 0.6], sets: { spread: { w: 2, fw: [18, 36], hw: [12, 26] }, forward: { w: 1, fw: [2, 14], hw: [22, 34] }, swept: { w: 1, fw: [44, 58], hw: [4, 12] } } } } },
+    // wingFams (#51): the families' wing-block genes over base: hw, the forewing's half chord (span fractions); sharp, the
+    // apex from rounded (0) to pointed (1); spots, the osmylid's stippled forewing spots [min, max] (neu-osmylus). The
+    // hemerobiid's wings are broad and oval (neu-hemerobius), the antlion's and the mantidfly's long and narrow
+    wingFams: { base: { hw: [0.14, 0.21], sharp: [0, 1] }, hemerobiid: { hw: [0.2, 0.28], sharp: [0, 0.3] }, myrmeleontid: { hw: [0.12, 0.15], sharp: [0.3, 1] },
+      ascalaphid: { hw: [0.17, 0.22], sharp: [0.4, 1] }, mantispid: { hw: [0.12, 0.15], sharp: [0.4, 1] }, osmylid: { hw: [0.17, 0.21], sharp: [0, 0.5], spots: [4, 9] } },
     headScaleP5: 0.81,
     wingRoots: [0.35, 0.65],
     wingRootX: 0.72,
@@ -2512,7 +2583,11 @@ const ORDERS = {
     wings: wingsNeuroptera,
     names: {
       tails: [['chrysa', 'f'], ['leon', 'm'], ['ptera', 'f'], ['nympha', 'f'], ['neura', 'f'], ['bius', 'm'], ['pteryx', 'f'], ['psectra', 'f'], ['phlebia', 'f'], ['merobius', 'm']],
-      common: { nouns: ['Green', 'Brown', 'Giant', 'Dusty', 'Pleasing', 'Beaded', 'Silky', 'Spoon-winged', 'Thread', 'Pearly'], base: 'Lacewing' },
+      common: { nouns: ['Green', 'Brown', 'Giant', 'Dusty', 'Pleasing', 'Beaded', 'Silky', 'Spoon-winged', 'Thread', 'Pearly'], base: 'Lacewing',
+        famNouns: { chrysopid: ['Green', 'Golden-eyed', 'Pearly', 'Stink', 'Emerald'], hemerobiid: ['Brown', 'Pine', 'Hop', 'Larch', 'Spruce'],
+          myrmeleontid: ['Pit', 'Sand', 'Dune', 'Spotted-winged', 'Shore'], ascalaphid: ['Yellow', 'Sulphur', 'Butterfly', 'Split-eyed', 'Meadow'],
+          mantispid: ['Praying', 'Styrian', 'Wasp', 'Pacific', 'Arizona'], osmylid: ['Glen', 'Rill', 'Stream', 'Brook', 'Alder'] },
+        famBase: { myrmeleontid: 'Antlion', ascalaphid: 'Owlfly', mantispid: 'Mantidfly' } },   // an antlion, an owlfly and a mantidfly are no lacewings by name (#51)
     },
   },
   cicada: {
@@ -2695,6 +2770,15 @@ const TYPES = Object.keys(ORDERS);   // the body plans, in pick order (see the r
 // per-seed choices from B instead of literals. P.fam (the wing family of a winged order, a body family for beetles and
 // grasshoppers) only biases the ranges; the seed rolls every value. The discrete part of each choice is pushed onto
 // B.sig and exposed as meta.bodySig, which tests/check.js holds to the same uniqueness rule as meta.wingSig.
+// #51 a thorax fraction laid out for the entry's nominal pronotum, placed on a thorax whose pronotum is T.pron long: the
+// prothorax stretches to the rolled length, the pterothorax behind it keeps its proportions. No rng.
+function prothoraxT(T, t) {
+  const p = T.pron, p0 = T.pron0;
+  return p === undefined ? t : t <= p0 ? t * p / p0 : p + (t - p0) * (1 - p) / (1 - p0);
+}
+// the share of the thorax that keeps the nominal layout's length (1 without a prothorax gene): the legs and their
+// thickness follow the thorax as it was before the pronotum stretched it
+const pteroK = T => T.pron === undefined ? 1 : (1 - T.pron) / (1 - T.pron0);
 function rollBodyGenes(type, P) {
   const fam = P.fam, isOdo = type === 'dragonfly' || type === 'damselfly';
   const B = { fam, sig: [], legs: [], abd: {}, thorax: {}, head: {}, ant: {} };
@@ -2881,6 +2965,20 @@ function rollBodyGenes(type, P) {
       if (rng() < 0.6) T.lines.push({ t: randRange(0.82, 0.9), bow: 0.1, sw: SW.F });
       T.scut = { shape: 'lunule', t0: randRange(0.6, 0.75), w: randRange(0.3, 0.45), len: randRange(0.12, 0.22), bow: randRange(-0.2, -0.1), hatched: rng() < 0.2, protrude: 0 };
   }
+  if (order.prothorax) {   // #51 the pronotum's length: the collar moved to it, the anchors and the other lines laid on the stretched thorax
+    const PT = Object.assign({}, order.prothorax, (order.prothorax.fams || {})[fam]);
+    T.pron0 = PT.nominal; T.pron = rr(PT.len);
+    const neck = PT.neck ? rr(PT.neck) : 0, p = T.pron, ptero = T.anchors.filter(a => a[0] > T.pron0).map(([t, f]) => [prothoraxT(T, t), f]);
+    if (neck) {   // a long, narrow prothorax: the coxal widening at the front, the neck, then the pterothorax
+      const a0 = Math.max(T.anchors[0][1], 0.62);
+      T.anchors = [[0, a0], [p * 0.3, a0 * 1.02], [p * 0.62, neck], [p * 0.92, neck * 1.15]].concat(ptero);
+    } else T.anchors = T.anchors.filter(a => a[0] <= T.pron0).map(([t, f]) => [prothoraxT(T, t), f]).concat(ptero);
+    for (const l of T.lines.slice(1)) l.t = prothoraxT(T, l.t);
+    T.lines[0].t = p;
+    if (T.scut) T.scut.t0 = prothoraxT(T, T.scut.t0);
+    P.thoraxLen *= (1 - T.pron0) / (1 - p);
+    B.sig.push('pr' + Math.round(p * 20) + (neck ? 'n' + Math.round(neck * 20) : ''));
+  }
   T.hatch = !T.pile && rng() < 0.6 ? { n: randInt(2, 4), spacing: randRange(3, 4) } : null;   // contour hatching along the sides
   T.subSeg = T.lines.length;
   T.tegula = order.tegula   // the orders whose entry has one (rx range, optional hair count range); the roll order is rx, k, tilt, hairs
@@ -2979,7 +3077,7 @@ function rollBodyGenes(type, P) {
   const poseNames = Object.keys(F.poses), poseW = poseNames.map(k => F.poses[k]), wTot = poseW.reduce((a, b) => a + b, 0);
   let x = rng() * wTot; B.pose = poseNames[poseNames.length - 1];
   for (let k = 0; k < poseNames.length; k++) { x -= poseW[k]; if (x < 0) { B.pose = poseNames[k]; break; } }
-  const u = P.legScale * (P.thoraxLen / 60);
+  const u = P.legScale * (P.thoraxLen * pteroK(B.thorax) / 60);
   const lenK = rr(F.lenK), wkF = rr(F.wk), tarsomeres = randInt(F.tarsomeres[0], F.tarsomeres[1]);
   const midFem = (isOdo ? 42 : 48) * u * lenK;
   const tRanges = isOdo ? [[0.08, 0.2], [0.27, 0.37], [0.44, 0.54]] : [[0.12, 0.32], [0.42, 0.62], [0.72, 0.92]];   // odonate legs cluster forward on the thorax
@@ -2991,7 +3089,7 @@ function rollBodyGenes(type, P) {
     const tib = fem * (saltatorial && i === 2 ? randRange(0.9, 1.05) : rr(F.tibR));
     const tar = fem * (saltatorial && i === 2 ? randRange(0.28, 0.36) : rr(F.tarR));
     const g = {
-      t: i === 0 && F.forePronotum ? B.thorax.lines[0].t * rr(F.forePronotum) : rr(tRanges[i]),   // forePronotum: the fore coxa ahead of the pronotal collar (B.thorax.lines[0]), as a fraction of its t
+      t: i === 0 && F.forePronotum ? B.thorax.lines[0].t * rr(F.forePronotum) : prothoraxT(B.thorax, rr(tRanges[i])),   // forePronotum: the fore coxa ahead of the pronotal collar (B.thorax.lines[0]), as a fraction of its t
       inset: randRange(3, 8), wk: wkF * rr(pairWk[i]),
       lens: [(saltatorial && i === 2 ? 12 : isOdo ? 8 : 10) * jitter(0.1), fem, tib, tar],
       swell: i === 2 ? rr(F.swell) : lerp(1, rr(F.swell), 0.5), flare: rr(F.flare), curl: randRange(4, 20), tarsomeres,
@@ -3022,6 +3120,7 @@ function rollBodyGenes(type, P) {
       const rolled = rng() < 0.9;
       g.femurTeeth = rolled ? randInt(2, 3) : 2; g.femStout = rolled ? randRange(2.3, 2.9) : 2.6;
     }
+    if (i === 0 && F.foreRaptor) { g.femStout = rr(F.foreRaptor.stout); g.femurTeeth = randInt(F.foreRaptor.teeth[0], F.foreRaptor.teeth[1]); }   // #51 a raptorial foreleg (the mantidfly's): a stout femur armed beneath
     if (type === 'cranefly') g.shade = false;
     if (type === 'fly') g.pulvilli = g.pads;
     B.legs[i] = g;
@@ -3036,14 +3135,23 @@ function rollBodyGenes(type, P) {
   B.sig.push(B.pose, fam || type, tarsomeres, Math.round(lenK * 5), B.thorax.subSeg, B.abd.seg, B.abd.ovipositor ? 1 : 0,
     ...(F.habitus ? ['p' + Math.round(P.headW / P.thoraxW * 10) + '/' + Math.round(P.abdW / P.thoraxW * 10)] : []),   // #12 (bee): head and abdomen to thorax width, tenths
     ...(F.legCap ? ['k' + (B.legCapped ? 1 : 0)] : []),   // whether the leg cap scaled this insect's legs down
+    ...(F.foreRaptor ? ['rt' + B.legs[0].femurTeeth + '/' + Math.round(B.legs[0].femStout * 4)] : []),   // #51 the raptorial foreleg's teeth and stoutness
     ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4), Math.round(g.skew), g.tibFlat ? 'T' : ''].join('')));
   // ---- wing set (#48): the order's wingSet ranges (a family's over them), the forewing's sweep at its root and the hindwing's
-  // further sweep, in degrees, + toward the tail; the wing block reads it and draws the venation unchanged ----
+  // further sweep, in degrees, + toward the tail; the wing block reads it and draws the venation unchanged. #51: an entry
+  // with sets picks one by weight first (B.wingSet.set) and rolls its fw / hw, and abdWing, the abdomen over the forewing's
+  // length, when the table has it ----
   B.wingSet = null;
   if (order.wingSet) {
     const WS = Object.assign({}, order.wingSet, (order.wingSet.fams || {})[fam]);
-    B.wingSet = { fw: rr(WS.fw), hw: rr(WS.hw) };
-    B.sig.push('ws' + Math.round(B.wingSet.fw / 5) + ':' + Math.round(B.wingSet.hw / 4));
+    if (WS.sets) {
+      const set = weighted(Object.fromEntries(Object.entries(WS.sets).map(([k, v]) => [k, v.w]))), SR = WS.sets[set];
+      B.wingSet = { set, abdWing: rr(WS.abdWing), fw: rr(SR.fw), hw: rr(SR.hw) };
+      B.sig.push('ws' + set[0] + Math.round(B.wingSet.abdWing * 10) + '/' + Math.round(B.wingSet.fw / 8) + '/' + Math.round(B.wingSet.hw / 6));
+    } else {
+      B.wingSet = { fw: rr(WS.fw), hw: rr(WS.hw) };
+      B.sig.push('ws' + Math.round(B.wingSet.fw / 5) + ':' + Math.round(B.wingSet.hw / 4));
+    }
   }
   // ---- elytra (#24): the puncture style of the striae, rolled last so every gene above keeps its draws ----
   B.elytra = null;
@@ -3145,7 +3253,10 @@ function drawPlate(seed, opts, dev) {
 // order's entry into a fresh P.
 function rollProportions(type) {
   const P = { variant: null, fam: null, abdOverlap: 8 };   // fam: the wing family for winged orders (read by the wing block), a body family for beetles and grasshoppers
-  ORDERS[type].proportions(P);
+  const order = ORDERS[type];
+  order.proportions(P);
+  const K = (order.famScale && order.famScale[P.fam]) || {};   // the family's factors on the rolled sizes (#51; no rng)
+  for (const k in K) P[k] *= K[k];
   return P;
 }
 
@@ -3174,7 +3285,7 @@ function layoutBody(C) {
   const abdomen = bodyPart(thorax.yBot - P.abdOverlap, P.abdLen, P.abdW / 2, P.abdAnchors);
   const abdHW = P.abdW / 2;
   // forewing / hindwing root positions along the thorax (the registry's; the wing block and the tegula read the same entry)
-  meta.thorax = { yTop: thorax.yTop, yBot: thorax.yBot, wingRoots: order.wingRoots.slice(), profile: [], scutellum: [] };
+  meta.thorax = { yTop: thorax.yTop, yBot: thorax.yBot, wingRoots: order.wingRoots.map(t => prothoraxT(B.thorax, t)), profile: [], scutellum: [] };   // on the pterothorax behind a rolled pronotum (#51)
   for (let y = thorax.yTop; y < thorax.yBot; y += 2) meta.thorax.profile.push([Math.round(y * 10) / 10, Math.round(thorax.hwAt(y) * 10) / 10]);
   meta.thorax.profile.push([Math.round(thorax.yBot * 10) / 10, Math.round(thorax.hwAt(thorax.yBot - 0.05) * 10) / 10]);
   Object.assign(C, { B, thorax, abdomen, abdHW, headTop, headCy });
@@ -3662,9 +3773,9 @@ function drawHead(C) {
 
 // ---------- tegulae over the forewing roots ----------
 function drawTegulae(C) {
-  const { order, L, B, thorax } = C;
+  const { order, L, B, thorax, meta } = C;
   if (B.thorax.tegula) {
-    const G = B.thorax.tegula, ty = thorax.yAt(order.wingRoots[0]), rootX = thorax.hwAt(ty) * order.wingRootX;   // the forewing root, the same entry fields the wing block reads
+    const G = B.thorax.tegula, ty = thorax.yAt(meta.thorax.wingRoots[0]), rootX = thorax.hwAt(ty) * order.wingRootX;   // the forewing root, the same entry fields the wing block reads
     const c = [rootX + G.rx * 0.3, ty];
     L.tegulae.push(pathEl(ellipsePath(c, G.rx, G.rx * G.k, G.tilt), SW.D, '#fff'));
     for (let i = 0; i < G.hairs; i++) {   // lepidopteran tegulae are beset with hair-like scales on their outer edge
@@ -3679,7 +3790,7 @@ function drawLegs(C) {
   const { type, order, L, meta, P, B, thorax, abdomen } = C;
   {
     // leg thickness follows body size, scaled by the entry's legThick (slender-legged orders < 1; default 1)
-    const wk0 = Math.sqrt(thorax.length / 60) * (order.legThick || 1);
+    const wk0 = Math.sqrt(thorax.length * pteroK(B.thorax) / 60) * (order.legThick || 1);
     const isOdo = type === 'dragonfly' || type === 'damselfly';
     // Pose families: femur direction F, fold (tibia relative to the femur) and tarsus bend T per pair; 0 points
     // outward, negative toward the head. spread is the classic plate; walking strides front forward / hind back;
@@ -4484,7 +4595,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
 }
 
 function wingsNeuroptera(C) {   // (type === 'lacewing')
-  const { order, L, meta, thorax, abdomen } = C;
+  const { order, L, meta, thorax, abdomen, B } = C;
   // ---- Chrysopidae, grown by growVeins v2 (docs/wing-venation-spec.md, Neuroptera; refs neu-nothochrysa, neu-chrysoperla).
   // Lanes: the costa as an undrawn wall, Sc and R1 hugging it as pre-built offsets (the costal field widest a third of
   // the way out and closing at the apex, where Sc and R1 fuse), Rs a pre-built offset one cell under R1 rooted on it
@@ -4494,18 +4605,26 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
   // costal ladder C-Sc, the 2-5 R1-Rs rungs, the two Rs-M rungs closing the intramedian cell across the M fork, the 1-3
   // gradate series stepping outward through the branches, and a few m-cu rungs. Sites fill the outer parts of the
   // inter-branch strips and the M-Cu strip (k gene); uOpen 1.0, every longitudinal reaches the margin and end-twigs there. ----
-  const theta = randRange(30, 54);
-  const by0 = thorax.yAt(order.wingRoots[0]);
-  const Lw = (abdomen.yBot - by0) / Math.sin(theta * D2R) * randRange(1.0, 1.12);
+  // the wing set is a body gene (#51, B.wingSet): the forewing's angle, the hindwing's further sweep, and the forewing's
+  // length from the abdomen's (abdWing, abdomen / forewing)
+  const WS = B.wingSet, theta = WS.fw, WF = Object.assign({}, order.wingFams.base, order.wingFams[B.fam] || {});
+  const Lw = (abdomen.yBot - abdomen.yTop) / WS.abdWing;
   const G = {
-    spread: randRange(10, 24), heavy: rng() < 0.35, hw: randRange(0.15, 0.2), tipY: randRange(-0.1, 0.14), sharp: randRange(0, 1), hindL: randRange(0.82, 0.95), hindW: randRange(0.85, 1.0),
+    spread: WS.hw, heavy: rng() < 0.35, hw: randRange(...WF.hw), tipY: randRange(-0.1, 0.14), sharp: randRange(...WF.sharp), hindL: randRange(0.78, 0.97), hindW: randRange(0.85, 1.0),
     nB: randInt(8, 14), rsEnd: randRange(0.78, 0.88), ladder: randRange(0.022, 0.038), twig: randRange(1.5, 3.5), bowB: randRange(0.03, 0.09),
     grad: [], mBump: randRange(1.8, 2.6), maX: randRange(0.15, 0.21), mF: randRange(0.3, 0.42), cuX: randRange(0.03, 0.06), nmc: randInt(1, 4), zig: randRange(0.07, 0.12), drift: randRange(0, 0.01), gradAng: randRange(108, 116),   // M: fork vertex depth (M-Rs gaps), MA's margin end past the fork, the fork (span fractions); Cu's margin end past the fork; m-cu rungs; gradate rung lean (fraction of a branch), per-branch drift of the series, the rungs' target angle
     costal: randRange(0.07, 0.11), sub: randRange(0.04, 0.06), rsGap: randRange(1.1, 1.5), mGap: randRange(0.8, 1.1),   // costal field depth at its widest and the Sc-R1 gap (chord fractions); R1-Rs gap in Sc-R1 gaps; M-Rs gap in R1-Rs gaps
     k: randRange(1.4, 2.2), nR1Rs: randInt(2, 5), angle: randRange(110, 126), lean: rng() < 0.8 ? -1 : 1, rsFork: randRange(0.07, 0.12),   // nR1Rs: the R1-Rs strip's rungs (ref neu-nothochrysa: 2-5 there, #19)   // site spacing / strip width; junction genes; where Rs leaves R1
   };
+  G.mBump = 1 + (G.mBump - 1) * Math.min(1, 0.18 / G.hw);   // #51 a broad wing's chord makes the M-Rs gaps deep against the span: the fork vertex is shallower there, so the im cell's rungs still meet M and Rs inside the angle band
   { const ng = randInt(1, 3); for (let g = 0; g < ng; g++) G.grad.push(lerp(0.42, 0.78, (g + 0.5) / ng) * jitter(0.08)); }
-  const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: order.wingRoots[1], hind: true }, { L: Lw, k: 1, th: theta, t: order.wingRoots[0], hind: false }];
+  // the osmylid's stippled forewing spots (#51, neu-osmylus): small dark patches along the wing, spread over its length;
+  // each at (u along the span, s across the chord) with a radius in span fractions
+  G.spots = [];
+  if (WF.spots) { const n = randInt(WF.spots[0], WF.spots[1]); for (let q = 0; q < n; q++) G.spots.push({ u: lerp(0.2, 0.88, (q + randRange(0.15, 0.85)) / n), s: randRange(0.2, 0.8), r: randRange(0.035, 0.065) }); }
+  const spotsDrawn = [];
+  const roots = meta.thorax.wingRoots;   // the entry's, on the pterothorax behind the rolled pronotum (#51)
+  const defs = [{ L: Lw * G.hindL, k: G.hindW, th: theta + G.spread, t: roots[1], hind: true }, { L: Lw, k: 1, th: theta, t: roots[0], hind: false }];
   const s = G.sharp;
   const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0 };
   let foreGrown = null, foreR1Rs = 0, media = null;
@@ -4599,6 +4718,22 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
     for (const l of grown.lanes) if (l.id[0] === 'B' || l.id === 'Rs' || l.id === 'M' || l.id === 'Mp' || l.id === 'Cu') { const tw = twigEnd(wing, l.pl, l.id === 'Cu' || l.id === 'M' ? 2 : G.twig); L.wings.push((s, W) => grown.floor && grown.floor(s, W).ends.get(l)?.end ? [] : tw); }   // end-twigging on the outline; none where the lane floor (#14) ended the lane on a neighbour before the margin
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum;
+    if (!d.hind && G.spots.length) {   // stipple dots on a grid at the floored pitch inside each spot, jittered; every dot inside the wing
+      const pitch = floorPitch(2.4);
+      for (const sp of G.spots) {
+        const x0 = X(sp.u), r = sp.r * d.L, yr = wing.yRange(x0);
+        if (!yr) continue;
+        const c = [x0, lerp(yr[0], yr[1], sp.s)], dots = [];
+        for (let gy = -r, row = 0; gy <= r; gy += pitch * 0.87, row++) for (let gx = -r + (row % 2) * pitch / 2; gx <= r; gx += pitch) {
+          const q = [c[0] + gx + randRange(-0.3, 0.3), c[1] + gy + randRange(-0.3, 0.3)];
+          if (gx * gx + gy * gy > r * r || !wing.inside(q)) continue;
+          const yq = wing.yRange(q[0]); if (!yq || q[1] - yq[0] < 1 || yq[1] - q[1] < 1) continue;
+          const pt = wing.T(q); dots.push(pt); L.wings.push(circleEl(pt, 0.4, SW.F, '#000'));
+        }
+        spotsDrawn.push({ c: wing.T(c), r, dots });
+      }
+      rngSync();   // each dot draws its jitter, and a device plate's coarser pitch draws fewer
+    }
     if (!d.hind) {
       foreGrown = grown; foreR1Rs = r1rs.filter(nv => nv.pl).length;
       // M as drawn (#19): its fork and margin end, how far under Rs it runs before the im cell (in R1-Rs gaps), whether MP
@@ -4609,9 +4744,9 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
       media = { fork: uF, end: mEnd[0] / d.L, beside, mpMargin: !!mpEnd && poly.indexOf(mpEnd) >= 0, im: im.map(nv => nv.pl ? nv.uMid : null) };
     }
   }
-  meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, r1rs: foreR1Rs, media };
+  meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, r1rs: foreR1Rs, media, spots: spotsDrawn };
   meta.wingSig = ['neu', G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), G.nB, G.grad.length, Math.round(G.mF * 20), Math.round(G.maX * 20), G.nmc, foreGrown.joins.length, Math.round(G.hw * 50), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.bowB * 50),
-    Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100), Math.round(G.costal * 50), Math.round(G.k * 4), G.nR1Rs].join(',');
+    Math.round(G.rsEnd * 20), Math.round(G.ladder * 500), Math.round(G.hindL * 20), Math.round(G.zig * 100), Math.round(G.costal * 50), Math.round(G.k * 4), G.nR1Rs, G.spots.length].join(',');
 }
 
 const CIC_CLAVUS = 10;   // degrees the forewing's claval margin runs in from straight back (#26)

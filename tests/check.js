@@ -92,6 +92,35 @@ const NEU = { r1rs: [2, 6], forkMin: 0.28, beside: 1.5, imMax: 0.15, poses: ['wa
 const neuSeen = { neuR1Rs: 0, neuMedia: 0, neuForeleg: 0 };   // lacewing plates each #19 check asserted on, for POST.neuSeen
 let neuSeenPlates = 0;   // lacewing plates in the run, counted by the seed loop whichever checks are selected
 const NEU_MIN = 20;   // lacewing plates a run needs before a #19 check that never ran fails rather than being reported (~8% of plates)
+// #51 Neuroptera families (docs/research-neuroptera-families.md, refs neu-myrmeleon, neu-libelloides, neu-mantispa,
+// neu-osmylus, neu-hemerobius), stated from the references rather than read from the engine's tables. fams: the families a
+// lacewing plate rolls; famsAll: a run with this many lacewing plates has drawn every family
+const NEU_FAMS = { fams: ['chrysopid', 'hemerobiid', 'myrmeleontid', 'ascalaphid', 'mantispid', 'osmylid'], famsAll: 60 };
+// ant: per family, the antenna kinds drawn, the club (clubbed kinds) and the drawn length in body lengths (head top to
+// abdomen tip): the hemerobiid's moniliform, the antlion's short gradual club, the owlfly's body-long antenna with an
+// abrupt club, the mantidfly's short antenna
+const NEU_ANT = { chrysopid: { kinds: ['filiform', 'moniliform'], len: [0.4, 1] }, hemerobiid: { kinds: ['moniliform'], len: [0.3, 0.65] },
+  myrmeleontid: { kinds: ['clubbed'], club: 'gradual', len: [0.12, 0.35] }, ascalaphid: { kinds: ['clubbed'], club: 'abrupt', len: [0.7, 1.1] },
+  mantispid: { kinds: ['moniliform', 'filiform'], len: [0.1, 0.35] }, osmylid: { kinds: ['filiform'], len: [0.3, 0.7] } };
+// abdWing: the abdomen's length over the forewing's (root to the farthest outline point): the antlion's 1.3-1.6
+// (the ticket's; neu-myrmeleon measures about 1.25 on a set specimen, a female or a short male), its tip past every wing by past body units;
+// every other family's wings longer than the abdomen (chrysopids 0.37-0.67 before #51)
+const NEU_ABD = { antlion: [1.25, 1.65], past: 2, other: [0.3, 0.9] };
+// pron: the pronotum's length (the pronotal collar, meta.bodyGenes.thorax.lines[0].t, a fraction of the thorax) on every
+// lacewing, the mantidfly's long prothorax (neu-mantispa: the prothorax as long as the pterothorax or longer) and every
+// other family's short one; the wing roots and the mid and hind coxae on the pterothorax behind it
+const NEU_PRON = { all: [0.1, 0.6], mantispid: [0.38, 0.6], other: [0.1, 0.25] };
+// raptor: the mantidfly's raptorial forelegs (neu-mantispa): the femur raised toward the head at least femur degrees from
+// straight out, the tibia folded back against it (at least fold degrees between the femur's and the tibia's directions),
+// the femur stout (at most stout times as long as its widest)
+const NEU_RAPTOR = { femur: -30, fold: 120, stout: 4.2 };
+// spots: the osmylid's stippled forewing spots (neu-osmylus): at least n spots of at least dots dots each, every dot inside
+// a wing outline; no other family's wings are spotted
+const NEU_SPOTS = { n: 3, dots: 4 };
+// eyes: the owlfly's and the mantidfly's large eyes (neu-libelloides, neu-mantispa): each eye at least eye of the head's
+// width across (meta.head: eyes[].rx, W), larger than a chrysopid's (0.22-0.28)
+const NEU_EYES = { big: ['ascalaphid', 'mantispid'], eye: 0.3 };
+const neuFamRun = {};   // family -> lacewing plates of it in the run, for POST.neuFamilies
 const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 // #22 grasshopper, from the references (orth-grasshopper: the hindwing folds under the tegmen, the tegmina overlap along
 // the inner margin and their apices part; the archedictyon is rows of near-rectangular cells; thorax-orth-grasshopper and
@@ -405,7 +434,11 @@ const PRE = {
       if (o.elytra !== undefined && (!o.elytra || !o.elytra.styles || !range2(o.elytra.pitch) || !range2(o.elytra.dash) || Object.values(o.elytra.fams || {}).some(e => !range2(e.len)))) f('elytra is not { styles, pitch: [min, max], dash: [min, max], fams?: { fam: { len: [min, max], truncate? } } }');
       if (o.pronotum !== undefined && (!o.pronotum || !range2(o.pronotum.wl) || !range2(o.pronotum.ely))) f('pronotum is not { wl: [min, max], ely: [min, max] }: ' + JSON.stringify(o.pronotum));
       if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
-      if (o.wingSet !== undefined && (!o.wingSet || !range2(o.wingSet.fw) || !range2(o.wingSet.hw) || Object.values(o.wingSet.fams || {}).some(w => (w.fw && !range2(w.fw)) || (w.hw && !range2(w.hw))))) f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } }: ' + JSON.stringify(o.wingSet));
+      // #51: or named sets { name: { w, fw, hw } } with abdWing, the family's sets replacing the order's
+      const setsBad = w => !w.sets || !range2(w.abdWing) || Object.values(w.sets).some(v => !(v.w > 0) || !range2(v.fw) || !range2(v.hw));
+      if (o.wingSet !== undefined && (!o.wingSet || (o.wingSet.sets ? setsBad(o.wingSet) || Object.values(o.wingSet.fams || {}).some(w => (w.sets || w.abdWing) && setsBad(Object.assign({}, o.wingSet, w)))
+        : !range2(o.wingSet.fw) || !range2(o.wingSet.hw) || Object.values(o.wingSet.fams || {}).some(w => (w.fw && !range2(w.fw)) || (w.hw && !range2(w.hw))))))
+        f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } } nor { abdWing, sets: { set: { w, fw, hw } }, fams? }: ' + JSON.stringify(o.wingSet));
       if (o.wingPlans !== undefined && Object.values(o.wingPlans).some(f => Object.keys(o.wingPlans).includes(f))) f('wingPlans maps a family onto another mapped family: ' + JSON.stringify(o.wingPlans));
       if (o.chaetae !== undefined && Object.values(o.chaetae).some(c => !(o.chaetaeKinds || {})[c.kind] || !(c.p > 0 && c.p <= 1))) f('chaetae is not { fam: { kind (a chaetaeKinds key), p in (0, 1] } }: ' + JSON.stringify(o.chaetae));
       if (o.wingSetFams !== undefined && Object.values(o.wingSetFams).some(w => Object.keys(w).some(k => !(o.wingSets || {})[k]))) f('wingSetFams weighs a set wingSets does not have');
@@ -423,7 +456,7 @@ const PRE = {
         for (const k of P_FIELDS) if (!(typeof P[k] === 'number' && P[k] > 0)) f('proportions leaves P.' + k + ' unset: ' + P[k]);
         for (const k of ['thoraxAnchors', 'abdAnchors']) if (!Array.isArray(P[k]) || P[k].length < 3 || P[k].some(a => !Array.isArray(a) || a.length !== 2)) f('proportions leaves P.' + k + ' unset or malformed');
       }
-      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}], ['wingSetFams', o.wingSetFams || {}], ['wingPlans', o.wingPlans || {}], ['chaetae', o.chaetae || {}]])
+      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['famScale', o.famScale || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}], ['wingSetFams', o.wingSetFams || {}], ['wingPlans', o.wingPlans || {}], ['chaetae', o.chaetae || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
   },
@@ -498,8 +531,11 @@ const CHECKS = {
     if (!roots) fail('no registry entry for the type');
     const th = meta.thorax;
     if (!th.profile || th.profile.length < 3) fail('no thorax profile');
-    if (roots && JSON.stringify(th.wingRoots) !== JSON.stringify(roots)) fail('meta.thorax.wingRoots is not the registry\'s: ' + JSON.stringify(th.wingRoots));
-    for (const t of roots || []) {
+    // #51 an entry with a prothorax gene keeps its roots on the pterothorax behind the rolled pronotum (T.pron, laid out for
+    // T.pron0): a root at t sits at pron + (t - pron0)(1 - pron)/(1 - pron0)
+    const T = meta.bodyGenes.thorax, want = reg && reg.prothorax ? roots.map(t => T.pron + (t - T.pron0) * (1 - T.pron) / (1 - T.pron0)) : roots;
+    if (want && th.wingRoots.some((t, i) => Math.abs(t - want[i]) > 1e-9) || (want && th.wingRoots.length !== want.length)) fail('meta.thorax.wingRoots is not the registry\'s: ' + JSON.stringify(th.wingRoots));
+    for (const t of th.wingRoots || []) {
       const hw = profHw(th.profile, th.yTop + t * (th.yBot - th.yTop), 0.11);
       if (hw <= 4) fail('thorax too narrow at a wing root: hw ' + hw.toFixed(1) + ' at t=' + t);
     }
@@ -1029,7 +1065,7 @@ const CHECKS = {
   // rolled and drawn is walking or spread (never raised), and the femur (trochanter to femur tip, meta.legs[0].pts) points
   // out from the body no more than NEU.femurMin degrees toward the head; on the right legs and the skewed left set.
   neuForeleg(meta, svg, fail) {
-    if (meta.type !== 'lacewing') return;
+    if (meta.type !== 'lacewing' || meta.fam === 'mantispid') return;   // #51: the mantidfly's are raptorial (neuRaptorial)
     neuSeen.neuForeleg++;
     const fr = meta.legs.find(l => l.pair === 'front'), collar = meta.bodyGenes.thorax.lines[0];
     if (!fr || !collar) return fail('lacewing plate has no front leg / pronotal collar');
@@ -1040,6 +1076,69 @@ const CHECKS = {
       const a = Math.atan2(pts[3][1] - pts[2][1], pts[3][0] - pts[2][0]) * 180 / Math.PI;
       if (a < NEU.femurMin) fail('lacewing' + label + ' fore femur raised more than ' + (-NEU.femurMin) + ' degrees toward the head: ' + (-a).toFixed(0));
     }
+  },
+  // #51 the lacewing family (P.fam, meta.fam) is one of the Neuroptera families the plate draws, and on the bodySig
+  neuFamily(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    neuFamRun[meta.fam] = (neuFamRun[meta.fam] || 0) + 1;
+    if (!NEU_FAMS.fams.includes(meta.fam)) return fail('lacewing family not one of ' + NEU_FAMS.fams.join(' / ') + ': ' + meta.fam);
+    if (!meta.bodySig.split(',').includes(meta.fam)) fail('lacewing family ' + meta.fam + ' not on the bodySig');
+  },
+  // #51 the lacewing's antenna is its family's (NEU_ANT): kind, club, and drawn length against the body
+  neuAntenna(meta, svg, fail) {
+    if (meta.type !== 'lacewing' || !NEU_ANT[meta.fam]) return;
+    const want = NEU_ANT[meta.fam], an = meta.antennae, A = meta.bodyGenes.ant;
+    const bl = meta.abdomen.yBot - meta.head.top, len = A.len * an.lenK / bl;
+    if (!want.kinds.includes(an.kind)) fail(meta.fam + ' antenna not ' + want.kinds.join(' / ') + ': ' + an.kind);
+    if (want.club && an.club !== want.club) fail(meta.fam + ' antenna club not ' + want.club + ': ' + an.club);
+    if (len < want.len[0] || len > want.len[1]) fail(meta.fam + ' antenna ' + len.toFixed(2) + ' body lengths, not ' + want.len.join('-'));
+  },
+  // #51 the abdomen against the forewing (NEU_ABD): the antlion's reaches past the wings
+  neuAbdomen(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    const w = meta.wingOutlines.slice().sort((a, b) => a[0][1] - b[0][1]), fore = w[0];
+    const foreL = Math.max(...fore.map(p => dist(p, fore[0]))), abdL = meta.abdomen.yBot - meta.abdomen.yTop, r = abdL / foreL;
+    const band = meta.fam === 'myrmeleontid' ? NEU_ABD.antlion : NEU_ABD.other;
+    if (r < band[0] || r > band[1]) fail(meta.fam + ' abdomen ' + r.toFixed(2) + ' forewing lengths, not ' + band.join('-'));
+    const wingBot = Math.max(...w.flat().map(p => p[1]));
+    if (meta.fam === 'myrmeleontid' && !(meta.abdomen.yBot > wingBot + NEU_ABD.past)) fail('antlion abdomen tip does not reach past the wings: tip ' + meta.abdomen.yBot.toFixed(1) + ', wings to ' + wingBot.toFixed(1));
+  },
+  // #51 the pronotum's length (NEU_PRON): the mantidfly's long prothorax, the wings and the mid and hind legs behind it
+  neuPronotum(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    const t = meta.bodyGenes.thorax.lines[0].t, th = meta.thorax, yC = th.yTop + t * (th.yBot - th.yTop);
+    const band = meta.fam === 'mantispid' ? NEU_PRON.mantispid : NEU_PRON.other;
+    if (t < NEU_PRON.all[0] || t > NEU_PRON.all[1] || t < band[0] || t > band[1]) fail(meta.fam + ' pronotum ' + t.toFixed(2) + ' of the thorax, not ' + band.join('-'));
+    for (const r of th.wingRoots) if (!(r > t)) fail(meta.fam + ' wing root at ' + r.toFixed(2) + ' on the pronotum (collar ' + t.toFixed(2) + ')');
+    for (const leg of meta.legs) if (leg.pair !== 'front' && !(leg.y > yC)) fail(meta.fam + ' ' + leg.pair + ' coxa on the pronotum');
+  },
+  // #51 the mantidfly's raptorial forelegs (NEU_RAPTOR), on the right legs and the skewed left set
+  neuRaptorial(meta, svg, fail) {
+    if (meta.type !== 'lacewing' || meta.fam !== 'mantispid') return;
+    const fr = meta.legs.find(l => l.pair === 'front'), deg = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI;
+    for (const [label, pts] of [['', fr.pts], [' skewed', skewedPts(fr)]]) {
+      const aF = deg(pts[2], pts[3]), aT = deg(pts[3], pts[4]), fold = Math.abs(((aT - aF) % 360 + 540) % 360 - 180);
+      if (aF > NEU_RAPTOR.femur) fail('mantidfly' + label + ' fore femur not raised toward the head: ' + aF.toFixed(0) + ' degrees');
+      if (fold < NEU_RAPTOR.fold) fail('mantidfly' + label + ' fore tibia not folded back on the femur: ' + fold.toFixed(0) + ' degrees');
+    }
+    if (fr.femLen / fr.femW > NEU_RAPTOR.stout) fail('mantidfly fore femur not stout: ' + (fr.femLen / fr.femW).toFixed(2) + 'x as long as wide');
+  },
+  // #51 the osmylid's stippled wing spots (NEU_SPOTS, meta.wingStats.spots: { dots: [[x, y] body coords] } per spot)
+  neuSpots(meta, svg, fail) {
+    if (meta.type !== 'lacewing') return;
+    const spots = (meta.wingStats && meta.wingStats.spots) || [];
+    if (meta.fam !== 'osmylid') { if (spots.length) fail(meta.fam + ' wings carry osmylid spots'); return; }
+    if (spots.length < NEU_SPOTS.n) fail('osmylid forewing has ' + spots.length + ' stippled spots, want ' + NEU_SPOTS.n + '+');
+    for (const sp of spots) {
+      if (sp.dots.length < NEU_SPOTS.dots) { fail('osmylid wing spot of ' + sp.dots.length + ' dots'); break; }
+      if (sp.dots.some(p => !meta.wingOutlines.some(o => inPoly(p, o)))) { fail('osmylid wing spot dot outside the wings'); break; }
+    }
+  },
+  // #51 the owlfly's and the mantidfly's large eyes (NEU_EYES)
+  neuEyes(meta, svg, fail) {
+    if (meta.type !== 'lacewing' || !NEU_EYES.big.includes(meta.fam)) return;
+    const h = meta.head, k = Math.max(...h.eyes.map(e => 2 * e.rx)) / h.W;
+    if (k < NEU_EYES.eye) fail(meta.fam + ' eye ' + k.toFixed(2) + ' of the head width, want ' + NEU_EYES.eye + '+');
   },
   // #22 the folded hindwing fan (meta.orth.fan, right side, body coordinates) never stands out past the costa of its
   // tegmen (meta.orth.tegmen): at every height the fan reaches no further out than the tegmen's outer edge there, and
@@ -1649,6 +1748,12 @@ const POST = {
     console.log('#19 lacewing checks asserted on (of ' + n + ' lacewing plates):', Object.keys(neuSeen).filter(k => ran.has(k)).map(k => k + ' ' + neuSeen[k]).join(', ') +
       (n < NEU_MIN ? '; too few lacewing plates (' + n + ' < ' + NEU_MIN + ') to require every check' : ''));
   },
+  // #51 every Neuroptera family is drawn once the run has NEU_FAMS.famsAll lacewing plates
+  neuFamilies(fail) {
+    const n = Object.values(neuFamRun).reduce((a, b) => a + b, 0), missing = NEU_FAMS.fams.filter(f => !neuFamRun[f]);
+    if (n >= NEU_FAMS.famsAll && missing.length) fail('lacewing families never drawn in ' + n + ' lacewing plates: ' + missing.join(', '), 'lacewing');
+    console.log('#51 lacewing families:', JSON.stringify(neuFamRun));
+  },
   // the #22 checks assert only on grasshopper plates: once the run has ORTH_MIN of them every selected one must have run
   orthSeen(fail) {
     const n = orthSeenPlates, idle = Object.keys(orthSeen).filter(k => ran.has(k) && !orthSeen[k]);
@@ -1749,7 +1854,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'] };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
