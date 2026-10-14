@@ -29,7 +29,7 @@ contract for changes.
   everything the engine knows about it under one key: its `proportions` roll, the `abd` / `thorax` /
   `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots` + `wingRootX` (the root's
   x as a fraction of the thorax half-width), the `tegula`, `legThick` and `antFit` opt-ins (and the lacewing's #51
-  `habitus`, `prothorax`, `wingSet` and `wingFams` family tables), its `wings` function
+  `famScale`, `prothorax`, `wingSet` sets and `wingFams` family tables), its `wings` function
   and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
   first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
   re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs

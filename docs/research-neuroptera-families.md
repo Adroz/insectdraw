@@ -26,7 +26,7 @@ lacewing's beaded antenna and broad wings, the osmylid's spotted wings.
 ## Rules derived (what the engine draws)
 
 - **Family pick** (`proportions`): chrysopid twice as likely as each of hemerobiid, myrmeleontid, ascalaphid, mantispid,
-  osmylid. `habitus` scales the rolled sizes per family: the hemerobiid every length ×0.75 (the plate's 1.3 scale cap
+  osmylid. `famScale` scales the rolled sizes per family: the hemerobiid every length ×0.75 (the plate's 1.3 scale cap
   leaves it small), the antlion's abdomen ×1.45 long and ×0.75 wide, the owlfly's head ×1.3 broad, the mantidfly's
   abdomen stout.
 - **Abdomen against the wing** (`wingSet.abdWing`, the abdomen's length over the forewing's): chrysopid 0.38–0.68 (0.37–

@@ -3,7 +3,8 @@
 Status: two plans in one file. The first, the per-seed genes for legs, body, head, eyes and antennae, has all seven
 steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07); it follows the wing-genes work (see
 README "Venation" and `meta.wingSig`). The second, "Nine plates, nine insects (#30)" at the end, is open: the
-perceptual criterion (`tests/perceptual.js`) and eight steps, one ticket per order (#48–#55).
+perceptual criterion (`tests/perceptual.js`) and eight steps, one ticket per order (#48–#55); step 2 (cicada, #49) is
+done.
 
 ### Status detail
 
@@ -413,6 +414,13 @@ rules for all of them:
    flanges wider than the head); mesonotum markings (the paired obconical spots and the M mark, as hatched shapes);
    abdomen width / taper families. Grounded in `research-thorax.md` (Hemiptera) and `research-head-eyes.md`
    (cicada); #26 fixes the forelegs and composition first or alongside.
+   **Done (#49, 2026-10-14)**, grounded in `research-cicada-habitus.md`: family `P.fam` (cicadine with tymbal covers,
+   small slender cicadettine, platypleurine with the flared collar), abdomen taper (barrel / cone / spindle), wing set
+   spread / half-open / roofed (`B.wing`, the roofed tegmina laid over the abdomen and meeting on the midline, the
+   hindwing hidden), forewing narrow-pointed / broad-round, hatched mesonotum marks (obconical spots, M, both, none).
+   `node tests/perceptual.js 60 --type cicada`: seeds 1-60 min 5.95 on main (6.99 on backlog after #26) -> 10.09,
+   sheet9 8.82 -> 15.15; seeds 61-120 min 5.76 (7.12) -> 10.55, sheet9 8.36 -> 16.55; `--view body` 6.74 -> 11.86
+   and 5.21 -> 10.78.
 3. **Mayfly: family habitus, hindwing size, tails, #50** (7.47). One triangular wing set, one body, two or three tails of
    one length. Families: ephemerid (large, three tails, dark dorsal triangles on the tergites), baetid (small, two
    tails, a tiny or absent hindwing), heptageniid (flattened, broad head, two tails), caenid (no hindwing, broad
