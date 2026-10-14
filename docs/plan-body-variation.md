@@ -405,6 +405,12 @@ rules for all of them:
    on a long prothorax, the `raised` pose with a folded tibia), osmylid (stippled wing spots). Genes: family, abdomen
    length relative to the wing, pronotum length (0.1–0.6 of the thorax), antenna kind per family (the `clubbed` kind
    exists), foreleg family. Wing-outline changes (nemopterid ribbons) are out of scope. #19 corrects the forelegs.
+   **Done (#51, 2026-10-14).** The six families, with a wing set gene (spread / forward / swept) and the antlion's
+   abdomen at 1.2–1.6 forewings (the reference measures ~1.25); rules and references in
+   `docs/research-neuroptera-families.md`, checks `neuFamily`, `neuAntenna`, `neuAbdomen`, `neuPronotum`,
+   `neuRaptorial`, `neuEyes`, `neuSpots`, `neuFamilies`. `tests/perceptual.js 60 --type lacewing`, before (backlog
+   f1abafd, after #19) → after: seeds 1–60 min 8.30 (13,24) → 10.20 (37,57), sheet9 11.77 → 17.42; seeds 61–120
+   7.18 → 9.45, sheet9 11.99 → 17.50; `--view body` 8.18 → 11.18 and 10.27 → 10.49.
 5. **Lepidoptera: abdomen families, leg pose and wing set, #52** (moth 9.17, butterfly 8.75). The audit: same abdomen,
    same hairy thorax, same raised-foreleg V, same hind-leg stubs. Genes by `P.fam`: sphingid (long fusiform abdomen
    tapering to a point, lateral spot row), saturniid (short, stout, hairy), geometrid (slender, long), arctiid
