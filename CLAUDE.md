@@ -28,7 +28,7 @@ contract for changes.
 - One registry per order (#4): an order is one entry in `ORDERS` (just above `rollBodyGenes`), holding
   everything the engine knows about it under one key: its `proportions` roll, the `abd` / `thorax` /
   `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots` + `wingRootX` (the root's
-  x as a fraction of the thorax half-width), the `tegula` and `legThick` opt-ins, its `wings` function
+  x as a fraction of the thorax half-width), the `tegula`, `legThick` and `antFit` opt-ins, its `wings` function
   and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
   first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
   re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs
@@ -138,7 +138,8 @@ contract for changes.
   `rollAntGenes` (the entry's `ant` table, poses from `ANT_POSES`) rolls the genes, `antennaGeom` builds the
   geometry without rng, and the antennae block (after the legs and the wings) validates the pose: no point of
   the right antenna reaches the mirror line (the left is its mirror image, so that is the
-  no-crossing rule), the antenna alone does not push the plate scale under 0.6, no centre-line of the
+  no-crossing rule), the antenna alone does not push the plate scale under 0.6 (an entry's `antFit` raises that floor and caps how far out
+  the antenna reaches: the grasshopper's is scale 1.0 and 1.3× the half width of the rest of the plate, #23), no centre-line of the
   antenna (`meta.antennae.lines`: shaft, club, rami, lamellae, arista) comes within 3 px + both half widths of a
   leg segment ahead of the thorax in any leg pose (#7: every leg from the femur on, right side and the skewed
   left set, each segment's half width on `meta.legs[i].segHw`; beside the body the antenna lies over the legs),

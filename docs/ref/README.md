@@ -62,3 +62,12 @@ References for `../research-antennae.md`. All from Wikimedia Commons; downscaled
 | ant-butterfly-tips-bingham.png | C. T. Bingham, butterfly antenna tips: Danais, Orsotriaena, Hypolimnas, Pareba, Libythea, Abisara, Papilio, Pieris, Lampides, Tagiades (skipper apiculus) | [Antennae ctb.png](https://commons.wikimedia.org/wiki/File:Antennae_ctb.png) | Public domain |
 | ant-longhorn-dorcadion.jpg | Carinatodorcadion fulvum head, dorsal: scape / pedicel / first flagellomere lengths marked, eyes notched around the sockets, antennae swept back beside the body | [Carinatodorcadion fulvum detail1.jpg](https://commons.wikimedia.org/wiki/File:Carinatodorcadion_fulvum_detail1.jpg), Siga | CC BY-SA 3.0 |
 | ant-lucanus-curtis.jpg | John Curtis, *British Entomology*: Lucanus plate with the geniculate lamellate antenna drawn in detail and the set habitus | [Lucanus Curtis.jpg](https://commons.wikimedia.org/wiki/File:Lucanus_Curtis.jpg) | Public domain |
+
+## Legs (`leg-` prefix)
+
+References for `../research-legs-eyes-antennae.md`. From Wikimedia Commons.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| leg-orth-femur.jpg | Grasshopper hind femur, lateral micrograph of the outer face: drumstick profile deepest at a fifth of the length, herringbone (pinnate) muscle chevrons over the whole face, genicular lobe at the knee; the #23 femur measurements | [Grasshopper leg.tif](https://commons.wikimedia.org/wiki/File:Grasshopper_leg.tif), Tenbergen (2020), downscaled to 1280 px JPEG | CC BY-SA 4.0 |
+| leg-orth-psm1891.jpg | Grasshopper hind leg engraving (femur with herringbone, serrated tibia) and the stridulatory peg row, *Popular Science Monthly* vol. 39 p. 697 (1891) | [PSM V39 D697 Grasshopper leg.jpg](https://commons.wikimedia.org/wiki/File:PSM_V39_D697_Grasshopper_leg.jpg) | Public domain |

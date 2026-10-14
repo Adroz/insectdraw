@@ -19,6 +19,12 @@ const raster = require('./raster');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
+// #23 grasshopper hind femur, measured on docs/ref/leg-orth-femur.jpg (lateral micrograph, 4.4 long per depth, deepest at
+// 0.19 of the length) and the PSM 1891 engraving (3.6, deepest at 0.24); see docs/research-legs-eyes-antennae.md
+const HIND_FEMUR = { ratio: [3.6, 4.8], peak: [0.12, 0.4], herring: [0.1, 0.8] };
+// #23 grasshopper antennae: no plate under this scale because of the antenna alone, the antenna within this many times
+// the half width of the rest of the plate, a tetrigid antenna at least this many head widths long
+const GRASS_ANT = { scale: 1.0, width: 1.3, tetrigid: 0.5 };
 const DEV = 440;   // device plate size the device checks draw at (spec #32, ADR 0001)
 const SAMPLE = 50;   // the slow extras (parts, the 800 px device plate) run on every SAMPLE-th seed
 const SAMPLED = ['parts', 'device'];   // the checks that read ctx.sampled, for the report
@@ -56,6 +62,35 @@ const neuSeen = { neuR1Rs: 0, neuMedia: 0, neuForeleg: 0 };   // lacewing plates
 let neuSeenPlates = 0;   // lacewing plates in the run, counted by the seed loop whichever checks are selected
 const NEU_MIN = 20;   // lacewing plates a run needs before a #19 check that never ran fails rather than being reported (~8% of plates)
 const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
+// #22 grasshopper, from the references (orth-grasshopper: the hindwing folds under the tegmen, the tegmina overlap along
+// the inner margin and their apices part; the archedictyon is rows of near-rectangular cells; thorax-orth-grasshopper and
+// research-thorax.md: the pronotum is a saddle, widest over the metazona, with lateral carinae and a hind margin that
+// projects back over the tegmina). fanOut: how far (body units) the fan may stand past its tegmen's costa; overlap: the
+// inner margin crosses the midline by at least this over the middle of the tegmen; apexX: each apex at least this far
+// on its own side; tip: the last fraction of the tegmen length that stays clear of the midline; oblique: the share of
+// the archedictyon's cell outlines that may run obliqueBand degrees off the tegmen's axis (a honeycomb has a third),
+// asserted on a plate with cellsMin cells or more (seed 2103: 49 cells, mostly at the tapering tip, 22%); onVein: an
+// intercalary's root within this of another vein; base: a lane rooted within this fraction of the length of the tegmen's
+// base starts at the base; metazona: the pronotum is widest behind this fraction of its length; prozona: and at most this
+// fraction of that width ahead of the principal sulcus; hind: its half width at the hind margin at most this fraction of
+// the widest (an angled or rounded margin, never truncate); carinae: the lateral carina kinds the bodySig carries
+const ORTH = { fanOut: 0.5, overlap: 1, apexX: 2, tip: 0.04, oblique: 0.2, obliqueBand: [20, 65], cellsMin: 60, onVein: 0.75, base: 0.12, metazona: 0.55, prozona: 0.96, hind: 0.6, carinae: ['straight', 'incurved', 'outcurved'] };
+const orthSeen = { orthFan: 0, orthTegmina: 0, orthCells: 0, orthIntercalary: 0, orthPronotum: 0 };   // grasshopper plates each #22 check asserted on, for POST.orthSeen
+let orthSeenPlates = 0;   // grasshopper plates in the run, counted by the seed loop whichever checks are selected
+const ORTH_MIN = 20;   // grasshopper plates a run needs before a #22 check that never ran fails rather than being reported (~8% of plates)
+// the x where a horizontal line at y leaves a closed polygon on the right (its outer edge), or null when it misses it
+const rightmostAt = (poly, y) => {
+  let best = null;
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j];
+    if ((a[1] > y) === (b[1] > y)) continue;
+    const x = a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]);
+    if (best === null || x > best) best = x;
+  }
+  return best;
+};
+const leftmostAt = (poly, y) => { const m = rightmostAt(poly.map(p => [-p[0], p[1]]), y); return m === null ? null : -m; };
+const distToPl = (p, pl) => { let d = Infinity; for (let i = 0; i + 1 < pl.length; i++) { const a = pl[i], b = pl[i + 1], v = [b[0] - a[0], b[1] - a[1]], L2 = v[0] * v[0] + v[1] * v[1] || 1e-9, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * v[0] + (p[1] - a[1]) * v[1]) / L2)); d = Math.min(d, Math.hypot(p[0] - a[0] - t * v[0], p[1] - a[1] - t * v[1])); } return d; };
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 // #17, from the references (odo-damsel-ris1921: a coenagrionid, two antenodals and the quadrilateral from the arculus;
 // Calopterygidae carry an antenodal ladder) and the common names of each family, stated here rather than read from the engine
@@ -235,6 +270,7 @@ const PRE = {
       if (o.tegula && o.wingRootX === undefined) f('tegula without a wingRootX to sit at');
       if (o.legThick !== undefined && !(typeof o.legThick === 'number' && o.legThick > 0)) f('legThick is not a positive factor: ' + o.legThick);
       if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
+      if (o.antFit !== undefined && !(o.antFit && o.antFit.scale > 0 && o.antFit.width > 0)) f('antFit is not { scale, width } (both > 0): ' + JSON.stringify(o.antFit));
       if (typeof o.wings !== 'function') f('wings is not a function');
       const nb = namesBad(o.names); if (nb) f('names: ' + nb);
       for (const v of Object.keys(o.variantNames || {})) { const vb = namesBad(o.variantNames[v]); if (vb) f('variantNames.' + v + ': ' + vb); }
@@ -320,12 +356,23 @@ const CHECKS = {
     const fr = byPair.front, mi = byPair.mid, hi = byPair.hind;
     if (fr && mi && hi && !(fr.femurTip[1] < mi.femurTip[1] && mi.femurTip[1] < hi.femurTip[1])) fail('femur tips not ordered front < mid < hind along the body');
     // saltatorial hind femur (docs/research-legs-eyes-antennae.md: "hind femur enormous"): it must read as a jumping leg, so
-    // it is at least 1.8x as wide as the mid femur and between 3 and 5 times as long as it is wide
+    // it is at least 1.8x as wide as the mid femur (its proportions are the hindFemur check)
     if (meta.type === 'grasshopper' && hi && mi && hi.femW !== undefined) {
       if (hi.femW < 1.8 * mi.femW) fail('grasshopper hind femur only ' + (hi.femW / mi.femW).toFixed(2) + 'x the mid femur width');
-      const r = hi.femLen / hi.femW; if (r < 3 || r > 5) fail('grasshopper hind femur length/width ' + r.toFixed(2) + ' outside 3-5');
     }
     checkLegSet(meta, meta.legs.map(l => l.pts), '', fail);
+  },
+  // #23 the saltatorial hind femur as drawn (meta.legs[2].fem: trochanter-to-knee length, outline width every twentieth,
+  // the span the herringbone chevrons cover) against docs/ref/leg-orth-femur.jpg: HIND_FEMUR.ratio long per widest width,
+  // widest in the proximal third (not at the trochanter: a drumstick, not a carrot), chevrons over the whole outer face
+  hindFemur(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    const f = meta.legs[2] && meta.legs[2].fem;
+    if (!f || !(f.L > 0) || !f.widths || f.widths.length !== 21) return fail('no drawn hind femur profile on meta.legs[2].fem');
+    const wMax = Math.max(...f.widths), at = f.widths.indexOf(wMax) / 20, r = f.L / wMax;
+    if (r < HIND_FEMUR.ratio[0] || r > HIND_FEMUR.ratio[1]) fail('grasshopper hind femur length/width ' + r.toFixed(2) + ' outside ' + HIND_FEMUR.ratio.join('-'));
+    if (at < HIND_FEMUR.peak[0] || at > HIND_FEMUR.peak[1]) fail('grasshopper hind femur widest at ' + at.toFixed(2) + ' of its length, not in ' + HIND_FEMUR.peak.join('-'));
+    if (!f.herring || f.herring[0] > HIND_FEMUR.herring[0] || f.herring[1] < HIND_FEMUR.herring[1]) fail('grasshopper hind femur herringbone covers ' + JSON.stringify(f.herring && f.herring.map(x => +x.toFixed(2))) + ', not ' + HIND_FEMUR.herring.join('-') + ' of the face');
   },
   // mirror skew (plan step 7): the left legs are the right legs rotated 0-6 degrees about their own coxa, then mirrored;
   // the rotated set must hold the same pose invariants as the right legs
@@ -386,6 +433,25 @@ const CHECKS = {
           if (d < leg.segHw[k] + ANT_LEG_CLEAR) return fail('antenna within ' + d.toFixed(1) + ' of the' + label + ' ' + leg.pair + ' leg ahead of the thorax (' + an.kind + ' ' + an.pose + ', legs ' + meta.legRoll.pose + ')');
         }
       }
+    }
+  },
+  // #23 grasshopper antennae: the antenna alone never pulls the plate under scale GRASS_ANT.scale (the plate scale
+  // against the scale of meta.antennae.box0, the box before the antennae: body, legs and wings, with the same margins and
+  // 1.3 cap as assemblePlate), the right antenna reaches no further out than GRASS_ANT.width x that box's half width (so
+  // the whole pair spans at most that many times the rest of the plate), and a tetrigid's shaft is at least
+  // GRASS_ANT.tetrigid head widths long as drawn
+  grasshopperAntenna(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    const an = meta.antennae, b = an && an.box0;
+    if (!b || !(an.headW > 0)) return fail('no pre-antenna box / head width on meta.antennae');
+    const hw = Math.max(Math.abs(b.minX), b.maxX), sc0 = Math.min(552 / (2 * hw), 507 / (b.maxY - b.minY), 1.3);
+    if (meta.scale < Math.min(GRASS_ANT.scale, sc0) - 1e-6) fail('grasshopper antenna alone pulls the plate under scale ' + GRASS_ANT.scale + ' (' + an.pose + ')');
+    const out = Math.max(...an.pts.map(p => p[0]));
+    if (out > GRASS_ANT.width * hw + 1e-6) fail('grasshopper antenna reaches past ' + GRASS_ANT.width + 'x the body box half width (' + an.pose + ')');
+    if (an.fam === 'tetrigid') {
+      const pl = an.lines[0].pl; let len = 0;
+      for (let i = 1; i < pl.length; i++) len += Math.hypot(pl[i][0] - pl[i - 1][0], pl[i][1] - pl[i - 1][1]);
+      if (len < GRASS_ANT.tetrigid * an.headW) fail('tetrigid antenna under ' + GRASS_ANT.tetrigid + ' head widths long');
     }
   },
   // #12 the caption and the drawing agree: type bee draws bee families only and type wasp none of them
@@ -702,6 +768,91 @@ const CHECKS = {
       if (a < NEU.femurMin) fail('lacewing' + label + ' fore femur raised more than ' + (-NEU.femurMin) + ' degrees toward the head: ' + (-a).toFixed(0));
     }
   },
+  // #22 the folded hindwing fan (meta.orth.fan, right side, body coordinates) never stands out past the costa of its
+  // tegmen (meta.orth.tegmen): at every height the fan reaches no further out than the tegmen's outer edge there, and
+  // past the tegmen's apex no further out than the apex, so it shows only beside the midline and at the tip
+  orthFan(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthFan++;
+    const o = meta.orth;
+    if (!o || !o.tegmen) return fail('no tegmen outline on meta.orth');
+    if (!o.fan) return;
+    const T = o.tegmen, apex = T.reduce((m, p) => p[1] > m[1] ? p : m), top = Math.min(...T.map(p => p[1]));
+    let worst = -Infinity, at = null;
+    for (const p of o.fan) {
+      const edge = p[1] > apex[1] ? apex[0] : p[1] < top ? -Infinity : rightmostAt(T, p[1]);
+      const out = edge === null ? Infinity : p[0] - edge;
+      if (out > worst) { worst = out; at = p; }
+    }
+    if (worst > ORTH.fanOut) fail('grasshopper hindwing fan stands ' + worst.toFixed(1) + ' out past the tegmen costa at y ' + at[1].toFixed(1));
+  },
+  // #22 the tegmina overlap along the inner margin and their apices part: the right tegmen's inner margin crosses the
+  // midline by ORTH.overlap or more over the middle of its length (the left one, drawn over it, hides that strip), its
+  // apex lies ORTH.apexX or more out on its own side, and its last ORTH.tip of length stays clear of the midline (no X)
+  orthTegmina(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthTegmina++;
+    const T = meta.orth && meta.orth.tegmen;
+    if (!T) return fail('no tegmen outline on meta.orth');
+    const apex = T.reduce((m, p) => p[1] > m[1] ? p : m), top = Math.min(...T.map(p => p[1])), len = apex[1] - top;
+    let shallow = -Infinity;
+    for (let f = 0.15; f <= 0.75; f += 0.05) { const x = leftmostAt(T, top + f * len); shallow = Math.max(shallow, x === null ? Infinity : x); }
+    if (shallow > -ORTH.overlap) fail('grasshopper tegmina do not overlap along the inner margin: the inner edge reaches only x ' + shallow.toFixed(1) + ' (want <= -' + ORTH.overlap + ')');
+    if (apex[0] < ORTH.apexX) fail('grasshopper tegmen apex at x ' + apex[0].toFixed(1) + ', not ' + ORTH.apexX + ' clear of the midline');
+    const cross = T.filter(p => p[1] >= apex[1] - ORTH.tip * len && p[0] <= 0);
+    if (cross.length) fail('grasshopper tegmen apices cross: the tip reaches x ' + Math.min(...cross.map(p => p[0])).toFixed(1) + ' within ' + ORTH.tip + ' of the apex');
+  },
+  // #22 the archedictyon is rows of near-rectangular cells, not a honeycomb: the cells the tegmen grew (meta.orth.cells,
+  // body coordinates, where the tegmen runs along y) have their sides along the tegmen or across it. A grid's sides are
+  // 0 or 90 degrees off the tegmen's axis; a honeycomb's are 90 and +-30, so a third of its length is oblique. At most
+  // ORTH.oblique of the cells' outline length lies between ORTH.obliqueBand degrees off the axis.
+  orthCells(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthCells++;
+    const c = meta.orth && meta.orth.cells;
+    if (!Array.isArray(c)) return fail('no archedictyon cells on meta.orth');
+    let tot = 0, obl = 0;
+    for (const cell of c) for (let i = 0; i < cell.length; i++) {
+      const a = cell[i], b = cell[(i + 1) % cell.length], L = dist(a, b), ang = Math.atan2(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) * 180 / Math.PI;
+      tot += L; if (ang >= ORTH.obliqueBand[0] && ang <= ORTH.obliqueBand[1]) obl += L;
+    }
+    if (c.length < ORTH.cellsMin) return;   // a sparse mesh (the tegmen mostly ladders, which are rows by construction) is too few cells to measure
+    if (tot && obl / tot > ORTH.oblique) fail('grasshopper archedictyon is a honeycomb, not rows of rectangles: ' + Math.round(obl / tot * 100) + '% of the cell sides oblique (max ' + ORTH.oblique * 100 + '%)');
+  },
+  // #22 every intercalary vein starts on a vein: in the tegmen's drawn lanes (the meta.wingLanes entry with R), a lane
+  // whose root (the end of its drawn pieces nearest the base) is not at the tegmen's base (within ORTH.base of its length)
+  // lies within ORTH.onVein of another lane or wall
+  orthIntercalary(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthIntercalary++;
+    const T = meta.orth && meta.orth.tegmen, fr = (meta.wingLanes || []).find(w => w.lanes.some(l => l.id === 'R'));
+    if (!T || !fr) return fail('no tegmen outline / lanes on meta');
+    const top = Math.min(...T.map(p => p[1])), len = Math.max(...T.map(p => p[1])) - top;
+    const drawn = fr.lanes.filter(l => !l.wall && l.pieces.length);
+    for (const l of drawn) {
+      const root = l.pieces.flatMap(pc => [pc.pts[0], pc.pts[pc.pts.length - 1]]).reduce((m, p) => p[1] < m[1] ? p : m);   // its end nearest the base (a lane carried onto another by a connector piece roots there)
+      if (root[1] - top <= ORTH.base * len) continue;
+      const d = Math.min(...fr.lanes.filter(m => m !== l).flatMap(m => m.pieces.map(pc => distToPl(root, pc.pts))));
+      if (d > ORTH.onVein) fail('grasshopper tegmen lane ' + l.id + ' starts in the membrane, ' + d.toFixed(1) + ' from the nearest vein');
+    }
+  },
+  // #22 the pronotum is a saddle (meta.thorax.profile is its dorsal outline): widest over the metazona (behind
+  // ORTH.metazona of its length), narrower over the prozona, its hind margin projecting back over the tegmina (an angle
+  // or a curve, never truncate), with lateral carinae of a kind the bodySig carries
+  orthPronotum(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthPronotum++;
+    const th = meta.thorax, prof = th.profile, len = th.yBot - th.yTop, T = meta.bodyGenes.thorax;
+    const w = maxHw(prof), at = (prof.find(p => p[1] === w)[0] - th.yTop) / len;
+    if (at < ORTH.metazona) fail('grasshopper pronotum widest at ' + at.toFixed(2) + ' of its length, not over the metazona (>= ' + ORTH.metazona + ')');
+    const pro = Math.min(...prof.filter(p => (p[0] - th.yTop) / len >= 0.15 && (p[0] - th.yTop) / len <= 0.5).map(p => p[1]));
+    if (pro > ORTH.prozona * w) fail('grasshopper pronotum not narrower over the prozona: ' + (pro / w).toFixed(2) + ' of its widest');
+    const hind = prof[prof.length - 1][1];
+    if (hind > ORTH.hind * w) fail('grasshopper pronotum hind margin truncate: ' + (hind / w).toFixed(2) + ' of its widest at the hind margin');
+    const kind = T.latCar && T.latCar.kind;
+    if (!ORTH.carinae.includes(kind)) fail('grasshopper pronotum has no lateral carinae of a known kind: ' + kind);
+    else if (!meta.bodySig.split(',').includes('lc' + kind[0])) fail('grasshopper lateral carina kind ' + kind + ' not in the bodySig');
+  },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {
       if (!s) return fail(what + 'no wingStats on a grown wing');
@@ -918,6 +1069,13 @@ const POST = {
     console.log('#19 lacewing checks asserted on (of ' + n + ' lacewing plates):', Object.keys(neuSeen).filter(k => ran.has(k)).map(k => k + ' ' + neuSeen[k]).join(', ') +
       (n < NEU_MIN ? '; too few lacewing plates (' + n + ' < ' + NEU_MIN + ') to require every check' : ''));
   },
+  // the #22 checks assert only on grasshopper plates: once the run has ORTH_MIN of them every selected one must have run
+  orthSeen(fail) {
+    const n = orthSeenPlates, idle = Object.keys(orthSeen).filter(k => ran.has(k) && !orthSeen[k]);
+    if (idle.length && n >= ORTH_MIN) fail('#22 grasshopper checks that never ran in ' + n + ' grasshopper plates: ' + idle.join(', '));
+    console.log('#22 grasshopper checks asserted on (of ' + n + ' grasshopper plates):', Object.keys(orthSeen).filter(k => ran.has(k)).map(k => k + ' ' + orthSeen[k]).join(', ') +
+      (n < ORTH_MIN ? '; too few grasshopper plates (' + n + ' < ' + ORTH_MIN + ') to require every check' : ''));
+  },
   signatures(fail) {
     sigRule(wingSigs, 'wing', 0.5, fail);
     sigRule(bodySigs, 'body', 0.98, fail);
@@ -962,7 +1120,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen) };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen) };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
@@ -981,6 +1139,7 @@ async function run() {
     typeCount[key] = (typeCount[key] || 0) + 1;
     if (meta.type === 'bee') beeSeenPlates++;
     if (meta.type === 'lacewing') neuSeenPlates++;
+    if (meta.type === 'grasshopper') orthSeenPlates++;
     if (meta.wingSig) { const m = wingSigs[key] ||= new Map(); m.set(meta.wingSig, (m.get(meta.wingSig) || 0) + 1); }
     if (meta.bodySig) { const m = bodySigs[key] ||= new Map(); m.set(meta.bodySig, (m.get(meta.bodySig) || 0) + 1); }
     elTotal += drawn(svg);

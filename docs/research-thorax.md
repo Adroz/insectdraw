@@ -170,7 +170,7 @@ rolls.
 | fly | 0.8–1.0 | 0.3–0.45 | 0.04–0.15 (humped mesonotum) | 0 | 0.9–1.15 |
 | bee / wasp | 0.85–1.15 | 0.3–0.45 | 0.02–0.12 | 0.04–0.12 (propodeum to petiole) | 0.9–1.2 |
 | dragonfly / damselfly | 0.6–0.8 (narrower than the head) | 0.4–0.55 | 0–0.05 | 0 | 0.95–1.2 |
-| grasshopper | 1.0–1.3 | 0.3–0.45 | 0 | 0 (posterior margin enum angulate / rounded / truncate) | 0.9–1.2 |
+| grasshopper | 1.0–1.3 (front at most 0.86 of the widest) | 0.72–0.84 (the saddle: widest over the metazona, drawn in a little over the prozona, #22) | 0 | 0 (posterior margin enum angulate / obtuse / rounded, projecting back over the tegmina; never truncate, #22) | 0.9–1.2 |
 | moth / butterfly | 0.9–1.3 (patagia widen the front) | 0.3–0.4 | 0.02–0.1 | 0 | 0.85–1.1 |
 | cicada | 0.8–1.0 (head as wide as the thorax) | 0.3–0.4 | 0 | 0 | 0.9–1.15 |
 | cranefly / lacewing / mayfly | 0.8–1.1 | 0.35–0.5 | 0.03–0.12 | 0 | 0.9–1.2 |
@@ -183,7 +183,7 @@ rolls.
 | fly | postpronotal edge at 0.08–0.14; transverse suture at 0.30–0.42, complete (0.4) or interrupted with a central gap of 0.25–0.5 hw (0.6), bow −0.05–+0.1; scutoscutellar line at 0.72–0.82 (bow −0.1–−0.25: the scutellum bulges forward into the scutum) | see left | D (suture), F (edges) |
 | bee / wasp | pronotal collar 0.12–0.22 (bow +0.25–+0.45); scutoscutellar 0.6–0.72 (bow −0.1–−0.25); metanotal 0.82–0.9 (bow +0.05–+0.15); notauli 0/1 (0.5): from (±0.3 hw, collar) converging to (±0.08 hw, 0.45–0.65); parapsidal lines 0/1 (0.6): ±0.4–0.5 hw from scutoscutellar line forward 0.15–0.25 of the length; median line 0/1 (0.3) | | D / F |
 | dragonfly / damselfly | prothorax collar 0.12–0.2 (bow +0.15–+0.3); mid-dorsal carina 0.2→0.9 (always); humeral sutures: from (±0.2–0.35 hw, 0.22–0.32) to (±0.8–0.95 hw, 0.5–0.62), a second parallel line 0/1 (0.5), antehumeral hatched stripe 0/1 (0.35) | straight | D, F |
-| grasshopper | median carina (always, weight D or O for a crest); sulci: 2–3, the principal at 0.5–0.7 (prozona : metazona 1–2.3), others at 0.2–0.35 (and 0.38–0.48); lateral carinae 0/1 (0.6) at ±0.55–0.7 hw, straight or incurved | 0.08–0.2 | D (principal), F |
+| grasshopper | median carina (always, weight D or O for a crest); sulci: 2–3, the principal at 0.5–0.7 (prozona : metazona 1–2.3), others at 0.2–0.35 (and 0.38–0.48); lateral carinae always (#22), a gene in bodySig: straight or incurved (0.6, at ±0.55–0.7 hw) or outcurved (0.4) | 0.08–0.2 | D (principal), F |
 | moth / butterfly | patagia: two lobes at 0.03–0.18 covering ±0.1–0.55 hw; otherwise 0–1 bowed lines hidden by pile; dorsal crest 0/1 (0.35) | 0.1–0.25 | F |
 | cicada | pronotal collar 0.25–0.35 (bow +0.1–+0.2); mesonotal paramedian sutures 0/1 (0.6) at ±0.3 hw, 0.4→0.72; cruciform elevation at 0.72–0.95 | | D |
 | cranefly | V-shaped suture: from (±hw, 0.3–0.4) to (0, +0.12–0.2 lower) | — | D |

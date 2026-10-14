@@ -516,13 +516,26 @@ its outer edge, which is the costa; the straight inner edge on the midline is th
 `noDraw` walls; Sc (s 0.1 → the costa at `scEnd` 0.68–0.82, O), R (s 0.24 → the apex, D / O) with Rs
 forking off at `rFork` 0.58–0.72 to the inner margin at 0.96, M (s 0.42 → 0.9), Cu (s 0.6 → 0.8)
 forking at `cuFork` 0.1–0.2 into CuP (→ 0.62), an anal vein (odds 0.6, F) and a light intercalated vein
-between R and M from u 0.3 (`subRow` 0.6, F). The **archedictyon** is the mesh regime (`rows2`, `rowsAt`
-1.4) with an absolute cell of `cell` 0.11–0.16 × the tegmen's width (6–9 cells across, 0.8× in the costal
-row, × (1 − 0.3 u) toward the apex) and a low `zig` 0.04–0.1, so a narrow strip is one row of leaning
-rungs and a wider one rows of near-rectangular polygons rather than hexagons; `uOpen` 1.0. The folded
-hindwing fan (odds 0.7) is a second frame: 5–9 anal lanes radiating from the root to targets by arc
-length along the outer margin, each a one-row ladder of rungs at `fanCell` 0.05–0.08 of the tegmen
-length. Both frames draw into `covers`, the fan first. 360 joins per plate, mean angle 117°.
+between R and M (`subRow` 0.6, F), which forks off M at u 0.3 and bends toward R, so it starts on a vein
+(#22; it used to start free in the membrane). The **archedictyon** is the mesh regime (`rows2`, `rowsAt`
+1.4, `grid`) with an absolute cell of `cell` 0.11–0.16 × the tegmen's width (6–9 cells across, 0.8× in the costal
+row, × (1 − 0.3 u) toward the apex): a narrow strip is one row of leaning rungs and a wider one rows of
+near-rectangular cells. `grid` (#22) stacks the rows' sites square instead of staggered, damps their
+jitter to 0.35× and drops the outer rows' zigzag, so the Voronoi cells are rectangles in rows rather than
+the hexagons the staggered lattice gave; `uOpen` 1.0.
+
+Outline (#22): the inner margin runs 0.1 × the tegmen width past the midline, so the left tegmen (drawn
+after it) overlaps the right along the inner margin; at `tipY` − 0.1 of the length the apical margin leaves
+it and sweeps out to the apex, at least 0.16 × the width out on its own side, so the apices part in a V
+instead of crossing. The folded hindwing fan (odds 0.7) is a second frame inside the tegmen: its control
+points stay 2 units inside the costa and it ends at 0.95 of the tegmen's length, so it shows only in the V
+between the apices; 5–9 anal lanes radiate from the root to targets by arc length along the outer margin,
+each a one-row ladder of rungs at `fanCell` 0.05–0.08 of the tegmen length. Both frames draw into `covers`,
+the fan first. `meta.orth` carries the tegmen and fan outlines and the archedictyon's cells, where
+`tests/check.js` asserts the fan inside the costa (`orthFan`), the overlap and the parted apices
+(`orthTegmina`), the cells' sides along or across the tegmen (`orthCells`: at most 20% of their length
+20–65° off its axis; the honeycomb had about 30%) and every lane not rooted at the base starting on a vein
+(`orthIntercalary`).
 
 ## Generation model
 
