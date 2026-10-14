@@ -29,7 +29,16 @@ Three pages, one engine:
   English common name, drawn
   from a separate PRNG stream so the drawing is unaffected. They are rendered
   as a Victorian plate caption below the insect and exposed as `meta.name`
-  / `insectName(seed, type, variant)`.
+  / `insectName(seed, type, variant, fam, genes)`. The common name agrees
+  with the plate (#28): `fam`, the drawn family `meta.fam`, picks the noun (an
+  ichneumonid is an Ichneumon, a papilionid a Swallowtail, a sawfly a Sawfly)
+  from the order's `famNouns`, and `genes` (`{ mark, ant }`, the abdominal
+  marking and antenna kind) give the adjective whenever the plate has one to
+  give ("Banded", "Black-tailed", "Feathered"); no name claims a marking the
+  plate does not draw. An optional qualifier ("Lesser", "Northern") keeps
+  repeats under 10% of seeds 1-3000. The common
+  name never repeats a stem ("Dark Darkling", "Blue-tailed Bluet"), and every
+  epithet stem x gender is written out in `tests/names.js` (`FORMS`, against the `EPITHETS` export).
 
 ## Use
 
@@ -175,6 +184,17 @@ margin-terminating vein ends on an outline sample.
   tip and trailing edge, no free ends; libellulid-small to aeshnid-large by the
   `cells` gene; after
   [Hoffmann et al. 2018, PNAS](https://www.pnas.org/doi/10.1073/pnas.1721248115).
+  The discoidal triangle (dragonfly) or quadrilateral (damselfly, square under
+  the arculus) and the subnodus are on every wing; a damselfly's family
+  (`P.fam`, #48) sets its antenodals: two on a coenagrionid, lestid or
+  platycnemidid, a ladder on a calopterygid, and its common name follows (#17).
+  Both suborders roll a family habitus with the body (#48,
+  `docs/research-odonata-habitus.md`): abdomen width profile, dorsal pattern,
+  wing set, leg pose. The dragonfly hindwing is widest at its
+  base with an anal lobe against the body, the two wings meet only at their
+  roots (swept apart until they do), the arculus is a short step from the
+  sectors' stem to the triangle, the pterostigma is 4–8% of the span, and no
+  mesh cell is under 3 plate px (#18).
 - **Butterfly / moth** — Comstock–Needham layout grown as lanes: closed discal
   cell whose discocellular is three crossveins placed by the angle rule (a soft
   chevron pointing at the base, M1 and M2 leaving its bends), Sc+R1 along the
@@ -190,6 +210,14 @@ margin-terminating vein ends on an outline sample.
   so r4+5 closes (muscid, syrphid), forked into M1 / M2 (+ M3) (nematoceran),
   or three branches to the margin with R4 forking off R4+5 (tabanid, asilid).
   Small stigma where Sc ends, syrphid vena spuria, alula and halteres.
+  The wing set is a body gene (#54, `docs/research-diptera-habitus.md`):
+  spread, half-folded in a delta, or folded scissor-wise over the abdomen
+  (the hind margins over the midline, the abdomen's sides showing beside
+  them), weighted by family. Eight families: muscid, nematoceran, syrphid
+  (banded oval abdomen), tabanid (broad), asilid (long tapering abdomen, long
+  raptorial legs), tachinid (round, with abdominal macrochaetae), bombyliid
+  (round and hairy) and conopid (petiolate, long porrect antennae); the last
+  three are drawn on the venation of the nearest family.
 - **Bee / wasp** — grown rather than templated: smooth longitudinal lanes
   (Sc+R into the stigma, R1 closing the marginal cell, Rs forking off Sc+R, an
   M+Cu stem forking at the basal vein, A) carry the family's named crossveins
@@ -209,10 +237,12 @@ margin-terminating vein ends on an outline sample.
   few extra cells appear.
 - **Grasshopper** — the tegmen as its own wing frame: Sc, R, M and Cu as
   near-parallel lanes (Cu forking near the base, R near the tip, an optional
-  light intercalated vein), the archedictyon grown as one row of leaning rungs
-  where a strip is narrow and rows of near-rectangular polygons where it is
-  wider, finer toward the apex; the folded hindwing fan as radiating lanes with
-  ladder rungs.
+  light intercalary forking off M), the archedictyon grown as one row of leaning
+  rungs where a strip is narrow and square rows of near-rectangular cells where it
+  is wider, finer toward the apex; the tegmina overlap along the inner margin and
+  part at the apices; the folded hindwing fan, radiating lanes with ladder rungs,
+  lies inside the costa and shows only between the apices. The pronotum is a
+  saddle with lateral carinae.
 - **Lacewing** — Sc, R1 and Rs as smooth offsets under the costa (Rs rooted on
   R1 near the base), a costal ladder of 20–35 placed crossveins, 2–5 rungs in
   the R1–Rs strip, M beside Rs to its fork (MP to the hind margin, MA on past
@@ -224,7 +254,14 @@ margin-terminating vein ends on an outline sample.
   stem) to a nodal line that is one chain of crossveins at a single slant, the
   apical veins leaving the nodal nodes through short stems and ending on the
   ambient vein (a lane along the inset outline), the optional ulnar row across
-  them, peripheral membrane left blank, anal veins to the clavus.
+  them, peripheral membrane left blank, anal veins to the clavus. The wing set
+  is a body gene (#49, `docs/research-cicada-habitus.md`): spread, half-open, or
+  roofed at rest (the tegmen laid back over the abdomen, inner margins meeting
+  along the midline, the hindwing hidden), with a narrow pointed or broad round
+  forewing; the family (cicadine with tymbal covers, small slender cicadettine,
+  platypleurine with a flared pronotal collar), the abdomen's taper (barrel,
+  cone, spindle) and hatched mesonotum markings (obconical spots, M mark) vary
+  the body.
 - **Damselfly** — the dragonfly model on petiolate (stalked) wings: the fan
   leaves the end of the petiole from two fused stems, a quadrilateral below the
   arculus, and ladders nearly everywhere with a two-row mesh only at the tip.
@@ -338,10 +375,11 @@ Consumers rely on exactly this, and `node tests/check.js` fails if any of it sto
   every platform; the only inputs are the seed and the options (`{ type, devicePx }`). `dailySeed()` is
   the one function that reads the clock.
 - **The exports.** `module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName,
-  dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H }`
+  EPITHETS, dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H }`
   (`ORDERS` is the order registry, read-only (frozen to the leaves, asserted by `engineContract()`): one entry
   per body plan with its gene tables, wing roots, head scale, wing function and name tables; `TYPES` is its
-  key list, in pick order). Adding an
+  key list, in pick order; `EPITHETS` is every species-epithet stem the namer declines with its masculine /
+  feminine / neuter forms, frozen). Adding an
   export means updating `EXPORTS` in `tests/engine.js` in the same commit; removing or renaming one is a
   breaking change for every consumer below.
 
@@ -351,7 +389,7 @@ How each consumer loads it:
 | --- | --- |
 | `index.html` | the block runs inline; the page's own UI script is a second `<script>` after it |
 | `compare.html`, `parts.html`, `tests/sheet.html` | `fetch` `index.html` (`../index.html` from `tests/`), match the tag, inject the text as a script (so they need HTTP) |
-| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `perceptual.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm`, returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
+| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `perceptual.js`, `names.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm`, returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
 | crowpanel-ha `services/insectdraw-render` | the Dockerfile curls `index.html` from `main` at build time and writes the script block containing `module.exports` to `insectdraw-engine.js`, which `server.js` requires |
 
 `tests/engine.js` also exports `engineContract(path)`, the list of violations (empty on a good file), and

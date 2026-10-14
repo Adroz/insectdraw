@@ -1,6 +1,6 @@
 # Wing venation: what the references show and how we generate it
 
-Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera), all eight grown by `growVeins` v2 since the same day, and audited at 4x against the references, except Ephemeroptera, whose audit was against a stonefly; its rules were re-derived from a real mayfly on 2026-10-13 (#20) and the implementation catches up in #59. See Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
+Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera), all eight grown by `growVeins` v2 since the same day, and audited at 4x against the references, Ephemeroptera's rules were re-derived from a real mayfly on 2026-10-13 (#20) and re-implemented against it on 2026-10-14 (#59). See Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
 are in `ref/` with sources and licences in `ref/README.md`. `research-lepidoptera-wings.md`
 still covers lepidopteran *patterns* (tone, hatching); this document covers veins and cells
 for every order.
@@ -135,13 +135,53 @@ Rules (implemented 2026-10-02 on `growVeins` v2, after Hoffmann et al. 2018; see
   like any other and every cell closes against a vein or the margin.
 - **Named crossveins** through `place` (angle rule, slide, no dangling): the antenodals as aligned
   C–Sc–R1 pairs (`then` chains the Sc–R1 segment at the same lean; the first two heavier), the
-  subnodus (C–R1 at the nodus, O), the two pterostigma end crossveins (lean gene 18–38° from
+  subnodus (Sc–R1 just under the nodus, oblique, O), the two pterostigma end crossveins (lean gene 18–38° from
   perpendicular, O, lower end distal; the strip under the stigma is a `gap` with no other
-  crossvein), the arculus stepping from R2 through the fan to the median lane (O), the discoidal
+  crossvein), the arculus stepping from R2 through the fan to the median lane (O; a short step on a
+  dragonfly, see #18 below), the discoidal
   triangle (two rungs from one point, the long side with a relaxed band) or the damselfly
   quadrilateral (two rungs), and the bridge (a short oblique R1–R2 behind the subnodus).
+- **Diagnostic cells and the family cue (#17).** The discoidal triangle / quadrilateral and the
+  subnodus are on every wing (they were rolled at 0.8 / 0.85, so a fifth of the plates lacked the
+  cell that identifies the suborder). Their sides, the subnodus and the damselfly arculus are
+  structural crossveins with their own wide band (75–179°, the subnodus 60–179°), so the rung band
+  never drops them; `meta.wingStats.discoidal` / `.subnodus` count the wings that have them and
+  `tests/check.js` (`odoCells`) wants 2 of 2 on the plate and on the device plate. The damselfly's
+  antenodal regime is the family (`P.fam`, rolled with the body since #48): a coenagrionid, lestid or
+  platycnemidid has exactly two antenodals, Ax1 just past the stalk and Ax2 over the arculus, both heavy
+  (Ris plate 2); a calopterygid the ladder on a broad wing with a short stalk (0.07–0.11 of the span). Every dragonfly has a ladder. `meta.fam` carries it and the
+  common name's noun follows it (Bluet / Damsel / Dancer / … vs Demoiselle / Jewelwing / Rubyspot).
+  The triangle's base lies distal to the arculus on both wings (the hindwing's sat 0.03 of the span
+  basal to it; `wingStats.triOff` > 0), and the discoidal sides are drawn heavy (O) so the cell reads.
+  The damselfly arculus stands square 0.08 of the span past the stalk with the quadrilateral's
+  proximal side straight under it (it used to float 15–20% of the span distal). R1 keeps 0.8 units
+  under Sc before the nodus (Sc's bow used to cross it just past a damselfly's stalk). `odoAntenodal`
+  asserts the counts (2 exactly, or a ladder of 5+), the name and `wingStats.qGap` ≤ 0.02.
+- **Outline, sweep, arculus, stigma and cell floor (#18).** The anisopteran hindwing is widest at its
+  base: a straighter costa and the anal lobe (`anal` gene 0.2–0.42 of the chord) rounding out of the
+  hind margin, its last two points laid out along the body (and its shoulder half way), so however far
+  the wing sweeps back the lobe lies against the abdomen and never over its midline (it was a scaled
+  forewing, widest at ~25% span and narrowing into the root). The two wings meet only at their roots:
+  before drawing, while either outline reaches into the other past `ODO_ROOT` (0.12) of the hindwing's
+  span from its root, the hindwing sweeps back (to 22° at most) and the forewing forward by turns, a
+  degree at a time, no rng (the hindwing's costa lay over the forewing's hind margin to 35–40% of the
+  span on most plates; a broad pair on close roots needs ~45° between them). A dragonfly's sectors
+  leave the arculus as on odo-anax-ris1921: the upper fan, down to the triangle's costal lane, starts
+  in a narrow band under R2 (each lane 2.4 units under the one above, clear of the lane floor, within
+  0.22 of the depth), so the arculus that crosses it is short, and the lanes below start a quarter of
+  the chord gene further down, so the triangle is no sliver (the arculus was one bar through four lanes
+  half the chord deep); it is structural (the wide band) like the damselfly's. The pterostigma is
+  4–7.5% of the span (`psL`; it reached 11%). The `cells` gene's libellulid end is floored at 0.95 (at
+  0.7 the cells read as stipple), and no two neighbouring sites of a mesh or a ladder lie closer than
+  `ODO_CELL` (0.0135) of the span (`siteMin`: the Poisson test's floor, and a ladder holds fewer
+  rungs); a wing spans 228–270 plate px, so no cell is narrower than 3 px. `wingStats.cellMin` (body
+  units) and `.stigma` (fraction of the span) report them; `tests/check.js` asserts `odoMesh` (cellMin
+  × scale ≥ 3 px), `odoHindwing` (chord a tenth of the way out ≥ 0.9 of the widest, which lies in the
+  basal third), `odoOverlap` (no overlap past 15% of the hindwing span) and `odoStigma` (≤ 8%).
+  Odonate ladders keep `gapNear` 0.25 (as the grasshopper), so a lane shared with a dense strip above
+  still takes rungs below (a strip whose near lane was full of the other strip's junctions drew none).
 - **Secondaries, regime per strip segment**: cell size `cell(u, s)` = 0.03 Lw × `cells` gene
-  (libellulid 0.7 .. aeshnid 1.3; damselfly 1.0–1.5) × (1 − 0.3 u) × (1 − 0.25 s), floored at
+  (libellulid 0.95 .. aeshnid 1.3; damselfly 1.0–1.5) × (1 − 0.3 u) × (1 − 0.25 s), floored at
   3.2 units; the postnodal ladder uses its own `postStep`. Along every strip, where
   width / cell < 1.6 the segment is a **ladder**: evenly spaced sites, each rung the bisector of
   two neighbours clipped to the two primaries and slid until both junctions lie in 105–140°
@@ -176,15 +216,15 @@ Rules: grown by `growVeins` v2. Lane plan (u = span fraction, s = chord fraction
 
 | lane | from (u, s) | to | notes |
 |---|---|---|---|
-| Sc+R | (0.02, 0.3) | nodal node N0 (u `nx0` 0.46–0.6, s 0.14) | O (H with the heavy gene); bow −`bow` (0.015–0.04) |
+| Sc+R | (0.02, 0.3) | nodal node N0 (u `nx0` 0.46–0.6, s 0.14) | O on the forewing (D on the hindwing), #26; bow −`bow` (0.015–0.04) |
 | M+CuA | (0.02, 0.44) | `mcu` (u 0.1–0.2) | the common stem (`mcuFork` odds 0.7); CuA forks off it |
-| M | `mcu` (or the base) | N1 (u nx0 − slant/3, s 0.33) | O / H; bow −0.8 `bow` |
+| M | `mcu` (or the base) | N1 (u nx0 − slant/3, s 0.33) | O; bow −0.8 `bow` |
 | CuA | fork off M+CuA | N2 (s 0.53) | O; bow +`bow` |
-| CuP | (0.02, 0.62) | N3 (u nx0 − slant, s 0.72) | D |
+| CuP | (0.02, 0.62) | N3 (u nx0 − slant, s 0.72) | O (#26: the fourth trunk) |
 | apical stems | N0 / N1 / N2 | 20–45% of the way to their targets' mean | D; one stem per nodal node that carries 2+ branches, two sub-stems when M carries 3–4 |
 | RA, RP, M1–M4, CuA1, CuA2 | the stems' ends | nodes on the ambient vein's apical arc (x > 0.68) | D; lanes sharing nodes, common `apBow` ±0.03 |
 | ambient vein | pre-built: the outline inset by `inset` × 1.6, costa → apex → clavus, as two monotone lanes | – | D, `noJoin` |
-| A1–A3 | `wingGraph` chains | clavus | D / F |
+| A1–A3 | `wingGraph` chains | the claval margin at u 0.22 / 0.16 / 0.10 (short, #26) | D / F |
 
 Named crossveins, all through `place`: the **nodal line** as one `then` chain Sc+R → M → CuA → CuP so
 its four pieces keep one slant (`slant` 0.04–0.14 of the span back toward the base); 1–3 **m-cua**
@@ -192,7 +232,17 @@ rungs in the median cell; the optional Sc+R–M rung in the radial cell (`scr` 0
 (`ulnar` 0.6) across the apical lanes at 45–60% of their length. `noSites`: a cicada has no other
 crossveins, and `uOpen` is the nodal line. The hindwing is the same plan at half size with one apical
 branch per nodal node. `meta.wingStats` carries the placed joins; 14 per plate on average, under 1%
-dropped.
+dropped. The `heavy` gene weights the nodal line (D, else F); the trunks are always O on the
+forewing (#26: at D the basal half read as seven or eight thin radiating lines).
+
+Posture (#26, from set specimens): the forewing's root-to-apex line lies `sweep` 30–45° below the
+horizontal, and its length is anatomical, 1.46–1.72 root-to-abdomen-tip lengths, not stretched to put
+the apex level with the abdomen tip (that made a shallow sweep widen the plate twice over: median
+plate scale 0.81, now about 1.04). The hindwing roots on the metathorax (`wingRoots[1]` 0.8, behind
+the cruciform elevation) and the forewing's clavus runs back along the body over it (its basal hind
+margin 10° in from straight back, `CIC_CLAVUS`), so the hindwing shows only from under the forewing's
+hind margin, beside the abdomen. `tests/check.js` asserts these as `cicSweep`, `cicScale`,
+`cicTrunks` and `cicHindRoot`.
 
 ### Diptera (ref: dip-eristalis, dip-asilid-photo, dip-limonia)
 
@@ -423,8 +473,8 @@ Observed (forewing unless stated):
     meet it are inferred, not measured. Families without hindwings (Baetidae in part, Caenidae) are not
     shown either. All three stay as unverified notes, not rules.
 
-Which current rules survive (the implementation is still the one written against the stonefly; the
-changes are filed as #59; outline and root items overlap #21):
+Which of the rules written against the stonefly survived (#20's verdicts; #59 implemented the changes, see the
+paragraph after the table):
 
 | current rule (2026-10-02) | verdict | against |
 |---|---|---|
@@ -435,29 +485,68 @@ changes are filed as #59; outline and root items overlap #21):
 | 7–13 fan lanes as rays from the root to targets spaced along the hind margin | changes: a few basal stems that fork across the basal half; 12–16 ends with the intercalaries | 4, 6 |
 | Fan lanes bent by a share of the costa's convexity and undulating (`und`) | survives as smooth curves; keep `und` small, no visible zigzag | 5 |
 | Intercalaries between alternate pairs from `u0i` 0.4–0.5 to the margin | survives; add short marginal intercalaries along the hind margin and the cubital veinlets | 7, 8 |
-| Rungs "tilted toward the apex" (`angle` 110–124, `lean` mostly one way) | changes: near-perpendicular (about 90–110°) leaning either way. The check.js band (100–145 on every winged order) would reject part of that range, so the band for this order is a decision for Nik, not something to relax in passing | 9 |
+| Rungs "tilted toward the apex" (`angle` 110–124, `lean` mostly one way) | changes: near-perpendicular (about 90–110°) leaning either way. Decided by Nik (2026-10-14, #59): the mayfly has its own junction band, 88–125° from this reference, asserted per order in `tests/check.js` (`RUNG_BAND`); every other order keeps 100–145° | 9 |
 | Cell size shrinking toward the tip and the trailing edge | survives | 9 |
 | First three fan lanes D, the rest F; crossveins F | survives | 11 |
 | Hindwing small and rounded, 3 fan lanes, 1.6× coarser cell, `hindL` 0.22–0.36, present with odds 0.8 | survives in size (measured 0.33); changes in shape (costal process near the base) and in vein count (7–10) | 12, 13 |
 | "1A–5A", "9–15 longitudinals" | dropped: read off the stonefly | — |
 
-Current implementation (unchanged by #20; where the table above says "changes", this paragraph describes
-what #59 replaces, not the reference): grown by `growVeins` v2, the ladder regime everywhere. The forewing is a triangle with the apex at
-the top corner (a domed outline sent Rs diving away from R1 and no rung could bridge them). Lanes: C and
-the trailing edge as `noDraw` walls; Sc and R1 as pre-built offsets under the costa (`sub` 0.035–0.055 of
-the chord each, Sc ending on the costa at 0.9, R1 at the apex, O / D); 7–13 fan lanes (`nV` − 2: Rs, M,
-Cu1, Cu2, 1A..) as rays from the root to targets spaced by arc length along the hind margin from the
-apex back to 22% span, each bent by a share of the costa's convexity that fades toward the trailing
-edge (`pow0` 0.8–1.0 × (1 − f)^1.2, measured against the ray's own chord) and undulating (`und`); the
-first three D, the rest F; intercalaries (`inter` 0.6) between alternate pairs as free lanes from `u0i`
-0.4–0.5 to the margin (F). No named crossveins: every strip is a one-row ladder of sites at the local
-spacing (`evenSites`, `k` 1.0–1.4) with an absolute cell `cells` × 0.035 span × (1 − 0.3 u)(1 − 0.25 s),
-the costal ladder on its own `costStep` (0.022–0.034); `uOpen` 1.0. Two `growVeins` knobs were added
-for this order (defaults keep every other order byte-identical): `gapNear` 0.2 (a lane shared by two
-ladders cannot keep half a spacing clear of the junctions the first one left) and `reachW` 0.7 (a rung
-across a wide apical strip must slide further than one spacing to lean into the band). Hindwing: the
-same with 3 fan lanes and a 1.6× coarser cell, present with odds 0.8. 220 rungs per plate, mean angle
-117°, 17 dropped.
+Current implementation (#59, 2026-10-14), grown by `growVeins` v2 in `wingsEphemeroptera`, the ladder regime everywhere;
+`meta.mayfly` carries each wing's outline, lanes (`kind`: costal, stem, branch, inter, marg, cub) and rungs in wing-local
+coordinates, and the `eph*` checks of `tests/check.js` assert the rules below on them (`EPH`, stated from this reference).
+
+- **Outline (1).** Forewing length : width 2.3–2.7 (gene `w`, width 0.37–0.44 of the length); the costa nearly straight
+  (sagitta under 0.05 of the length from 0.1 of the length to the apex, `ephOutline`), the apex the costal corner, the
+  outer margin sloping back to the hind margin, deepest at `deep` 0.40–0.50 of the length. The apex (#21) is a
+  circular arc of radius 0.045–0.06 of the length (larger on a blunter wing, gene `sharp`) from the costa round to the
+  outer margin, its first point kept behind the costal knee so the spline cannot hook there: no outline point more than
+  0.001 of the length in front of the costal tangent (taken over 0.7–0.85 of the length) and no bend tighter than 0.03
+  of the length past 0.85 (`ephApex`). The costa's sagitta is measured from 0.1 to 0.9 of the length, where the arc
+  begins (`ephOutline`; the chord to the apex point would measure the arc).
+- **Costal field (2, 3).** Sc and R1 pre-built under the costa, each strip `sub` 0.05–0.07 of the wing's width (so they
+  run nearly parallel, never more than a fifth of the local chord), Sc ending on the costa at 0.9, R1 at the apex. The
+  C–Sc ladder takes `costStep` 0.020–0.026 of the length over the apical third and `costBase` 2.2–3.0 times that over
+  the basal half, the two stretches separated by `walls` at 0.5 and 0.62 (a new `growVeins` option: extra ladder stops
+  per lane pair). Measured: at least 1.5 times as many rungs per length over the apical third (`ephCostal`). The forked,
+  anastomosing cells of the stigmatic area are not drawn: the C–Sc strip is 2–4 plate px, so a fork's two feet would sit
+  under the 1.8 px floor and fill in on e-ink.
+- **Fan (4, 6, 7).** Stems Rs, MA, MP, CuA, CuP and one or two anals (`nA`) leave the base at 0.05 of the length, spread
+  over its chord, a strip apart (at least 0.012 of the length at 0.08, `ephFan`), the front ones taking a share of the costa's bow, each held at least 0.6 strip under R1.
+  Rs forks once or twice (`fRs` 0.14–0.26, `fRs2` 0.36–0.5), MA (`fMA` 0.3–0.46) and MP (`fMP` 0.16–0.32) once, each branch
+  leaving its stem and easing over to its own target behind it. Long intercalaries start free in mid-wing (`u0i`
+  0.38–0.5, or halfway along a pair that ends early) in the gaps between the branches, siblings first (IR, IMA, IMP), as
+  many as bring the vein ends on the margin to `ends` (12–16). Margin targets by arc length from the apex, closer
+  together toward it; CuA's end and everything behind it share the hind margin behind `cuX` 0.38–0.46 of the length.
+- **Marginal intercalaries and polygons (7, 10).** Between neighbouring vein ends whose midpoint lies at 0.55–0.97 of
+  the length, one (sometimes two, `marg2`, where the strip is over three cells wide at the margin) short free vein of
+  1.2–2.2 cells runs to the margin; the ladders on either side of it close the small polygons of the last cell
+  (`ephMarginal`: at least three, half of them carrying a rung).
+- **Cubital veinlets (8).** `nCub` 4–7, split between CuA (feet between its end and CuP's) and CuP (between its end and
+  the anals'; the first behind each vein sits 2.4 margin gaps clear of the vein's end, so the two never run under
+  the lane floor). Each drops steeply from its vein, its foot half its drop further out, bowed toward the base (the reference's
+  sigmoid veinlets; bowed the other way they left a steep CuA almost alongside it, under the lane floor on the device
+  plate), all of one series the same shape so they nest; built basal first, a veinlet that would leave its vein at
+  under 18°, or cross it, a neighbour, CuA, CuP or an anal, roots steeper (foot 0.35, then 0.25 of its drop out)
+  (`ephCubital`, and `ephLanes`: no two veins cross on either wing).
+- **Rungs (9).** One-row ladders everywhere (`evenSites`, `k` 1.0–1.4, cell `cells` × 0.035 of the length × (1 − 0.3 u)
+  (1 − 0.25 s)); the order's own band `angBand` [90, 123] (inside the asserted 88–125), target `angle` 94–104, `lean` 0:
+  each rung draws its own preferred lean, measured against its near lane's tangent, so the two leans come out about
+  even (`wingStats.leans`, each at least 20% of the leaning rungs, mean junction under 110°, `ephLean`, default and
+  device plate). `gapNear` 0.2 and `reachW` 0.7 as before. Open cells (#21): a rung that cannot be placed at its
+  bisector is tried again at 0.3, 0.7, 0.15 and 0.85 of its cell, half a step clear of the ladder's last rung and the
+  next bisector (`refill`), and a far end keeps only 0.3 of a step clear of the other strip's junctions on its lane
+  (`gapFar`; the default 0.5 left no room where the ladder on the lane's other side had the same step, so whole
+  stretches of a strip went unrunged beside crowded ones), while its own ladder's far ends stay in order and half a
+  step apart, so no two rungs cross or close a sliver (narrowest cell over 80 plates 1.8 px, 0.35 px before). No gap between
+  neighbouring rungs of a non-costal strip of four or more is over 3 times the strip's median gap (`ephOpen`).
+- **Hindwing (12).** Present with odds 0.8, `hindL` 0.22–0.36 of the forewing; length : width 1.6, broadest at about
+  40%, with an angular costal process at 0.12 of its length and a notch behind it (Sc and R1 run under the process, not
+  over it); R1 and `nH` 6–9 veins radiating from the base, so 7–10 behind Sc; the cell 1.6 times coarser (`ephHind`).
+  It is painted first, so the forewing's white fill masks it where they overlap, and every one of its veins is rooted
+  under the forewing or the thorax, so the root fan never shows (`ephMask`, #21; `meta.mayfly.paint`, and each wing's
+  `base` / `th` place it in body coordinates).
+- **Weights (11).** Sc O, R1 D (O on a `heavy` wing), Rs / MA / MP and their branches D, one level heavier before their
+  first fork (CuA and CuP before their first veinlet); otherwise CuA, CuP, the anals, intercalaries, veinlets and rungs F.
 
 ### Orthoptera, tegmen (ref: orth-grasshopper)
 
@@ -476,13 +565,26 @@ its outer edge, which is the costa; the straight inner edge on the midline is th
 `noDraw` walls; Sc (s 0.1 → the costa at `scEnd` 0.68–0.82, O), R (s 0.24 → the apex, D / O) with Rs
 forking off at `rFork` 0.58–0.72 to the inner margin at 0.96, M (s 0.42 → 0.9), Cu (s 0.6 → 0.8)
 forking at `cuFork` 0.1–0.2 into CuP (→ 0.62), an anal vein (odds 0.6, F) and a light intercalated vein
-between R and M from u 0.3 (`subRow` 0.6, F). The **archedictyon** is the mesh regime (`rows2`, `rowsAt`
-1.4) with an absolute cell of `cell` 0.11–0.16 × the tegmen's width (6–9 cells across, 0.8× in the costal
-row, × (1 − 0.3 u) toward the apex) and a low `zig` 0.04–0.1, so a narrow strip is one row of leaning
-rungs and a wider one rows of near-rectangular polygons rather than hexagons; `uOpen` 1.0. The folded
-hindwing fan (odds 0.7) is a second frame: 5–9 anal lanes radiating from the root to targets by arc
-length along the outer margin, each a one-row ladder of rungs at `fanCell` 0.05–0.08 of the tegmen
-length. Both frames draw into `covers`, the fan first. 360 joins per plate, mean angle 117°.
+between R and M (`subRow` 0.6, F), which forks off M at u 0.3 and bends toward R, so it starts on a vein
+(#22; it used to start free in the membrane). The **archedictyon** is the mesh regime (`rows2`, `rowsAt`
+1.4, `grid`) with an absolute cell of `cell` 0.11–0.16 × the tegmen's width (6–9 cells across, 0.8× in the costal
+row, × (1 − 0.3 u) toward the apex): a narrow strip is one row of leaning rungs and a wider one rows of
+near-rectangular cells. `grid` (#22) stacks the rows' sites square instead of staggered, damps their
+jitter to 0.35× and drops the outer rows' zigzag, so the Voronoi cells are rectangles in rows rather than
+the hexagons the staggered lattice gave; `uOpen` 1.0.
+
+Outline (#22): the inner margin runs 0.1 × the tegmen width past the midline, so the left tegmen (drawn
+after it) overlaps the right along the inner margin; at `tipY` − 0.1 of the length the apical margin leaves
+it and sweeps out to the apex, at least 0.16 × the width out on its own side, so the apices part in a V
+instead of crossing. The folded hindwing fan (odds 0.7) is a second frame inside the tegmen: its control
+points stay 2 units inside the costa and it ends at 0.95 of the tegmen's length, so it shows only in the V
+between the apices; 5–9 anal lanes radiate from the root to targets by arc length along the outer margin,
+each a one-row ladder of rungs at `fanCell` 0.05–0.08 of the tegmen length. Both frames draw into `covers`,
+the fan first. `meta.orth` carries the tegmen and fan outlines and the archedictyon's cells, where
+`tests/check.js` asserts the fan inside the costa (`orthFan`), the overlap and the parted apices
+(`orthTegmina`), the cells' sides along or across the tegmen (`orthCells`: at most 20% of their length
+20–65° off its axis; the honeycomb had about 30%) and every lane not rooted at the base starting on a vein
+(`orthIntercalary`).
 
 ## Generation model
 
@@ -522,7 +624,14 @@ to its `deflect` step:
   spacing until the obtuse angle between crossvein and lane lies in [105°, 140°] at both ends
   (target `angle` gene 112–128°, `lean` gene preferring the costal end distal as in the references);
   a crossvein that cannot satisfy both, or that would land next to another junction or cross a third
-  lane, is dropped. Nothing dangles (R-E): a crossvein exists only with both ends on lanes.
+  lane, is dropped. Nothing dangles (R-E): a crossvein exists only with both ends on lanes. An order may pass its
+  own band (`angBand`; the mayfly's [90, 123], #59) and `lean` 0, under which each rung draws its own preferred lean
+  (measured against its near lane's tangent) instead of the order-wide one; `wingStats.leans` counts the rungs
+  leaning more than 3° each way. `walls` (per lane pair, span fractions) add ladder stops, so a strip changes step
+  there (the mayfly's costal field). `refill` retries a ladder rung that fails at its bisector further along its
+  cell (0.3, 0.7, 0.15, 0.85; one drop counted if every try fails) and `gapFar` sets the far end's junction clearance
+  in steps from the junctions other ladders left on the far lane (default 0.5 with `evenSites`, else 0.35; the ladder's
+  own far ends keep the default and stay in order); the mayfly passes `refill` and `gapFar` 0.3 (#21).
 - **Open apex** (R-F): joins stop at `uOpen`; a stub lane is cut `stubLen` past its last junction and
   drawn at `SW.F` from there.
 - **Weight** (R-G): stems `SW.O` (Sc+R, M+Cu to its fork), named branches `SW.D`, A and
@@ -546,7 +655,10 @@ to its `deflect` step:
   dropped and moved), where `tests/check.js` (`laneSep`) asserts no two lane centre-lines closer than
   1.8 px away from a junction (6 px), on the default and the device plate. `meta.wingStats` stays the
   growth's count. An order opts out on its registry entry (`laneFloor: false`, read by the wing block
-  and by `laneSep`): Lepidoptera (#67 owns the lep costa) and the beetle (no lanes). `growVeins`
+  and by `laneSep`): the beetle (no lanes). Lepidoptera grow their lanes with the floor off and draw
+  the veins through `laneFloor` themselves (`lepVeinFloor`, #67), with the leading edge as a wall lane
+  (to the apex; on the hindwing also the forewing's outline over it), so Sc and R1 merge into the
+  costa rather than fuse with it. `growVeins`
   returns the resolver as `floor(s, W)` (memoised; `{ els, ends }`, `ends` saying per lane whether its
   root or its end gave way), so an element that depends on a cut (the lacewing end twigs) asks it
   instead of relying on its place in the layer.
@@ -637,7 +749,7 @@ the references, seeds listed per order) and what it changed:
   tabanids, asserted per plate by `dipRungs`.)
 - Neuroptera (neu-nothochrysa; seeds 1, 16, 22): gradates read as one oblique line; now true zigzags;
   a branch could double back to the costal side at the apex (fixed); twigs now end on the outline. Pass.
-- Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass. (Against `eph-mayfly-1956`, since found to be a stonefly, #20; superseded by the re-derived section and #59.)
+- Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass. (Against `eph-mayfly-1956`, since found to be a stonefly, #20; superseded by the #59 audit below.)
 - Odonata, second audit (odo-anax-ris1921, odo-damsel-ris1921; dragonfly 18, 27, 49, damselfly 30, 41)
   after moving the secondaries onto `growVeins` v2: R1 used to end on the costa at 62% span and the
   damselfly's fan overlapped itself in the petiole (both fixed); rungs now lean 105–140° (mean
@@ -670,6 +782,23 @@ type; bee / wasp / fly / cranefly / dragonfly / damselfly byte-identical to befo
   and a dropped upper piece silently ended the chain; the leans are now measured against the chord with
   the middle piece parallel to it, and the pieces are placed independently. The patterns (bands, ocelli,
   stigmata, fringe) render unchanged on butterfly and moth sheets. Pass.
+
+Audit of 2026-10-14 (#59), Ephemeroptera against `eph-ameletus-li2021` (4× zooms of seeds 2067877377 and
+4141179746 beside the reference, sheets of nine random seeds before and after, on `evidence/ticket-59`): the outline,
+the stems a strip apart at the base, the forks in the basal half, the intercalaries, the costal ladder crowding
+apically, the marginal intercalaries and the cubital veinlets read as on the reference, and the rungs stand near
+square, leaning both ways. Weaker than the reference: the cubital and anal field carries fewer rungs (its strips are
+wide and the ladder stays one row); Sc can still merge into the costa in short stretches where the lane floor holds
+them apart (#14); the forked costal cells are not drawn (see above). #21 owns the apex hook and the hindwing masking.
+
+Audit of 2026-10-15 (#21), Ephemeroptera against `eph-ameletus-li2021` (4× zooms beside the reference, the audit's
+evidence seeds and nine random seeds before and after, on `evidence/ticket-21`): the apex is a smooth curve with the
+costa running down into it (the hook at 0.95–0.96 of the length, up to 0.0075 of the length in front of the costal
+tangent, is gone); the hindwing lies under the forewing (already so since #59; now asserted); the fan's stems leave
+the base a strip apart (#59), so no root convergence; open cells beside crowded ones are gone from the long strips
+(worst gap over the strip's median gap: 3.8 on the median plate and 7.3 at worst before; 1.6 and 2.2 after). The fore coxa (a body rule,
+`ORDERS.mayfly.foreCoxa`) now sits on the prothorax behind the head (`ephForeleg`). Still weaker than the reference:
+the central field between MA and MP carries few rungs where its strips are short.
 
 ## Sequencing
 

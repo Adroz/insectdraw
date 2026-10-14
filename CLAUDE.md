@@ -15,7 +15,8 @@ contract for changes.
   `wingsDiptera`, `wingsNeuroptera`, `wingsCicada`, `wingsEphemeroptera`, `wingsHymenoptera`,
   `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`), `placeLegs` (#8: settles the leg pose `drawLegs`
   rolled against the wing outlines, without rng, and draws the legs), then `drawAntennae` (after the
-  wings, so the pose can be checked against their outlines) and `assemblePlate`.
+  wings, so the pose can be checked against their outlines), `drawTails` (the mayfly's tails, #50: drawn
+  last so they are shortened to the room the plate leaves; no rng) and `assemblePlate`.
   `rollProportions` takes the type and returns `P`; every other section takes one context object `C`
   (`seed`, `type`, `order` (the type's `ORDERS` entry), `dev`, `replay`, `L`, `meta`, `outerBox` from
   the orchestrator; `P`, `B`, `thorax`, `abdomen`, `abdHW`, `headTop`, `headCy` added by `layoutBody`),
@@ -29,7 +30,9 @@ contract for changes.
 - One registry per order (#4): an order is one entry in `ORDERS` (just above `rollBodyGenes`), holding
   everything the engine knows about it under one key: its `proportions` roll, the `abd` / `thorax` /
   `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots` + `wingRootX` (the root's
-  x as a fraction of the thorax half-width), the `tegula` and `legThick` opt-ins, its `wings` function
+  x as a fraction of the thorax half-width), the `tegula`, `legThick`, `antFit` and `foreCoxa` (the mayfly's fore coxa behind the head, #21) opt-ins (and the lacewing's #51
+  `famScale`, `prothorax`, `wingSet` sets and `wingFams` family tables; the mayfly's #50 `legSexes`, `tails`, `hindwing`, `foreFams`
+  and `wingSets`), its `wings` function
   and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
   first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
   re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs
@@ -55,7 +58,7 @@ contract for changes.
   when a new body part or venation plan is grounded in a reference.
   `docs/plan-body-variation.md` holds the finished plan that gave legs, body, head and antennae the
   per-seed "genes" treatment the wings have, and the open #30 plan "Nine plates, nine insects": the
-  perceptual criterion (`tests/perceptual.js`, a report) and one step per order (#48–#55).
+  perceptual criterion (`tests/perceptual.js`, a report) and one step per order (#48–#55, grasshopper #72).
 
 ## Hard constraints (e-ink plates)
 
@@ -64,13 +67,15 @@ contract for changes.
 - Minimum stroke 0.5 px after the plate scale; use the `SW.H/O/D/F` tokens, never literal widths.
 - Hatching spacing never below ~1.8 px or e-ink fills in.
 - Dark tones come from hatch pitch, never from stacking full hatch families. On a lepidopteran plate no 9×9 px window
-  of the wings reaches 55% ink at 600 px with the tone layers (hatch, stipple, fringe) putting a quarter of it there
-  (`lepInk` in `tests/check.js` rasterises every lep plate's `meta.lepInkSvg` against its line art alone,
-  `meta.lepArtSvg`, #13). Where the cross set lies over the fan the fan drops every other line; the hatch stops
-  `LEP_HUG` short of the veins, band edges and cross-lines and never runs alongside one; the hindwing hatch and
-  fringe keep `LEP_CLEAR` off the forewing's edge. A window the line art makes solid on its own (the costa beside Sc
-  and R1, a vein fork) is converging line art (#67), counted in the report, not failed.
-- Lanes never fuse into a bar (#14): on every `growVeins` order the registry does not opt out (`laneFloor: false`: the moth, #67), lanes and crossveins are drawn by one
+  of the wings reaches 55% ink at 600 px, whatever made it (`lepInk` in `tests/check.js` rasterises every lep plate's
+  `meta.lepInkSvg` and splits a failing window's ink against its line art alone, `meta.lepArtSvg`; #13, #67). Where the
+  cross set lies over the fan the fan drops every other line; the hatch stops `LEP_HUG` short of the veins, band edges
+  and cross-lines and never runs alongside one; the hindwing hatch and fringe keep `LEP_CLEAR` off the forewing's edge.
+  The line art holds its own (#67): the veins go through the lane floor (`lepVeinFloor`) with the leading edge as a
+  wall (on the hindwing only the runs that show outside the forewing, with its outline as a second wall), so Sc and the R branches merge into the costa instead
+  of running beside it; a cross-line tooth is at least `LEP_TOOTH` hatch pitches wide and no deeper than wide; band
+  edges and cross-lines stop `LEP_LINE_CLEAR` short of the costa and the veins; spot rings keep that far apart.
+- Lanes never fuse into a bar (#14): on every `growVeins` order the registry does not opt out (`laneFloor: false`: the beetle), and on the moth's veins (#67), lanes and crossveins are drawn by one
   deferred element resolved at the plate scale (`laneFloor`, see the spec's Growth section), which merges a lane into
   its neighbour where they converge under the floor; `meta.wingLanes` carries the drawn lanes and `laneSep` in
   `tests/check.js` asserts no two centre-lines within 1.8 px away from a junction. New lanes go through `growVeins`
@@ -85,9 +90,16 @@ contract for changes.
   straight into `L.abdomen`.
 - The elytral striae never fuse at the apex (#15): they converge toward it (and fan out of a narrow base), so
   `wingsElytra` rolls them as before and draws them through one deferred element (`elytralStriae`) resolved at the plate
-  scale: each stria keeps only its run `ELY_PITCH_PX` (3) plate px clear of every other stria and the outline, and a
-  puncture is kept only where its centre clears every line and the last puncture in its row by as much. `meta.elytra`
-  records what it drew and `elytraPitch` in `tests/check.js` measures it on the default and the device plate.
+  scale: each stria keeps only its run `ELY_PITCH_PX` (3) plate px clear of every other stria and the outline, and the
+  body gene `B.elytra.style` (#24, the entry's `elytra` table, on `bodySig`) lays it along that run as a line (smooth),
+  a row of punctures (punctate) or dashes, the marks a floor apart; there are no puncture rows between the striae.
+  `meta.elytra` records what it drew; `elytraPitch` and `elytraTexture` in `tests/check.js` measure it on the default
+  and the device plate. The beetle's pronotum is held to the research proportions by the entry's `pronotum` bands
+  (`beetleProportions`) and the rove family draws short truncate elytra over a tapering, hatched abdomen (`roveBody`). The
+  within-family genes (#53: elytral outline, sculpture, pattern; pronotal pattern and width class; horns, spines, the
+  fossorial tibia, stag jaws) live in the entry's `elytra`, `pronotum`, `armature` and `legs` tables; a tone over a
+  shape (an elytral or pronotal pattern) goes through `hatchRegions` at the plate pitch inside a deferred element,
+  never as a fill (`elytraPattern`, `pronotumPattern`).
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px
@@ -96,7 +108,7 @@ contract for changes.
   that its thresholded letters do not fragment). Strokes are floored at the token substitution; pitches at
   draw time through `floorPitch(v)` (body units), which also records `meta.minPitch`. Every
   repeated mark at a spacing goes through `floorPitch`, never a literal step: hatch bands,
-  lattice, mesh cells, pile, fringe, and the limb and antenna marks too (shading, spines, comb
+  lattice, mesh cells, pile, fringe, and the limb and antenna marks too (shading, spines, teeth, comb
   rows, herringbone, arista rami, club annuli), crossvein ladders and the stigma's lines
   (`floorFrac` for a step given as a fraction of a length, `floorSamples` for marks at every
   k-th sample). A site the floor misses leaves the `device` check of `tests/check.js` blind to
@@ -119,7 +131,11 @@ contract for changes.
   plan, then proportions, legs, head, then wings. Adding or removing `rng()` calls inside a block
   only changes what follows that block for the same seed; the body plan and everything drawn
   earlier stay put.
-- Names use their own PRNG (`insectName`) and must never touch the drawing's `rng`.
+- Names use their own PRNG (`insectName`) and must never touch the drawing's `rng`. A new epithet stem
+  is written out in `tests/names.js` `FORMS` too (check.js `epithets`); only adjectives are declined. The common name
+  reads the plate (#28): a family's noun from `famNouns`, a gene word for the marking or a rare antenna kind; a new
+  marking or antenna adjective goes into `GENE_MARK_ADJ` / `GENE_ANT_ADJ` and `tests/names.js` `MARK_CLAIMS` /
+  `ANT_CLAIMS`, never into a general adjective list (check.js `nameFamilies`, `nameFamily`, `nameGenes`).
 - Per-seed variation is the whole point. Each winged body plan rolls a "wing genes" object
   (outline shape, vein counts, cell plan, crossvein spacing ...) at the top of its wing block and
   exposes a discrete `meta.wingSig`. `tests/check.js` fails if one signature covers more than 10%
@@ -146,14 +162,18 @@ contract for changes.
   `rollAntGenes` (the entry's `ant` table, poses from `ANT_POSES`) rolls the genes, `antennaGeom` builds the
   geometry without rng, and the antennae block (after the legs and the wings) validates the pose: no point of
   the right antenna reaches the mirror line (the left is its mirror image, so that is the
-  no-crossing rule), the antenna alone does not push the plate scale under 0.6, no centre-line of the
+  no-crossing rule), the antenna alone does not push the plate scale under 0.6 (an entry's `antFit` raises that floor and caps how far out
+  the antenna reaches: the grasshopper's is scale 1.0 and 1.3× the half width of the rest of the plate, #23), no centre-line of the
   antenna (`meta.antennae.lines`: shaft, club, rami, lamellae, arista) comes within 3 px + both half widths of a
   leg segment ahead of the thorax in any leg pose (#7: every leg from the femur on, right side and the skewed
   left set, each segment's half width on `meta.legs[i].segHw`; beside the body the antenna lies over the legs),
   no point lies inside a wing, elytron or tegmen outline (`meta.wingOutlines`, pushed by `makeWing`
   and the elytra). A leg or wing hit is sticky: every later attempt is forward and nearly straight (a swept pose
   can only lie across them) and walks toward straight ahead, shortening a plume that has no clear pose at full
-  length; re-roll, then a known-good pose shortened until it clears. `tests/check.js` asserts it on
+  length; re-roll, then a known-good pose shortened until it clears. A family's `ant` entry may reshape a pose (`poses`, e.g. the longhorn's
+  sweep, #25); a `back` sweep leaves the head already turned back and is never straightened: a leg hit turns its root
+  further back, a wing hit turns it less, and after half the attempts it searches the pose's `alt` on a grid (a steep root
+  that turns out past the elytral shoulders); its tip stays within `ANT_BACK_OUT` of the covers' half width. `tests/check.js` asserts it on
   `meta.antennae.pts` and `.lines`. The legs block holds up its end: `legsOk` keeps every leg ahead of the head
   off the antenna socket by that clearance (`socket`), so a foreleg can never stand where no antenna fits.
   Curvature is signed outward-positive; keep inward curvature tiny or the long kinds will cross.
@@ -189,6 +209,7 @@ node tests/check.js 3000                 # invariants + determinism + wing uniqu
 node tests/check.js 300 --only antennae  # just the named checks (a,b,...), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists them
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster
+node tests/names.js                      # names audit: every epithet stem x gender; repeated-stem, gene-disagreeing and duplicate common names over seeds 1-3000 (a few minutes)
 node tests/pages.js                      # the three pages in headless Chromium: chrome, panes, hash, redirect
 node tests/snapshot.js write|check f.json 3000 [--engine old.html]   # byte-identity fixture for engine refactors (write on the old engine, check on the new)
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it

@@ -24,6 +24,11 @@ Reproduce with attribution where the licence asks for it.
 | lep-papilio.jpg | Papilio polyxenes fore + hindwing | [Wings of Papilio polyxenes (venation).jpg](https://commons.wikimedia.org/wiki/File:Wings_of_Papilio_polyxenes_(venation).jpg) | CC0 |
 | neu-nothochrysa.jpg | Green lacewing with Rs, im cell and gradate series traced | [Nothochrysa fulviceps venation.JPG](https://commons.wikimedia.org/wiki/File:Nothochrysa_fulviceps_venation.JPG) | CC BY-SA 3.0 |
 | neu-chrysoperla.jpg | Chrysoperla wing photo | [Chrysoperla.carnea.wing.detail.jpg](https://commons.wikimedia.org/wiki/File:Chrysoperla.carnea.wing.detail.jpg) | CC BY-SA 3.0 |
+| neu-myrmeleon.jpg | Antlion (Myrmeleontidae), pinned dorsal: long abdomen past the wings, short clubbed antennae (#51) | [Myrmeleon formicarius Bytom.jpg](https://commons.wikimedia.org/wiki/File:Myrmeleon_formicarius_Bytom.jpg), Gower | CC BY-SA 4.0 |
+| neu-libelloides.jpg | Owlfly (Ascalaphidae): body-long antennae with abrupt clubs, large eyes, broad spread wings (#51) | [Owlfly (Libelloides macaronius) female Istria.jpg](https://commons.wikimedia.org/wiki/File:Owlfly_(Libelloides_macaronius)_female_Istria.jpg), Charles J. Sharp | CC BY-SA 4.0 |
+| neu-mantispa.jpg | Mantidfly (Mantispidae): long prothorax, raptorial forelegs with folded tibiae (#51) | [Mantispa styriaca.jpg](https://commons.wikimedia.org/wiki/File:Mantispa_styriaca.jpg), H. Dumas | CC BY-SA 3.0 |
+| neu-osmylus.jpg | Osmylid (Osmylidae): stippled spots on broad wings (#51) | [Osmylus fulvicephalus.jpg](https://commons.wikimedia.org/wiki/File:Osmylus_fulvicephalus.jpg), invertebradosdehuesca.com | CC BY 3.0 ES |
+| neu-hemerobius.jpg | Brown lacewing (Hemerobiidae), pinned dorsal: broad oval wings, beaded antennae, short abdomen (#51) | [Hemerobius stigma.jpg](https://commons.wikimedia.org/wiki/File:Hemerobius_stigma.jpg), Teemu Rintala, Timo Lehto | CC BY 4.0 |
 | eph-ameletus-li2021.jpg | *Ameletus daliensis* (Ameletidae) imago, slide photos: forewing (fig. 30) and hindwing (fig. 31). Cropped from figs 30–34, downscaled to 1200 px. The two figures are at different scales (bars 1000 µm and 500 µm), so the crop exaggerates the hindwing; the measured ratio is in the spec's Ephemeroptera section, observation 12 | [Ameletus daliensis (10.3897-zookeys.1021.59927) Figures 30–34.jpg](https://commons.wikimedia.org/wiki/File:Ameletus_daliensis_(10.3897-zookeys.1021.59927)_Figures_30%E2%80%9334.jpg), Li X, Luo Y, Jiang J, Wang L, Tong X (2021) ZooKeys 1021: 37–51, [doi:10.3897/zookeys.1021.59927](https://doi.org/10.3897/zookeys.1021.59927) | CC BY 4.0 |
 | eph-mayfly-1956.jpg | **Plecoptera (stonefly), not a mayfly.** Filed here as a mayfly until 2026-10-13 (#20): long many-segmented antennae, a hindwing with an anal fan to 5thA, paired cerci with claspers and paratergites are the generic stonefly diagram. Kept only because the 2026-10-02 audit entries in the spec and the `wingsEphemeroptera` comments in `index.html` name it (those comments are updated in #59); do not use it for Ephemeroptera | [Aquatic insects of California ... (19747552885).jpg](https://commons.wikimedia.org/wiki/File:Aquatic_insects_of_California,_with_keys_to_North_American_genera_and_California_species_(1956)_(19747552885).jpg) | No known restrictions |
 | orth-grasshopper.jpg | Grasshopper tegmen and hindwing fan, veins labelled | [Grasshopper wing structure.png](https://commons.wikimedia.org/wiki/File:Grasshopper_wing_structure.png) | CC BY-SA 3.0 |
@@ -50,6 +55,10 @@ Dorsal-view head references for `../research-head-eyes.md` (step 5 of the body p
 | thorax-orth-grasshopper.jpg | Grasshopper thorax, lateral: saddle pronotum with sulci and lateral lobe over the pleura | [Grasshopper thorax lateral.jpg](https://commons.wikimedia.org/wiki/File:Grasshopper_thorax_lateral.jpg) (Giancarlodessi / Alvesgaspar) | CC BY 2.5 |
 | thorax-col-engraving.jpg | Nine carabid beetles in dorsal view, Curtis del., Janson 1863: pronotum shapes and proportions against head and elytra | [British beetles (Plate I) (5987271987).jpg](https://commons.wikimedia.org/wiki/File:British_beetles_(Plate_I)_(5987271987).jpg) | Public domain |
 | thorax-hem-heteroptera.png | Shield bug dorsal scheme: wide pronotum, large triangular scutellum | [Heteroptera morphology-d.svg](https://commons.wikimedia.org/wiki/File:Heteroptera_morphology-d.svg) (Giancarlodessi) | CC BY-SA 3.0 |
+| thorax-col-jacobson-plate26.jpg | G. Jacobson, *Beetles of Russia and Western Europe*, plate 26: Lucanidae and small Scarabaeoidea in dorsal view (stag mandibles ♂ / ♀, toothed fore tibiae, *Trox* tubercles, elytral outlines within a family); #53 | [Georgiy Jacobson - Beetles Russia and Western Europe - plate 26.jpg](https://commons.wikimedia.org/wiki/File:Georgiy_Jacobson_-_Beetles_Russia_and_Western_Europe_-_plate_26.jpg), downscaled | Public domain |
+| thorax-col-lucanus-jacobson.jpg | *Lucanus cervus* ♂, Jacobson: antler mandibles with the inner tooth, broad head, elbowed clubbed antennae; #53 | [Lucanus cervus-m- Jacobson.png](https://commons.wikimedia.org/wiki/File:Lucanus_cervus-m-_Jacobson.png), as JPEG | Public domain |
+| thorax-col-coccinella-jacobson.jpg | *Coccinella septempunctata*, Jacobson: the ladybird hemisphere, spots, short pronotum with pale corners; #53 | [Coccinella septempunctata Jacobson.png](https://commons.wikimedia.org/wiki/File:Coccinella_septempunctata_Jacobson.png), as JPEG | Public domain |
+| thorax-col-dynastes-drury.jpg | *Dynastes hercules* ♂, Drury 1777: pronotal horn over a cephalic horn; #53 | [Dynastes hercules by Drury 1777.jpg](https://commons.wikimedia.org/wiki/File:Dynastes_hercules_by_Drury_1777.jpg) | Public domain |
 ## Antennae (`ant-` prefix)
 
 References for `../research-antennae.md`. All from Wikimedia Commons; downscaled to ≤1200 px.
@@ -62,3 +71,49 @@ References for `../research-antennae.md`. All from Wikimedia Commons; downscaled
 | ant-butterfly-tips-bingham.png | C. T. Bingham, butterfly antenna tips: Danais, Orsotriaena, Hypolimnas, Pareba, Libythea, Abisara, Papilio, Pieris, Lampides, Tagiades (skipper apiculus) | [Antennae ctb.png](https://commons.wikimedia.org/wiki/File:Antennae_ctb.png) | Public domain |
 | ant-longhorn-dorcadion.jpg | Carinatodorcadion fulvum head, dorsal: scape / pedicel / first flagellomere lengths marked, eyes notched around the sockets, antennae swept back beside the body | [Carinatodorcadion fulvum detail1.jpg](https://commons.wikimedia.org/wiki/File:Carinatodorcadion_fulvum_detail1.jpg), Siga | CC BY-SA 3.0 |
 | ant-lucanus-curtis.jpg | John Curtis, *British Entomology*: Lucanus plate with the geniculate lamellate antenna drawn in detail and the set habitus | [Lucanus Curtis.jpg](https://commons.wikimedia.org/wiki/File:Lucanus_Curtis.jpg) | Public domain |
+
+## Legs (`leg-` prefix)
+
+References for `../research-legs-eyes-antennae.md`. From Wikimedia Commons.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| leg-orth-femur.jpg | Grasshopper hind femur, lateral micrograph of the outer face: drumstick profile deepest at a fifth of the length, herringbone (pinnate) muscle chevrons over the whole face, genicular lobe at the knee; the #23 femur measurements | [Grasshopper leg.tif](https://commons.wikimedia.org/wiki/File:Grasshopper_leg.tif), Tenbergen (2020), downscaled to 1280 px JPEG | CC BY-SA 4.0 |
+| leg-orth-psm1891.jpg | Grasshopper hind leg engraving (femur with herringbone, serrated tibia) and the stridulatory peg row, *Popular Science Monthly* vol. 39 p. 697 (1891) | [PSM V39 D697 Grasshopper leg.jpg](https://commons.wikimedia.org/wiki/File:PSM_V39_D697_Grasshopper_leg.jpg) | Public domain |
+
+## Cicada habitus (`hab-cic-` prefix)
+
+References for `../research-cicada-habitus.md` (#49). From Wikimedia Commons, downscaled to 800 px.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| hab-cic-orni-dorsal.jpg | *Cicada orni* (Cicadinae) at rest, dorsal: the tegmina roofed back over the abdomen, inner margins meeting along the midline, hindwings hidden; mesonotum with paired dark spots | [Cicada orni dorsal Ateret 0715 01.jpg](https://commons.wikimedia.org/wiki/File:Cicada_orni_dorsal_Ateret_0715_01.jpg), Sir Shurf | CC BY-SA 4.0 |
+| hab-cic-notopsalta-dorsal.jpg | *Notopsalta sericea* (Cicadettinae), spread, dorsal: slender abdomen, head narrower than the pronotum, the paired obconical spots and M-shaped mark on the mesonotum, narrow tegmina | [Notopsalta sericea dorsal view.jpg](https://commons.wikimedia.org/wiki/File:Notopsalta_sericea_dorsal_view.jpg), B. E. Rhode, Landcare Research | CC BY 4.0 |
+| hab-cic-cicadettana-dorsal.jpg | *Cicadettana calliope* (Cicadettinae), a small cicadettine, dorsal | [Cicadettana calliope calliope male US.IL.QHR male dorsal view.jpg](https://commons.wikimedia.org/wiki/File:Cicadettana_calliope_calliope_male_US.IL.QHR_male_dorsal_view.jpg), D. C. Marshall | CC BY-SA 4.0 |
+| hab-cic-tibicen-dorsal.jpg | *Tibicen* (now *Hadoa*) *bifidus* (Cicadinae) at rest, dorsal: broad body, roofed tegmina | [Tibicen bifidus dorsal.jpg](https://commons.wikimedia.org/wiki/File:Tibicen_bifidus_dorsal.jpg), JerryFriedman | CC BY-SA 3.0 |
+| hab-cic-platypleura-capensis.jpg | *Platypleura capensis* (Platypleurini) at rest: the pronotal collar flared into lateral flanges wider than the head, broad rounded tegmina roofed over a stout abdomen | [Platypleura capensis00.jpg](https://commons.wikimedia.org/wiki/File:Platypleura_capensis00.jpg), Karen Pagel | CC BY-SA 4.0 |
+
+## Fly habitus (`dip-hab-` prefix)
+
+References for `../research-diptera-habitus.md` (#54). From Wikimedia Commons, downscaled to 960 px where larger.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| dip-hab-tachina.jpg | *Tachina fera* (Tachinidae), dorsal: wings half open in a delta, round abdomen with stout marginal bristles standing out past its sides | [Fly (Tachina fera) top.jpg](https://commons.wikimedia.org/wiki/File:Fly_(Tachina_fera)_top.jpg), Charles J. Sharp | CC BY-SA 3.0 |
+| dip-hab-bombylius.jpg | *Bombylius major* (Bombyliidae): round, densely hairy body, long slender legs, long proboscis | [Grosser Wollschweber Bombylius major.jpg](https://commons.wikimedia.org/wiki/File:Grosser_Wollschweber_Bombylius_major.jpg), Richard Bartz | CC BY-SA 2.5 |
+| dip-hab-physocephala.jpg | *Physocephala rufipes* (Conopidae): petiolate clubbed abdomen, long porrect antennae, broad head | [Physocephala.rufipes.jpg](https://commons.wikimedia.org/wiki/File:Physocephala.rufipes.jpg), James K. Lindsey | CC BY-SA 3.0 |
+| dip-hab-tabanus.jpg | *Tabanus bovinus* (Tabanidae) at rest: wings swept back in a delta over a broad abdomen | [Tabanus.bovinus.female.jpg](https://commons.wikimedia.org/wiki/File:Tabanus.bovinus.female.jpg), James K. Lindsey | CC BY-SA 3.0 |
+| dip-hab-episyrphus.jpg | *Episyrphus balteatus* (Syrphidae), dorsal specimen: flat banded abdomen | [Episyrphus balteatus (10.3897-BDJ.10.e78518) Figure 22a.jpg](https://commons.wikimedia.org/wiki/File:Episyrphus_balteatus_(10.3897-BDJ.10.e78518)_Figure_22a.jpg), Rego et al. (2022) | CC BY 4.0 |
+
+## Mayfly habitus (`eph-hab-` prefix)
+
+References for `../research-ephemeroptera-habitus.md` (#50). From Wikimedia Commons, downscaled to 1000 px where larger.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| eph-hab-ephemera-vulgata.jpg | *Ephemera vulgata* (Ephemeridae), lateral: dark triangles on the tergites, three tails, the male's long foreleg held forward | [Ephemera vulgata 1.jpg](https://commons.wikimedia.org/wiki/File:Ephemera_vulgata_1.jpg), Peter Nijland | CC BY-SA 4.0 |
+| eph-hab-ephemera-danica.jpg | *Ephemera danica* (Ephemeridae): large, long-bodied, patterned abdomen, three tails | [Ephemera danica01.jpg](https://commons.wikimedia.org/wiki/File:Ephemera_danica01.jpg), Jeffdelonge | CC BY-SA 3.0 |
+| eph-hab-ecdyonurus.jpg | *Ecdyonurus venosus* (Heptageniidae): broad head, marked tergites, two long tails, long forelegs | [Ecdyonurus venosus.jpg](https://commons.wikimedia.org/wiki/File:Ecdyonurus_venosus.jpg), M. Albi | CC BY-SA 3.0 es |
+| eph-hab-baetis-male.jpg | *Baetis tricaudatus* (Baetidae) male imago: turbinate eyes, two tails, no hindwing showing | [Baetis tricaudatus male imago.jpg](https://commons.wikimedia.org/wiki/File:Baetis_tricaudatus_male_imago.jpg), JerryFriedman | CC BY-SA 3.0 |
+| eph-hab-caenis-stephens.jpg | *Caenis macrura*, Stephens 1835, dorsal: broad rounded forewings, no hindwing, short stout abdomen, three long tails | [Caenis macrura.jpg](https://commons.wikimedia.org/wiki/File:Caenis_macrura.jpg), Stephens vol. VI via L. Watson and M. J. Dallwitz | Public domain |
+| eph-hab-caenis-imago.jpg | *Caenis* sp. (Caenidae) imago: broad forewings, three tails | [Caenis spec. (Caenidae) - (imago), Arnhem, the Netherlands.jpg](https://commons.wikimedia.org/wiki/File:Caenis_spec._(Caenidae)_-_(imago),_Arnhem,_the_Netherlands.jpg), B. Schoenmakers (Waarneming.nl) | CC BY 3.0 |

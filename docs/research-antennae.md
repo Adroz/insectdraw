@@ -203,7 +203,7 @@ headH + thoraxLen + abdLen, or forewing `fw` = wingSpan × family len)
 | beetle ground | filiform 5, moniliform 2 | 1.6–2.4 hw | 11 |
 | beetle rove | moniliform 3, filiform 2, clubbed-gradual 1 | 0.9–1.4 hw | 11 |
 | beetle scarab | lamellate 1 | 0.6–0.9 hw | 7 stalk + 3–7 lamellae |
-| beetle longhorn | filiform 1 (swept back) | 0.8–1.6 bl | 11 |
+| beetle longhorn | filiform 1 (swept back from the head, thick: shaft 3.5× the base width factor, tip 0.6–0.8 of the base) | 0.7–0.95 bl | 11 |
 | beetle weevil | geniculate (club abrupt) 1 | 0.8–1.2 hw | scape + 7 + 3 |
 | moth noctuid | filiform 4, serrate 1, bipectinate-short 1 | 0.33–0.5 fw | 30–50 |
 | moth geometrid / arctiid | bipectinate 3, filiform 2 | 0.33–0.5 fw | 30–45 |
@@ -227,7 +227,7 @@ headH + thoraxLen + abdLen, or forewing `fw` = wingSpan × family len)
 | dragonfly / damselfly | setaceous 1 | 0.12–0.22 hw | 4–7 |
 | grasshopper acridid | filiform 5, clubbed gradual 1 | 0.35–0.55 bl | 20–26 |
 | grasshopper tettigoniid | filiform 1 (swept back) | 1.0–1.8 bl | 30–45 |
-| grasshopper tetrigid | filiform 1 | 0.5–0.8 hw | 11–16 |
+| grasshopper tetrigid | filiform 1 | 0.9–1.4 hw (#23; was 0.5–0.8, which drew two hairs at 600 px) | 11–16 |
 | cranefly | moniliform-whorled 4, pectinate 0.6 | 0.6–1.0 hw | 13 (14–16) |
 | lacewing | filiform 5, moniliform 1 | 0.6–1.0 bl | 30–45 |
 | cicada | setaceous 1 | 0.1–0.18 hw | 7 |
@@ -285,8 +285,8 @@ tucked or walking forelegs) and 0.3% of damselflies, and nowhere else.
 Socket centre = table value ± 0.03 hw in x, ± 0.04 headH in y; radius 1–2.5 px (headW × 0.03–0.045,
 clamped). Table (x / headW, y / headH from the head top): dragonfly [0.14, 0.12], damselfly
 [0.12, 0.25], fly [0.055, 0.2], bee / wasp [0.16, 0.3] (chalcid [0.14, 0.26]), moth [0.16, 0.3]
-(skipper-type hooked clubs [0.24, 0.3]), beetle [0.2, 0.3] (longhorn [0.28, 0.34], weevil
-[0.08, 0.1] on the rostrum), grasshopper [0.13, 0.24], cranefly [0.1, 0.22], lacewing [0.18, 0.28],
+(skipper-type hooked clubs [0.24, 0.3]), beetle [0.2, 0.3] (longhorn [0.28, 0.34]; weevil on the
+side of the rostrum, the head gene `antOn` 0.2–0.55 of its length ahead of the capsule, #25), grasshopper [0.13, 0.24], cranefly [0.1, 0.22], lacewing [0.18, 0.28],
 cicada [0.22, 0.3], mayfly [0.08, 0.2].
 
 ### R-F Signature
@@ -302,3 +302,29 @@ x bucket (× 20).
 - The plan's "shaft curvature −40–40°" would let a −40° inward curve cross the midline on any long
   antenna; inward curvature is limited to −5° and the long kinds get the arc / swept poses instead.
 - Tip droop is kept (0–15°) but only on the forward poses; it is meaningless on a swept antenna.
+- Grasshopper fit (#23, `antFit` on the grasshopper registry entry): the antenna alone never takes a grasshopper plate
+  under scale 1.0 (the general rule is 0.6) and never reaches past 1.3× the half width of the rest of the plate (body,
+  legs, wings), so the acridid arc can no longer draw a hoop out past the hind legs. A katydid antenna (1.0–1.8 bl)
+  cannot be laid swept back past the raised forelegs without crossing them, so after its re-rolls it is laid straight
+  ahead and shortened until it fits at scale 1.0: on the plate it reaches the top margin, about 0.3–0.7 (median 0.4) of its rolled
+  length. A true swept-back katydid antenna (out past the forelegs and back beside the body) is a follow-up.
+  `grasshopperAntenna` in `tests/check.js` asserts all three numbers.
+- Beetle head and antennae (#25). Weevil: the socket is on the side of the rostrum (`rostrumPoint`, the head gene
+  `antOn` 0.2–0.55 of the rostrum's length ahead of the capsule; `head-col-weevil.jpg` puts it about a quarter of the way
+  along a long *Curculio* rostrum), and the family's `wide` pose leaves it sideways (−25 … 0°) so the scape stands out
+  from the rostrum and the funicle turns forward at the elbow, as on the photo. Longhorn (`ant-longhorn-dorcadion.jpg`):
+  thick and segmented (the family's `thick` 3.5 on the width factor, `taper` 0.6–0.8), about the body's length
+  (0.7–0.95 bl as rolled; `longhornAntenna` holds the drawn shaft to 0.7–1.3 body lengths) and swept back beside the
+  elytra. The general swept pose leaves the head forward-out and crosses the forelegs ahead of the thorax, so on a
+  beetle it was always straightened forward into a hairline twice the body's length. The longhorn's own swept pose
+  (`poses.swept` on the family's `ant` entry: root 40–55° back from straight out, a further 35–50° turn weighted toward
+  the root, `back`) leaves the head already turned back, crossing the pronotum's front corner as on the photo, so the
+  forelegs ahead of the thorax are never in its way; a leg hit turns its root further back (and its run less, keeping
+  its heading), a wing hit turns it less, and it is never straightened forward. Where the forelegs (raised or reaching
+  forward) and the elytral shoulders leave the sweep no room (about 1 % of longhorns at 3000 seeds), the re-rolls switch
+  after half the attempts to the pose's `alt`: a steep root over the pronotum (55–90° back) that turns outward past
+  the elytral shoulders (curve −60 … −10) with a tip droop (10–80°) bringing it back beside the elytra, searched on a
+  fixed grid (no rng) for the clear pose whose tip stays nearest the body. Every back sweep's tip stays within 1.8× the
+  covers' half width (`ANT_BACK_OUT`, antOk 'wide': a wide one turns back sooner). `longhornAntenna` asserts the length,
+  that the shaft is never narrower than the detail stroke on the plate (and at least 0.1 head widths at its base),
+  the swept pose, nothing ahead of the head, and the tip beside the elytra.
