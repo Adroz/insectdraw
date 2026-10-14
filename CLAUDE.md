@@ -154,7 +154,10 @@ contract for changes.
   joint's disc of half width + `WING_LEG_CLEAR` straddles a wing margin) or is fully hidden (nothing
   pokes out). A pair that breaks it is turned to the nearest passing offset (`LEG_REPAIR`) with no rng
   draw, so the wings and every draw after them keep their place in the stream; `meta.legRoll.wingFirst`
-  / `.repaired` say what was repaired. `tests/check.js` asserts the result on `meta.legs[i].pts` (and
+  / `.repaired` say what was repaired. A repaired pose also keeps the limits the roll keeps by drawing
+  inside the order's own angles: a pair with `poseAng` never raises its femur more than `LEG_RAISE_TOL`
+  past them, and a `foreCoxa` foreleg (the repair may turn that coxa only backward) first leaves the
+  body behind the head (`legsOk` 'raised' / 'beside-head', wing-aware calls only). `tests/check.js` asserts the result on `meta.legs[i].pts` (and
   `legWings` the wing rule, right and skewed sets), so a new pose or family
   range must keep those invariants rather than relax the test. The left legs are the right legs rotated per pair by `B.legs[i].skew` about the coxa
   (`L.legPairs` in the assembly); any new check on the right legs should also run on the rotated

@@ -588,6 +588,8 @@ const LEG_REPAIR = (() => {
 // the repair's budget (placeLegs): the first LEG_KEEP passing poses of each pair are combined; failing that, the pairs are
 // placed depth first, hardest first, trying at most lim[depth] passing poses at each depth (each lim of LEG_DFS in turn:
 // the second lets the middle pair go as far as it must), with at most LEG_PAIR_BUDGET two-pair tests per pass
+// LEG_RAISE_TOL: how far (degrees) a repaired femur may be raised toward the head past its order's own pose angles (legsOk 'raised')
+const LEG_RAISE_TOL = 8;
 const LEG_KEEP = 6, LEG_DFS = [[48, 400, Infinity], [48, Infinity, Infinity]], LEG_PAIR_BUDGET = 40000;
 // After a leg or wing hit the antenna pose is straightened (R-D): per reason, the known-good fallback pose and the bound
 // the re-roll walks toward (straight ahead is -90). A plume or bristle with no clear pose at full length is shortened
@@ -4110,9 +4112,10 @@ function drawLegs(C) {
     // not beside the eyes where a long foreleg held forward reads as an antenna; no rng (the gene's t is clamped)
     const fc = order.foreCoxa, headBack = fc ? Math.max(...meta.head.outline.map(p => p[1])) : 0;
     const attachOf = g => { const y = fc && g === B.legs[0] ? Math.max(thorax.yAt(g.t), headBack + fc.clear) : thorax.yAt(g.t), hw = thorax.hwAt(y); return { y, hw, p: [hw - Math.min(g.inset, hw * 0.45), y] }; };
-    const makeSpec = (i, dirs, lenK) => {
+    // coxT: placeLegs' repair may turn a clamped fore coxa further back (never forward, so the femur stays behind the head)
+    const makeSpec = (i, dirs, lenK, coxT = 0) => {
       const g = B.legs[i], wk = wk0 * g.wk;
-      if (fc && i === 0) dirs = [fc.dir].concat(dirs.slice(1));
+      if (fc && i === 0) dirs = [fc.dir + coxT].concat(dirs.slice(1));
       const spec = {
         dirs, lens: g.lens.map((l, k) => k === 0 ? l : l * lenK),
         widths: [[6, 5], [7 * g.swell, 5], [5, 3.2 * g.flare], [3, 1.8]].map(w => [w[0] * wk, w[1] * wk]),
@@ -4219,7 +4222,29 @@ function drawLegs(C) {
       }
       const W = 2 * Math.max(maxX + 6, P.abdW / 2, P.thoraxW / 2, P.headW / 2) + 2 * 24, H = Math.max(maxY + 6, abdomen.yBot + 10) - Math.min(minY - 6, -10) + 2 * 24;
       if (Math.min(552 / W, 507 / H) < 0.62) return 'fit';
-      return wings ? wingWhy(joints, specs, wings, idx) : null;
+      if (!wings) return null;
+      // the wing-aware rules (placeLegs only, so the body-only roll and its draws are untouched) also hold a repaired pose
+      // to the pose limits the order's own leg angles stand for, which the roll keeps by drawing within them: a pair with
+      // its own angles (g.poseAng: the lacewing's walking forelegs #19, the mantidfly's #51, the odonate tuck #48) never
+      // raises its femur more than LEG_RAISE_TOL past the most raised of them, and a clamped fore coxa's leg (the mayfly,
+      // #21) starts behind the head and first comes out from under the body behind it, never beside the eyes
+      for (const i of idx) {
+        const g = B.legs[i], j = joints[i];
+        if (g.poseAng) {
+          const lo = Math.min(...Object.values(g.poseAng).map(R => R.F[0])) - LEG_RAISE_TOL;
+          if (Math.atan2(j[3][1] - j[2][1], j[3][0] - j[2][0]) / D2R < lo) return 'raised';
+        }
+        if (fc && i === 0) {
+          if (j[2][1] < headBack) return 'beside-head';
+          let e = null;   // where the leg first comes out from under the head and thorax
+          for (let k = 0; k + 1 < j.length && !e; k++) {
+            const a = j[k], b = j[k + 1], m = Math.max(1, Math.ceil(vlen(sub(b, a)) / 0.25));   // the step tests/check.js ephForeleg samples at
+            for (let q = 0; q <= m; q++) { const p = lerpP(a, b, q / m); if (!pointInPoly(p, meta.head.outline) && Math.abs(p[0]) > profHw(meta.thorax.profile, p[1])) { e = p; break; } }
+          }
+          if (e && e[1] < headBack) return 'beside-head';
+        }
+      }
+      return wingWhy(joints, specs, wings, idx);
     };
     // the pose roll, against the body only (the wings are drawn after it, and its draws keep their place in the stream)
     let specs, joints, why = null, lenK = 1, pose = B.pose, attempt = 0;
@@ -4255,7 +4280,7 @@ function drawLegs(C) {
         while (L.poses.length < want && !L.done) {
           if (L.k >= LEG_REPAIR.length) { L.bi++; L.k = 0; if (L.bi >= L.bases.length) { L.done = true; break; } }
           const o = LEG_REPAIR[L.k++], b = L.bases[L.bi];
-          S[L.i] = makeSpec(L.i, [b[0] + o[0] + o[2], b[1] + o[0], b[2] + o[1], b[3] + o[1]], lenK);
+          S[L.i] = makeSpec(L.i, [b[0] + o[0] + o[2], b[1] + o[0], b[2] + o[1], b[3] + o[1]], lenK, Math.max(0, o[2]));   // a clamped fore coxa (#21) takes only the coxa offset, and only backward
           J[L.i] = legJoints(at, S[L.i]);
           if (!legsOk(J, S, wings, [L.i], o[3] + L.bi > 0)) L.poses.push({ spec: S[L.i], joints: J[L.i], cost: o[3] + L.bi * 1000, label: (L.bi ? 'base ' + L.bi + ' ' : '') + o.slice(0, o[2] ? 3 : 2).join('/') });
         }

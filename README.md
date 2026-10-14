@@ -296,7 +296,7 @@ so once the wings are drawn each pair either shows cleanly (it comes out from
 under the wing once, with the tibia's end and the whole tarsus clear and no
 joint sitting on a wing margin) or is fully hidden under it; a pair that would
 show as a stub or a knot is turned to the nearest pose that passes, without a
-new roll (#8). **Abdomen**: the order's
+new roll, and still within its order's own foreleg limits (#8). **Abdomen**: the order's
 profile with the widest point slid along the axis, a tip shape (pointed,
 rounded, truncate, clubbed), petiole width and length, width factor,
 segmentation (count, start, bow, weight, doubled lines), a markings family
