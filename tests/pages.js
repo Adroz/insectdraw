@@ -83,6 +83,32 @@ server.listen(0, '127.0.0.1', async () => {
     // self-contained: the main page renders from file:// (no fetch)
     d = await dom('file://' + path.join(root, 'index.html'));
     check('main from file://: plate rendered', stageSvgs(d) === 1);
+
+    // contact sheet (tests/sheet.js, #58): a 3 x 3 sheet is exactly 3 x 3 cells of 600 px and the last row is whole.
+    // Headless Chrome's viewport is shorter than --window-size (it reserves room for window chrome), which used to cut
+    // the last row's captions off. Checked on the crane fly (longest legs) and the beetle.
+    const sharp = require('sharp');
+    const tmp = fs.mkdtempSync(path.join(require('os').tmpdir(), 'sheet-'));
+    try {
+      for (const type of ['cranefly', 'beetle']) {
+        const png = path.join(tmp, type + '.png');
+        await promisify(execFile)(process.execPath, [path.join(__dirname, 'sheet.js'), png, '3', '1,2,3,4,5,6,7,8,9', '--type', type]);
+        const { data, info } = await sharp(png).greyscale().raw().toBuffer({ resolveWithObject: true });
+        check('sheet ' + type + ': 1800 x 1800', info.width === 1800 && info.height === 1800, info.width + ' x ' + info.height);
+        const px = (x, y) => data[y * info.width * info.channels + x * info.channels];
+        // last row's bottom cell border (#ccc) on the image's last pixel row, under every column
+        const border = [300, 900, 1500].every(x => Math.abs(px(x, info.height - 1) - 0xcc) < 24);
+        check('sheet ' + type + ': last row bottom border drawn', border);
+        // every last-row cell has caption ink in the plate's caption band (the bottom 45 plate px)
+        for (let c = 0; c < 3; c++) {
+          let ink = 0;
+          for (let y = 1800 - 45; y < 1799; y++) for (let x = c * 600 + 100; x < c * 600 + 500; x++) if (y < info.height && px(x, y) < 128) ink++;
+          check('sheet ' + type + ': last-row cell ' + (c + 1) + ' caption drawn', ink > 50, ink + ' dark px');
+        }
+      }
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   } finally {
     server.close();
   }
