@@ -214,10 +214,12 @@ margin-terminating vein ends on an outline sample.
   few extra cells appear.
 - **Grasshopper** — the tegmen as its own wing frame: Sc, R, M and Cu as
   near-parallel lanes (Cu forking near the base, R near the tip, an optional
-  light intercalated vein), the archedictyon grown as one row of leaning rungs
-  where a strip is narrow and rows of near-rectangular polygons where it is
-  wider, finer toward the apex; the folded hindwing fan as radiating lanes with
-  ladder rungs.
+  light intercalary forking off M), the archedictyon grown as one row of leaning
+  rungs where a strip is narrow and square rows of near-rectangular cells where it
+  is wider, finer toward the apex; the tegmina overlap along the inner margin and
+  part at the apices; the folded hindwing fan, radiating lanes with ladder rungs,
+  lies inside the costa and shows only between the apices. The pronotum is a
+  saddle with lateral carinae.
 - **Lacewing** — Sc, R1 and Rs as smooth offsets under the costa (Rs rooted on
   R1 near the base), a costal ladder of 20–35 placed crossveins, 2–5 rungs in
   the R1–Rs strip, M beside Rs to its fork (MP to the hind margin, MA on past

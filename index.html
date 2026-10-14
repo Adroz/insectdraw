@@ -1129,12 +1129,14 @@ function poissonInPoly(poly, rFn, maxTries) {
   }
   return pts.map(q => q.p);
 }
-function voronoiEdges(sites, boundary) {
+function voronoiCells(sites, boundary) {   // each site's Voronoi cell clipped to the boundary polygon, in site order
+  return sites.map((s, i) => { let cell = boundary; for (let j = 0; j < sites.length && cell.length > 2; j++) if (j !== i) cell = clipHalfPlane(cell, s, sites[j]); return cell; });
+}
+function voronoiEdges(sites, boundary, cells) {   // cells: voronoiCells(sites, boundary) when the caller already has them
   const seen = new Set(), edges = [];
   const key = p => Math.round(p[0] * 2) + ',' + Math.round(p[1] * 2);
-  for (let i = 0; i < sites.length; i++) {
-    let cell = boundary;
-    for (let j = 0; j < sites.length && cell.length > 2; j++) if (j !== i) cell = clipHalfPlane(cell, sites[i], sites[j]);
+  cells = cells || voronoiCells(sites, boundary);
+  for (const cell of cells) {
     for (let k = 0; k < cell.length; k++) {
       const P = cell[k], Q = cell[(k + 1) % cell.length];
       if (vlen(sub(P, Q)) < 0.8) continue;
@@ -1566,7 +1568,7 @@ function growVeins(g, G) {
   const angLo = 105, angHi = 140, angT = G.angle === undefined ? 120 : G.angle, lean = G.lean === undefined ? -1 : G.lean;
   const bowAmt = G.bowAmt === undefined ? 0.02 : G.bowAmt, stubLen = G.stubLen === undefined ? 0.08 : G.stubLen;
   const stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
-  const joins = [], lanes = [], laneOf = {};
+  const joins = [], lanes = [], laneOf = {}, cellShapes = [];   // cellShapes: the multi-row regime's Voronoi cells, kept when G.cellShapes asks (the orthopteran archedictyon, #22)
   // #14: every lane and crossvein goes through drawPl; with the lane floor on (G.laneFloor !== false) they are collected and
   // drawn by one deferred element that holds lanes apart at plate scale (laneFloor), else emitted at once as before
   const floorOn = G.laneFloor !== false, items = [];
@@ -1826,14 +1828,16 @@ function growVeins(g, G) {
       if (ring.length < 4) return false;
       const onBoundary = p => distLane(p, a.pl) < 0.3 || distLane(p, b.pl) < 0.3 || distPl(p, p0) < 0.3 || (p1 && distPl(p, p1) < 0.3) || (walk && distPl(p, walk) < 0.3);
       let xs = Infinity, xe = -Infinity; for (const p of ring) { xs = Math.min(xs, p[0]); xe = Math.max(xe, p[0]); }
-      const sites = [], zig = G.zig === undefined ? 0.18 : G.zig;
+      const sites = [], zig = G.grid ? 0 : G.zig === undefined ? 0.18 : G.zig, jg = G.grid ? 0.35 : 1;   // a grid has square rows: no zigzag of the outer rows
       for (let x = xs + 0.5 * cell(xs / Lw) * jitter(0.3), col = 0; x < xe; col++) {
         const c = cell(x / Lw), yr = outlineYRange(ring, x);
         if (yr) {
           const h = yr[1] - yr[0], rows = Math.max(1, Math.round(h / c)), sg = col % 2 ? 1 : -1;
           for (let rI = 0; rI < rows; rI++) {
             const edge = rI === 0 ? sg : rI === rows - 1 ? -sg : 0;
-            const p = [x + (rI % 2) * 0.5 * c + randRange(-0.08, 0.08) * c, yr[0] + h * (rI + 0.5 + edge * zig) / rows + randRange(-0.08, 0.08) * c];
+            // G.grid (#22): rows stacked square and the jitter damped (the draws stay), so the cells are near-rectangles in
+            // rows; else staggered rows, hexagonal packing
+            const p = [x + (G.grid ? 0 : (rI % 2) * 0.5 * c) + randRange(-0.08, 0.08) * c * jg, yr[0] + h * (rI + 0.5 + edge * zig) / rows + randRange(-0.08, 0.08) * c * jg];
             if (!pointInPoly(p, ring)) continue;
             let ok = true;   // Poisson test against the sites of the last columns only (columns advance by at least 0.85 c)
             for (let q = sites.length - 1; q >= 0 && sites[q][0] > p[0] - 1.2 * c; q--) if (vlen(sub(p, sites[q])) < 0.6 * c) { ok = false; break; }
@@ -1844,7 +1848,9 @@ function growVeins(g, G) {
       }
       if (sites.length < 2) return false;
       let n = 0;
-      for (const e of voronoiEdges(sites, ring)) {
+      const cells = voronoiCells(sites, ring);
+      if (G.cellShapes) for (const c of cells) if (c.length > 2) cellShapes.push(c.map(wing.T));   // #22: the cells as grown (body coordinates), before ends slide along the primaries
+      for (const e of voronoiEdges(sites, ring, cells)) {
         if (onBoundary(lerpP(e[0], e[1], 0.5))) continue;   // a piece of the region's boundary, already a vein
         const seg = [e[0], e[1]], endL = [null, null];
         for (let end = 0; end < 2; end++) {   // an end on a primary: slide it along the primary toward the junction band
@@ -1922,7 +1928,7 @@ function growVeins(g, G) {
   const pairJoins = {}; for (const j of joins) { pairJoins[j[0] + '|' + j[1]] = (pairJoins[j[0] + '|' + j[1]] || 0) + 1; if (j[0] !== j[1]) pairJoins[j[1] + '|' + j[0]] = pairJoins[j[0] + '|' + j[1]]; }
   stats.pairJoins = pairJoins;
   rngSync();   // a mesh order's site count follows the cell size, so a device plate's draws inside the growth differ from the default's
-  return { lanes, joins, forks, stats, floor };
+  return { lanes, joins, forks, stats, floor, cells: cellShapes };
 }
 
 // ============================================================
@@ -2224,7 +2230,7 @@ const ORDERS = {
       P.fam = pick(['acridid', 'acridid', 'tettigoniid', 'tetrigid']);
     },
     abd: { tips: { pointed: 3, truncate: 2 }, marks: { plain: 3, banded: 1, spotted: 1 }, peak: [0.2, 0.5], wK: [0.85, 1.15], start: [0.05, 0.15], seg: [6, 8], ticks: 0.6 },
-    thorax: { front: [0.85, 1.1], peak: [0.3, 0.45], hump: [0, 0], waist: [0, 0], lenK: [0.9, 1.2] },
+    thorax: { front: [0.85, 1.1], peak: [0.72, 0.84], hump: [0, 0], waist: [0, 0], lenK: [0.9, 1.2] },   // peak: the saddle is widest over the metazona (#22)
     head: { outline: 'triangular', ratio: [0.8, 1.0], fast: [0.35, 0.55], cx: [0.3, 0.34], rx: [0.1, 0.13], ry: [0.24, 0.32], cy: [0.06, 0.16], tilt: [-15, 0], ocelli: 2, oc: 'lateral', palps: 0.5, furrow: 1, styles: { lattice: 3, stipple: 2 } },
     legs: { base: { tarsomeres: [3, 4], spines: 0.5, spurs: [1, 2], poses: { spread: 3, walking: 2, tucked: 2 } },
       acridid: { hindK: [1.75, 2.1] }, tettigoniid: { lenK: [1.15, 1.4], wk: [0.8, 0.9], hindK: [1.6, 1.9] }, tetrigid: { lenK: [0.8, 0.95], wk: [1.0, 1.1], hindK: [1.6, 1.9] } },
@@ -2483,10 +2489,16 @@ function rollBodyGenes(type, P) {
     }
     fRear -= T.hump * 0.5; fEnd = Math.max(0.2, fEnd - T.waist);
     const shoulder = Math.min(0.97, lerp(fFront, 1, T.shape === 'quadrate' ? 0.8 : 0.55) - T.hump);   // a low shoulder before the widest point reads as the mesonotal hump
-    const anchors = [[0, fFront], [T.peak * 0.5, shoulder], [T.peak, 1], [tRear, fRear]];
-    if (type === 'grasshopper') {   // posterior margin of the pronotum, drawn over the tegmina bases
-      T.margin = weighted({ truncate: 2, angulate: 2, rounded: 1 });
-      anchors.push(...(T.margin === 'angulate' ? [[0.86, fEnd], [0.95, fEnd * 0.5], [1, 0]] : T.margin === 'rounded' ? [[0.92, fEnd * 0.9], [1, fEnd * 0.45]] : [[1, fEnd]]));
+    let anchors = [[0, fFront], [T.peak * 0.5, shoulder], [T.peak, 1], [tRear, fRear]];
+    if (type === 'grasshopper') {   // the pronotal saddle (#22, research-thorax.md, ref thorax-orth-grasshopper): a truncate front
+      // against the head, the sides drawn in a little over the prozona (to the principal sulcus, about the middle), widest
+      // over the metazona (T.peak 0.72-0.84), and the posterior margin projecting back over the tegmina bases as an acute
+      // angle, an obtuse angle or a curve, never truncate
+      T.margin = weighted({ obtuse: 2, angulate: 2, rounded: 1 });
+      const back = lerp(T.peak, 1, 0.45);
+      fFront = Math.min(fFront, 0.86);   // the front corners round off inside the anchor (a wider front bulges past the metazona)
+      anchors = [[0, fFront * 0.9], [0.06, fFront], [0.22, lerp(fFront, 1, 0.3)], [0.48, lerp(fFront, 1, 0.24)], [T.peak, 1]].concat(
+        T.margin === 'angulate' ? [[back, 0.94], [1, 0]] : T.margin === 'obtuse' ? [[back, 0.96], [0.97, 0.45], [1, 0.25]] : [[back, 0.95], [0.95, 0.68], [1, 0.4]]);
     } else anchors.push([1, fEnd]);
     T.anchors = anchors;
   }
@@ -2533,7 +2545,12 @@ function rollBodyGenes(type, P) {
       const n = randInt(2, 3);   // sulci: the rearmost (principal) divides prozona and metazona
       T.lines.push({ t: randRange(0.5, 0.7), bow: randRange(0.08, 0.2), sw: SW.D }, { t: randRange(0.2, 0.35), bow: randRange(0.08, 0.2), sw: SW.F });
       if (n === 3) T.lines.push({ t: randRange(0.38, 0.48), bow: randRange(0.08, 0.2), sw: SW.F });
-      T.latCar = rng() < 0.6 ? { k: randRange(0.55, 0.7), curve: rng() < 0.5 ? randRange(0.05, 0.12) : 0 } : null;
+      {   // lateral carinae (#22: always, the saddle's edges; a gene in bodySig): straight, incurved over the prozona or outcurved.
+        // The kind reuses the draws the 0/1 carinae gene made (u, then k and the curve when u < 0.6), so no roll moves
+        const u = rng();
+        if (u < 0.6) { const k = randRange(0.55, 0.7), curve = rng() < 0.5 ? randRange(0.05, 0.12) : 0; T.latCar = { kind: curve ? 'incurved' : 'straight', k, curve }; }
+        else T.latCar = { kind: 'outcurved', k: lerp(0.55, 0.65, (u - 0.6) / 0.4), curve: -lerp(0.04, 0.08, (u - 0.6) / 0.4) };
+      }
       break;
     }
     case 'moth':
@@ -2558,7 +2575,7 @@ function rollBodyGenes(type, P) {
     ? { rx: rr(order.tegula.rx), k: randRange(0.5, 0.8), tilt: randRange(20, 40), hairs: order.tegula.hairs ? randInt(order.tegula.hairs[0], order.tegula.hairs[1]) : 0 } : null;
   B.sig.push(T.shape || T.margin || '-', T.lines.map(l => Math.round(l.t * 10) + (l.gap ? 'g' : '')).join('/'), T.median ? 1 : 0, T.notauli ? 1 : 0, T.para || T.paramedian ? 1 : 0,
     T.humeral ? (T.humeral.double ? 2 : 1) + (T.humeral.stripe ? 's' : '') : 0, T.scut ? T.scut.shape[0] + Math.round(T.scut.w * 10) + (T.scut.hatched ? 'h' : '') + (T.scut.axillae ? 'a' : '') : '-',
-    T.pile ? 'p' + (T.pile.interior ? 'i' : '') : T.punct ? 'd' + (T.punct.coarse ? 'c' : '') : T.bands ? 'b' + T.bands.n : '-', T.hatch ? T.hatch.n : 0, T.calli ? 1 : 0, T.bristles, T.latCar ? 1 : 0, T.patagia ? 1 : 0, T.crest ? 1 : 0,
+    T.pile ? 'p' + (T.pile.interior ? 'i' : '') : T.punct ? 'd' + (T.punct.coarse ? 'c' : '') : T.bands ? 'b' + T.bands.n : '-', T.hatch ? T.hatch.n : 0, T.calli ? 1 : 0, T.bristles, T.latCar ? 'lc' + T.latCar.kind[0] : 0, T.patagia ? 1 : 0, T.crest ? 1 : 0,
     T.tegula ? Math.round(T.tegula.rx) : '-', Math.round(T.front * 10), Math.round(T.hump * 20), Math.round(T.waist * 20), Math.round(T.lenK * 10), Math.round(T.peak * 10));
   // ---- head: outline, eyes, ocelli, mouthparts, face markings -- see docs/research-head-eyes.md ("Rules derived") ----
   // Fractions of headW (x) and headH (y) unless px. The order table gives the ranges, the family (P.fam / variant) overrides
@@ -3050,7 +3067,7 @@ function drawThorax(C) {
         }
       });
     }
-    if (T.latCar) {   // grasshopper lateral carinae, straight or incurved
+    if (T.latCar) {   // grasshopper lateral carinae, straight, incurved or outcurved (curve < 0)
       both(s => { const pts = []; for (let t = 0.08; t <= 0.95; t += 0.05) { const y = yAt(t), hw = hwAt(y); pts.push([s * (T.latCar.k - T.latCar.curve * Math.sin(Math.PI * t)) * hw, y]); } TH.push(pathEl(smoothPath(pts, false), SW.F)); });
     }
     // ---- scutellum ----
@@ -4743,16 +4760,18 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
   const { L, meta, P, B, thorax, abdHW } = C;
   // ---- Orthoptera, grown by growVeins v2 (docs/wing-venation-spec.md, Orthoptera; ref orth-grasshopper). The tegmen is
   // a wing frame pointing down the body (local x along the tegmen, local -y toward its outer edge, which is the costa;
-  // the straight inner edge on the midline is the hind margin). C and the inner margin are undrawn wall lanes; Sc, R,
-  // M and Cu run nearly parallel, Cu forking near the base into CuA / CuP and R near the tip into R / Rs, an optional
-  // light intercalated vein between R and M. The archedictyon is the site regime with a small absolute cell size: one
-  // row of rungs where a strip is narrow, rows of near-rectangular polygons (low zig) where it is wider, finer toward
-  // the apex; uOpen 1.0. The folded hindwing fan is a second frame whose anal veins radiate from the root with ladder
-  // rungs between them. Both are drawn in `covers`, the fan first so the tegmen lies over it. ----
+  // the straight inner edge just past the midline is the hind margin, so the left tegmen overlaps the right). C and the
+  // inner margin are undrawn wall lanes; Sc, R, M and Cu run nearly parallel, Cu forking near the base into CuA / CuP and
+  // R near the tip into R / Rs, an optional light intercalary leaving M toward R. The archedictyon is the site regime
+  // with a small absolute cell size and square rows (`grid`): one row of rungs where a strip is narrow, rows of
+  // near-rectangular cells where it is wider, finer toward the apex; uOpen 1.0. The folded hindwing fan is a second
+  // frame inside the tegmen's costa whose anal veins radiate from the root with ladder rungs between them; it shows
+  // only in the V between the apices. Both are drawn in `covers`, the fan first so the tegmen lies over it
+  // (meta.orth: the outlines and the archedictyon cells, #22). ----
   const by = thorax.yBot - 6;
   const G = {
     cell: randRange(0.11, 0.16), subRow: rng() < 0.6, wt: randRange(1.05, 1.28), tipX: randRange(0.1, 0.32), tipY: randRange(0.94, 0.985), fan: rng() < 0.7, rays: randInt(5, 9), bulge: randRange(0.72, 0.82), midX: randRange(0.4, 0.6),
-    k: randRange(1.0, 1.4), angle: randRange(110, 124), lean: rng() < 0.7 ? -1 : 1, zig: randRange(0.04, 0.1), heavy: rng() < 0.3,   // cell size (fraction of the tegmen width: 6-9 cells across), junction genes (low zig: the grid is rhombic, not hexagonal)
+    k: randRange(1.0, 1.4), angle: randRange(110, 124), lean: rng() < 0.7 ? -1 : 1, zig: randRange(0.04, 0.1), heavy: rng() < 0.3,   // cell size (fraction of the tegmen width: 6-9 cells across), junction genes (zig is still rolled; the square grid does not read it, #22)
     cuFork: randRange(0.1, 0.2), rFork: randRange(0.58, 0.72), scEnd: randRange(0.68, 0.82), anal: rng() < 0.6, fanCell: randRange(0.05, 0.08),
   };
   const Lt = P.abdLen * randRange(1.05, 1.18), wt = abdHW * G.wt;
@@ -4760,11 +4779,23 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
   const addStats = st => { S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi; };
   // a frame pointing down the body: world = base + rot(local, 90 deg), so local x runs down the body and local -y outward
   const frame = (base, worldPts) => makeWing(base, 90, worldPts.map(p => [p[1] - base[1], -(p[0] - base[0])]), 1);
-  let fanJoins = 0;
-  if (G.fan) {   // folded hindwing fan peeking out: anal veins radiating from the root, ladder rungs between them
-    const fb = [abdHW * 0.25, by + 4];
-    const fan = frame(fb, [fb, [abdHW * 1.15, by + Lt * 0.25], [abdHW * 1.3, by + Lt * 0.5], [abdHW * 1.0, by + Lt * 0.72], [abdHW * 0.6, by + Lt * 0.82], [abdHW * 0.3, by + Lt * 0.6]]);
+  // ---- tegmen outline (#22, ref orth-grasshopper): the inner margin runs `ov` past the midline, so the left tegmen (drawn
+  // after, over it) overlaps the right along the inner margin; the apical margin leaves the inner margin at `qa` of the
+  // length and sweeps out to the apex on its own side, so the two apices part in a V instead of crossing ----
+  const ov = wt * 0.1, qa = G.tipY - 0.1, ax = wt * Math.max(G.tipX, 0.16);
+  const tegPts = [[-ov, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * G.bulge, by + Lt * G.midX], [wt * 0.55, by + Lt * 0.85], [ax, by + Lt],
+    [lerp(-ov, ax, 0.3), by + Lt * lerp(qa, 1, 0.55)], [-ov, by + Lt * qa], [-ov, by + Lt * qa * 0.66], [-ov, by + Lt * qa * 0.33], [-ov, by + Lt * 0.03]];   // the last holds the inner margin straight to the base, under the pronotum
+  const teg = frame([0, by], tegPts), tegWorld = teg.localPoly.map(teg.T);
+  const costaAt = y => { let best = -Infinity; for (let i = 0, j = tegWorld.length - 1; i < tegWorld.length; j = i++) { const a = tegWorld[i], b = tegWorld[j]; if ((a[1] > y) !== (b[1] > y)) best = Math.max(best, a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1])); } return best; };
+  let fanJoins = 0, fanPoly = null;
+  if (G.fan) {   // the folded hindwing fan under the tegmen (#22): it lies inside the tegmen's costa and ends just short of
+    // the apex, so it shows only in the V between the apices; anal veins radiate from the root with ladder rungs between
+    const fb = [0.5, by + Lt * 0.04], tipYf = by + Lt * 0.95;
+    const inside = (x, y) => Math.min(x, costaAt(y) - 2);   // the fan's control points stay 2 inside the costa
+    const fan = frame(fb, [fb, [inside(wt * 0.45, by + Lt * 0.2), by + Lt * 0.2], [inside(wt * 0.5, by + Lt * 0.55), by + Lt * 0.55], [inside(wt * 0.35, by + Lt * 0.85), by + Lt * 0.85],
+      [inside(ax * 0.6, tipYf), tipYf], [0.5, tipYf - Lt * 0.04]]);
     L.covers.push(pathEl(fan.path, SW.D, '#fff'));
+    fanPoly = fan.localPoly.map(fan.T);
     const g = wingGraph(fan, Lt), poly = fan.localPoly, apex = tipPoint(fan), ia = poly.indexOf(apex);
     // targets by arc length along the outer margin from the apex back toward the leading corner
     const arc = [{ p: apex, dd: 0 }];
@@ -4782,9 +4813,8 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
     L.covers.push(...g.emit());
     addStats(grown.stats); fanJoins = grown.joins.length;
   }
-  // ---- tegmen ----
-  const tegPts = [[0, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * G.bulge, by + Lt * G.midX], [wt * 0.55, by + Lt * 0.85], [wt * G.tipX, by + Lt], [0, by + Lt * G.tipY], [0, by + Lt * G.tipY * 0.66], [0, by + Lt * G.tipY * 0.33]];
-  const teg = frame([0, by], tegPts), poly = teg.localPoly, apex = tipPoint(teg);
+  // ---- tegmen veins ----
+  const poly = teg.localPoly, apex = tipPoint(teg);
   L.covers.push(pathEl(teg.path, SW.O, '#fff'));
   const g = wingGraph(teg, Lt), X = f => f * Lt;
   const costaPl = [], edgePl = [], nW = 50;
@@ -4802,15 +4832,19 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
     { id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false },
   ];
   if (G.anal) lanes.push({ id: 'A', u0: 0.02, s0: 0.8, s1: 0.94, end: 'aE', sw: SW.F, noFork: true, stub: false, ctrl: 1, bow: randRange(0.0, 0.04) });
-  if (G.subRow) lanes.push({ id: 'I', u0: 0.3, s0: 0.33, s1: 0.33, end: 'iE', sw: SW.F, noFork: true, stub: false, ctrl: 2, bow: randRange(-0.02, 0.02) });   // a light intercalated vein between R and M
+  // a light intercalary between R and M (#22: it leaves M at u 0.3 and bends up toward R, so it starts on a vein, never
+  // in the membrane)
+  const inter = G.subRow ? { early: true, forkOn: 'M', u: 0.3, spec: { id: 'I', s1: 0.33, end: 'iE', sw: SW.F, noFork: true, stub: false, ctrl: 2, ease: 'out', bow: randRange(-0.02, 0.02) } } : null;
   const named = [{ early: true, forkOn: 'R', u: G.rFork, spec: { id: 'Rs', end: 'rsE', s1: 0.3, sw: SW.D, noFork: true, stub: false, ctrl: 1, ease: 'mid', bow: randRange(0.0, 0.03) } }];
+  if (inter) named.push(inter);
   const cellFn = (u, sMid, A, B) => wt * G.cell * (1 - 0.3 * u) * ((A === 'C' || B === 'C') ? 0.8 : 1);   // archedictyon cells, finer toward the apex and in the costal row
   const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.02, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0,
-    rows2: true, rowsAt: 1.4, evenSites: true, gapNear: 0.25, reachW: 0.5, cell: cellFn, cellMin: 2.6, zig: G.zig, joinSw: SW.F });
+    rows2: true, rowsAt: 1.4, evenSites: true, gapNear: 0.25, reachW: 0.5, cell: cellFn, cellMin: 2.6, zig: G.zig, joinSw: SW.F, grid: true, cellShapes: true });
   L.covers.push(...g.emit());
   L.covers.push(...costaEls(teg, X(0.01), X(0.96)));   // the costa, heavy, along the outer edge
   addStats(grown.stats);
   meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi };
+  meta.orth = { tegmen: tegWorld, fan: fanPoly, cells: grown.cells };   // right side, body coordinates (tests/check.js: orthFan, orthTegmina, orthCells)
   meta.wingSig = ['orth', G.subRow ? 1 : 0, G.anal ? 1 : 0, G.fan ? 1 : 0, G.rays, grown.joins.length, fanJoins, grown.stats.multi, Math.round(G.cell * 200), Math.round(G.wt * 20), Math.round(G.tipX * 10), Math.round(G.bulge * 20), Math.round(G.midX * 10),
     Math.round(G.cuFork * 20), Math.round(G.rFork * 20), Math.round(G.scEnd * 20), Math.round(G.k * 4), G.heavy ? 1 : 0].join(',');
 }
