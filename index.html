@@ -538,21 +538,21 @@ function rollAntGenes(type, P) {
   A.clubK = A.club === 'abrupt' ? randRange(0.15, 0.22) : randRange(0.2, 0.3);   // club length / antenna length
   A.hookSide = rng() < 0.6 ? 1 : -1;
   A.hookDeg = A.club === 'hooked' ? (A.slim ? randRange(110, 150) : randRange(80, 120)) : A.club === 'upcurved' ? randRange(25, 45) : 0;
-  A.wK = randRange(0.85, 1.2);
+  A.wK = randRange(0.85, 1.2) * (F.thick || 1);   // thick: the family's shaft-width factor (the longhorn's, #25)
   const long = F.rami !== 'short';   // rami: count, longest ramus / length, where the longest sits, sweep toward the tip
   A.rami = { n: randInt(long ? 26 : 20, long ? 44 : 34), maxK: long ? randRange(0.2, 0.3) : randRange(0.08, 0.14), peak: randRange(0.3, 0.5), sweep: randRange(0.25, 0.6) };
   A.lamellae = { n: randInt(3, 7), spread: rng() < 0.7 ? randRange(14, 40) : randRange(3, 8), clubK: randRange(0.3, 0.45) };
   A.scapeK = rr(F.scape || [0.28, 0.42]); A.elbow = randRange(45, 80);
   A.arista = F.arista ? (F.aristas ? weightedPick(F.aristas) : F.arista) : 'bare'; A.aristaK = randRange(1.0, 1.6);
   A.annuli = F.annuli ? randInt(F.annuli[0], F.annuli[1]) : 0; A.styleK = randRange(0.3, 0.6);
-  A.whorls = !!F.whorls; A.taper = randRange(0.4, 0.6);
+  A.whorls = !!F.whorls; A.taper = randRange(...(F.taper || [0.4, 0.6]));   // tip width / base width of a filiform shaft
   const sock = A.club === 'hooked' && !A.slim && type === 'moth' ? [0.24, 0.3] : F.socket;   // skipper bases are widely separated
   A.socket = [sock[0] * randRange(0.82, 1.22), sock[1] + randRange(-0.04, 0.04)];   // position jittered in proportion, so a fly's forward socket stays off the midline
   A.sr = Math.max(1, Math.min(2.5, hw * randRange(0.03, 0.045)));
   const longK = ['filiform', 'moniliform', 'serrate', 'plumose'].includes(A.kind);
   A.pose = A.kind === 'aristate' || A.kind === 'stylate' ? 'face' : !longK ? (['clubbed', 'pectinate', 'bipectinate'].includes(A.kind) ? 'costal' : 'wide')
     : A.len <= 2.5 * hw ? 'v' : A.len <= 0.65 * bl ? 'arc' : 'swept';
-  const R = ANT_POSES[A.pose];
+  const R = A.poseR = Object.assign({}, ANT_POSES[A.pose], F.poses && F.poses[A.pose]);   // the family may reshape a pose (#25: the weevil's scape, the longhorn's sweep)
   A.ang = rr(R.ang); A.curve = rr(R.curve); A.droop = rr(R.droop);
   return A;
 }
@@ -594,7 +594,7 @@ function antennaGeom(A, base, hw, pose) {
     G.pLen = pLen; G.pts.push(...G.pl, ...G.lam.map(l => l.far)); G.tip = G.lam[Math.floor(n / 2)].far;
   } else {
     const swept = A.pose === 'swept';
-    G.pl = shaft(base, pose.ang, len, pose.curve, swept ? 24 : 14, { front: swept ? 2.4 : 0, droop: pose.droop });   // swept: most of the turn in the first third, then a near-straight run back beside the body
+    G.pl = shaft(base, pose.ang, len, pose.curve, swept ? 24 : 14, { front: swept ? (A.poseR.front !== undefined ? A.poseR.front : 2.4) : 0, droop: pose.droop });   // swept: most of the turn in the first third, then a near-straight run back beside the body
     G.pts.push(...G.pl);
     if (A.kind === 'clubbed') {
       // the club sits on the last clubK of the length: gradual thickening, an abrupt knob, a skipper's hook or a swallowtail's upcurve
@@ -2070,11 +2070,11 @@ const ORDERS = {
     thorax: { front: [1.0, 1.5], peak: [0.3, 0.55], hump: [0, 0], waist: [0, 0], lenK: [0.85, 1.15] },
     head: { outline: 'round', ratio: [1.1, 1.35], flat: 0.5, cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.2, 0.28], cy: [-0.06, 0.02], dent: [0.3, 0.45], dentAt: -125, ocelli: 0, mand: [0.1, 0.2], labrum: [1, 1], styles: { stipple: 2, plain: 2, lattice: 1 }, stripe: 0.4 },
     headFams: {
-      ground: { outline: 'elongate', ratio: [0.85, 1.05], flat: 0, frontK: [0.75, 0.9], capK: [0.86, 0.93], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.24], cy: [0.08, 0.2], dent: [0, 0], mand: [0.4, 0.6], mandCross: 0.5, serr: 0.3, palps: 0.8, furrow: 1, styles: { plain: 3, stipple: 2 } },
-      rove: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.8, 0.92], capK: [0.88, 0.94], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.22], cy: [0.02, 0.14], dent: [0, 0], mand: [0.3, 0.45], mandCross: 0.4, palps: 0.6, ocelli: [0, 1], oc: 'median', styles: { plain: 3, stipple: 2 } },
+      ground: { outline: 'elongate', ratio: [0.85, 1.05], flat: 0, frontK: [0.75, 0.9], capK: [0.86, 0.93], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.24], cy: [0.08, 0.2], dent: [0, 0], mand: [0.28, 0.4], mandCross: 0.5, serr: 0.3, palps: 0.8, furrow: 1, styles: { plain: 3, stipple: 2 } },
+      rove: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.8, 0.92], capK: [0.88, 0.94], cx: [0.36, 0.39], rx: [0.09, 0.12], ry: [0.16, 0.22], cy: [0.02, 0.14], dent: [0, 0], mand: [0.3, 0.45], mandCross: 0.4, palps: 0.6, styles: { plain: 3, stipple: 2 } },
       scarab: { ratio: [1.2, 1.45], flat: 0.7, dent: [0, 0.15], mand: [0.08, 0.15], clypeus: 0.7 },
       longhorn: { ratio: [1.0, 1.2], flat: 0.3, dent: [0.35, 0.5], dentAt: -105, mand: [0.12, 0.22] },
-      weevil: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.6, 0.75], rostrum: [0.6, 1.8], rostW: [0.15, 0.25], cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.18, 0.26], cy: [-0.02, 0.1], dent: [0, 0], mand: [0.04, 0.06], labrum: [0, 0], stripe: 0 },
+      weevil: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.6, 0.75], rostrum: [0.6, 1.8], rostW: [0.15, 0.25], antOn: [0.2, 0.55], cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.18, 0.26], cy: [-0.02, 0.1], dent: [0, 0], mand: [0.04, 0.06], labrum: [0, 0], stripe: 0 },
     },
     legs: { base: { tarsomeres: [4, 5], spines: 0.4, spurs: [1, 2], hindSafe: [18, 26, 58, 72] },   // hindSafe: [coxa, femur, tibia, tarsus] dirs of the last-resort hind leg (#24)
       ground: { lenK: [1.0, 1.2], wk: [1.0, 1.15], poses: { spread: 3, walking: 3, tucked: 0.5 } },
@@ -2086,8 +2086,13 @@ const ORDERS = {
       ground: { kinds: { filiform: 5, moniliform: 2 }, len: [1.6, 2.4] },
       rove: { kinds: { moniliform: 3, filiform: 2, clubbed: 1 }, club: 'gradual', len: [0.9, 1.4] },
       scarab: { kinds: { lamellate: 1 }, len: [0.6, 0.9] },
-      longhorn: { kinds: { filiform: 1 }, ref: 'bl', len: [0.8, 1.6], socket: [0.28, 0.34] },            // 1-2x body, swept back beside the body
-      weevil: { kinds: { geniculate: 1 }, club: 'abrupt', len: [0.8, 1.2], socket: [0.08, 0.1] } },   // elbowed, clubbed, on the rostrum
+      // #25 (ant-longhorn-dorcadion): thick and segmented, about the body's length, swept back from the head beside the
+      // pronotum and the elytra (the sweep leaves the head already turned back, `back`, so it never crosses the forelegs ahead of it)
+      longhorn: { kinds: { filiform: 1 }, ref: 'bl', len: [0.7, 0.95], socket: [0.28, 0.34], thick: 3.5, taper: [0.6, 0.8],
+        poses: { swept: { ang: [40, 55], curve: [35, 50], front: 1.5, back: true } } },
+      // elbowed, clubbed; the socket is set on the rostrum's side from the head gene antOn (#25), and the scape leaves it
+      // sideways (head-col-weevil), the funicle turning forward at the elbow
+      weevil: { kinds: { geniculate: 1 }, club: 'abrupt', len: [0.8, 1.2], socket: [0.08, 0.1], poses: { wide: { ang: [-25, 0] } } } },
     headScaleP5: 1.3,
     // #24 (optional): the pronotum held to docs/research-thorax.md (1.1-1.5x wider than long, 0.55-0.9 of the elytral width):
     // rollBodyGenes soft-clips the drawn ratios into these slightly narrower bands (no rng); tests/check.js asserts the research ones
@@ -2653,7 +2658,6 @@ function rollBodyGenes(type, P) {
         if (HF.oc === 'odo') { pos.push([0, -G.bump.h * randRange(0.2, 0.35)]); pos.push([randRange(0.07, 0.1), randRange(0.1, 0.16)], null); }   // median on the frons bump, laterals at the seam front
         else if (HF.oc === 'behind') { pos.push(null, [G.eye.cx * randRange(0.7, 0.8), Math.min(0.82, 0.5 + G.eye.cy + G.eye.ry + 0.06)], null); }     // moth: one behind each eye
         else if (HF.oc === 'lateral') { pos.push(null, [randRange(0.09, 0.13), randRange(0.16, 0.24)], null); }                            // grasshopper: beside the antennal bases
-        else if (HF.oc === 'median') pos.push([0, randRange(0.55, 0.7)]);
         else {
           const y0 = HF.ocY ? rr(HF.ocY) : G.holoptic ? randRange(0.76, 0.82) : randRange(0.55, 0.66);
           const dx = HF.ocDx ? rr(HF.ocDx) : G.holoptic ? randRange(0.04, 0.06) : randRange(0.07, 0.1), dy = HF.ocDy ? rr(HF.ocDy) : randRange(0.06, 0.12);
@@ -2661,7 +2665,7 @@ function rollBodyGenes(type, P) {
           pos.push([0, y0], [dx, line ? y0 : y0 + dy], line ? 'line' : null);
         }
         if (n === 2) pos[0] = null;
-        if (n === 1 && HF.oc !== 'median') pos[1] = null;
+        if (n === 1) pos[1] = null;
       }
       G.ocelli = n ? { n, r, median: pos[0], lateral: pos[1], arr: pos[2] || 'triangle' } : null;
     }
@@ -2672,7 +2676,10 @@ function rollBodyGenes(type, P) {
     G.clypeus = HF.clypeus && rng() < HF.clypeus ? randRange(0.05, 0.12) : 0;      // bow depth / H
     G.palps = HF.palps && rng() < HF.palps ? { len: randRange(0.1, 0.2), segs: randInt(2, 3) } : null;
     G.coil = HF.coil && rng() < HF.coil ? { r: randRange(0.1, 0.16), turns: randRange(1.5, 2.5) } : null;
-    G.rostrum = HF.rostrum ? { len: rr(HF.rostrum), w: rr(HF.rostW), curve: randRange(0, 0.25) } : null;
+    // rostrum: length and width (head widths); curve is its lateral curvature, which a dorsal plate does not show (the tube is
+    // drawn straight, so the mirrored antennae sit on both sides of it); antOn, the antennal insertion as a fraction of its
+    // length ahead of the capsule front (#25, head-col-weevil: the scape leaves the side of the rostrum, never the capsule)
+    G.rostrum = HF.rostrum ? { len: rr(HF.rostrum), w: rr(HF.rostW), curve: randRange(0, 0.25), antOn: rr(HF.antOn) } : null;
     G.snout = HF.snout ? rr(HF.snout) : 0;
     G.notch = HF.notch && rng() < HF.notch ? randRange(0.06, 0.12) : 0;            // occipital notch at the rear
     G.dish = !!HF.dish;
@@ -2688,6 +2695,10 @@ function rollBodyGenes(type, P) {
   // ---- antennae: kind, counts, club / rami / lamellae / arista parameters, pose family and socket (rollAntGenes; the pose angles are
   // checked and re-rolled in the antennae block, which also pushes the antenna genes onto B.sig) ----
   B.ant = rollAntGenes(type, P);
+  if (B.head.rostrum) {   // a weevil's antenna inserts on the side of the rostrum, antOn of its length ahead of the capsule (#25); no rng
+    const p = rostrumSide(B.head.rostrum, P.headW, P.headH, 0, B.head.rostrum.antOn);
+    B.ant.socket = [p[0] / P.headW, p[1] / P.headH];
+  }
   // ---- legs ----
   // The leg family (the wing family where the order has one, else the body family) sets the ranges: overall length
   // and thickness, femur swelling and tibial flare, segment ratios (saltatorial hind femur, reduced nymphalid
@@ -3173,6 +3184,19 @@ function drawThorax(C) {
 }
 
 // ---------- head ----------
+// The weevil's rostrum seen from above (G = B.head.rostrum, head width W, depth H): with `at` omitted, the right side as one
+// cubic Bezier from its root inside the capsule to the tip (the tube is drawn straight: its curvature is lateral); with
+// `at`, the point on that side `at` of the rostrum's length ahead of the capsule front (headTop), where the antenna
+// inserts (#25). No rng: rollBodyGenes places the socket with it and drawHead draws the tube from it.
+function rostrumSide(G, W, H, headTop, at) {
+  const len = G.len * W, w = G.w * W / 2, tip = headTop - len;
+  const c = [[w, headTop + H * 0.3], [w * 0.9, headTop - len * 0.45], [w * 0.8, tip + len * 0.3], [w * 0.7, tip]];
+  if (at === undefined) return c;
+  const y = headTop - at * len;   // y falls monotonically along the side: bisect for it
+  let lo = 0, hi = 1;
+  for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (bez3(c, m)[1] > y) lo = m; else hi = m; }
+  return bez3(c, (lo + hi) / 2);
+}
 function drawHead(C) {
   const { type, order, L, meta, P, B, headTop, headCy } = C;
   // head: capsule outline from B.head (docs/research-head-eyes.md), mouthparts that show from above drawn first so the
@@ -3184,24 +3208,29 @@ function drawHead(C) {
     const outlinePl = sampleSmooth(outline, true, 1, 3);
     const hwAt = y => polyMaxXAt(outlinePl, y);
     const yFrontAt = x => { const r = outlineYRange(outlinePl, x); return r ? r[0] : headTop; };
+    let mand = null;   // the two jaw outlines (closed polylines) when the head draws prognathous mandibles, for meta.head.mand
     // --- mouthparts and projections in front of the capsule ---
     if (G.rostrum) {   // weevil: a tube from the front of the capsule, tiny mandibles at its tip
-      const len = G.rostrum.len * W, w = G.rostrum.w * W / 2, y0 = headTop + H * 0.3, tip = headTop - len, bend = G.rostrum.curve * len;
-      HE.push(pathEl(cubicBezierPath([[w, y0], [w * 0.9, headTop - len * 0.45], [w * 0.8 + bend, tip + len * 0.3], [w * 0.7 + bend, tip], [w * 0.3 + bend, tip - w * 0.4], [-w * 0.3 + bend, tip - w * 0.4], [-w * 0.7 + bend, tip],
-        [-w * 0.8 + bend, tip + len * 0.3], [-w * 0.9, headTop - len * 0.45], [-w, y0]], false), SW.O, '#fff'));
-      HE.push(pathEl(cubicBezierPath([[0, headTop - len * 0.3], [bend * 0.25, tip + len * 0.5], [bend * 0.75, tip + len * 0.28], [bend, tip + len * 0.12]], false), SW.F));   // dorsal carina along the curve
-      for (const s of [-1, 1]) HE.push(lineEl([s * w * 0.35 + bend, tip - w * 0.3], [s * w * 0.15 + bend, tip - w * 0.3 - G.mand.len * W], SW.D));
+      const len = G.rostrum.len * W, w = G.rostrum.w * W / 2, tip = headTop - len, side = rostrumSide(G.rostrum, W, H, headTop);
+      HE.push(pathEl(cubicBezierPath(side.concat([[w * 0.3, tip - w * 0.4], [-w * 0.3, tip - w * 0.4]], side.slice().reverse().map(p => [-p[0], p[1]])), false), SW.O, '#fff'));
+      HE.push(lineEl([0, headTop - len * 0.3], [0, tip + len * 0.12], SW.F));   // dorsal carina
+      for (const s of [-1, 1]) HE.push(lineEl([s * w * 0.35, tip - w * 0.3], [s * w * 0.15, tip - w * 0.3 - G.mand.len * W], SW.D));
     }
-    if (G.mand && !G.rostrum) {   // prognathous mandibles: closed sickles from the front corners, curving inward, tips crossing on some ground beetles
-      const len = G.mand.len * W, mw = G.mand.w * W, bx = hwAt(headTop + H * 0.1) * 0.78, by = headTop + H * 0.12;
+    if (G.mand && !G.rostrum) {   // prognathous mandibles (head-col-carabus, #25): stout sickles from the front corners that run
+      // forward and hook inward to tips at the midline (crossing on some ground beetles), leaving an open space between the
+      // jaws where the transverse labrum shows; never a closed leaf
+      const len = G.mand.len * W, mw = Math.max(G.mand.w * W, W * 0.12), by = headTop + H * 0.22, bx = hwAt(by) * 0.72;
+      const xo = bx + mw * 0.4, xi = Math.max(W * 0.08, bx - mw * 0.8);   // the jaw's base (under the capsule's front corner), outer and inner edge
+      mand = [];
       for (const s of [-1, 1]) {
-        const tipX = s * (G.mand.cross ? -0.05 * W : bx * (1 - G.mand.curve) * 0.5), tipY = headTop - len * (G.mand.cross ? 0.75 : 0.95);
-        const outer = [[s * (bx + mw * 0.5), by], [s * (bx + mw * 0.5), headTop - len * 0.45], [tipX + s * mw * 0.4, tipY + len * 0.2], [tipX, tipY]];
-        const inner = [[tipX, tipY], [tipX - s * mw * 0.1, tipY + len * 0.15], [s * (bx - mw * 0.5) * 0.85, headTop - len * 0.3], [s * (bx - mw * 0.5), by]];
+        const tipX = s * (G.mand.cross ? -0.05 : 0.02 + 0.04 * (1 - G.mand.curve)) * W, tipY = headTop - len;
+        const outer = [[s * xo, by], [s * xo * 1.2, headTop - len * 0.4], [s * xo * 0.9, headTop - len * 1.1], [tipX, tipY]];   // convex outer edge hooking in to the tip
+        const inner = [[tipX, tipY], [tipX + s * W * 0.1, tipY + len * 0.04], [s * xi, headTop - len * 0.55], [s * xi, by]];
         HE.push(pathEl(cubicBezierPath(outer.concat(inner.slice(1)), false), SW.D, '#fff'));
+        mand.push(sampleBezier(outer.concat(inner.slice(1)), 10));
         if (G.mand.serr) { const sp = sampleBezier(inner, 6); for (let k = 1; k < 5; k += 1) { const p = sp[k], q = sp[k + 1], d = sub(q, p), n = perp(d); HE.push(lineEl(p, add(p, mul(n, -s * 0.9 / (vlen(n) || 1) * mw * 0.35)), SW.F)); } }
       }
-      if (G.labrum) HE.push(pathEl(cubicBezierPath([[-W * 0.1, headTop + 1], [-W * 0.08, headTop - W * 0.05], [W * 0.08, headTop - W * 0.05], [W * 0.1, headTop + 1]], false), SW.D, '#fff'));   // labrum between the jaws
+      if (G.labrum) HE.push(pathEl(cubicBezierPath([[-xi * 0.85, headTop + 1], [-xi * 0.7, headTop - W * 0.06], [xi * 0.7, headTop - W * 0.06], [xi * 0.85, headTop + 1]], false), SW.D, '#fff'));   // transverse labrum between the jaw bases
     }
     if (G.mandTips) {   // hypognathous head: only the jaw tips show below the clypeus
       for (const s of [-1, 1]) HE.push(pathEl(cubicBezierPath([[s * W * 0.14, headTop + 1.5], [s * W * 0.13, headTop - G.mandTips * W * 0.5], [s * W * 0.07, headTop - G.mandTips * W], [s * W * 0.02, headTop - G.mandTips * W * 0.9]], false), SW.D));
@@ -3276,7 +3305,7 @@ function drawHead(C) {
     }
     if (type === 'beetle' || type === 'grasshopper' || type === 'cicada') L.thoraxHead.unshift(...HE); else L.thoraxHead.push(...HE);
     meta.headOutline = outlinePl;
-    meta.head = { W, H, top: headTop, cy: headCy, outline: outlinePl, eyes, ocelli: ocelli.map(p => [p[0], p[1], G.ocelli.r]), rostrum: G.rostrum ? { len: G.rostrum.len * W, w: G.rostrum.w * W } : null };
+    meta.head = { W, H, top: headTop, cy: headCy, outline: outlinePl, eyes, ocelli: ocelli.map(p => [p[0], p[1], G.ocelli.r]), rostrum: G.rostrum ? { len: G.rostrum.len * W, w: G.rostrum.w * W } : null, mand };
   }
 }
 
@@ -3432,7 +3461,7 @@ function drawLegs(C) {
 function drawAntennae(C) {
   const { L, meta, outerBox, P, B, thorax, abdomen, headTop, order } = C;
   {
-    const A = B.ant, R = ANT_POSES[A.pose];
+    const A = B.ant, R = A.poseR;
     const fit = order.antFit;   // the order's own antenna fit, if any (#23: a grasshopper's never shrinks the plate under 1.0, nor reaches past 1.3x the body box)
     const base = [P.headW * A.socket[0], headTop + P.headH * A.socket[1]];
     const ob = outerBox;   // everything drawn so far: body, legs and wings
@@ -3492,6 +3521,13 @@ function drawAntennae(C) {
       const shrink = straight && attempt >= ANT_SHRINK.from && (why === 'legs' || (why === 'cross' && G.rami));
       pose = { ang: rr(R.ang), curve: rr(R.curve), droop: rr(R.droop), lenK: why === 'fit' ? prev.lenK * 0.92 : shrink ? Math.max(ANT_SHRINK.floor, prev.lenK * ANT_SHRINK.step) : prev.lenK };
       if (why === 'cross') { pose.curve = Math.abs(pose.curve); A.hookSide = 1; }
+      if (R.back) {   // a sweep that leaves the head turned back (#25) is never straightened forward: a leg hit turns it further back
+        // at the root (clear of the forelegs ahead of the thorax) and turns less after it, so its run beside the body keeps its
+        // heading; a wing hit keeps the root and turns less (clear of the elytra), or once it barely turns, leaves the root further out
+        if (why === 'legs') { const d = randRange(4, 10); pose.ang = Math.min(80, prev.ang + d); pose.curve = Math.max(0, prev.curve - d); }
+        if (why === 'wing') { pose.ang = prev.curve < 5 ? Math.max(0, prev.ang - randRange(4, 10)) : prev.ang; pose.curve = prev.curve * 0.7; }
+        continue;
+      }
       if (ANT_HIT[why]) straight = true;
       if (straight) {   // back off a little from the midline after a cross, else on toward straight ahead (a fit or cross hit while straightened keeps the wing's bound)
         pose.ang = why === 'cross' ? Math.min(-45, prev.ang + randRange(5, 15)) : Math.max((ANT_HIT[why] || ANT_HIT.wing).minAng, Math.min(prev.ang, -45) - randRange(5, 20));
@@ -3505,17 +3541,19 @@ function drawAntennae(C) {
       // An order with antFit whose antenna still does not fit (a katydid's, longer than the body, #23) is laid forward
       // (ANT_FIT_FB) from full length and shortened until it fits, never curled into a stub.
       const fitFb = why === 'fit' && !!fit;
-      const fb = fitFb ? ANT_FIT_FB : ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
+      const fb = R.back ? { ang: 60, curve: 10 } : fitFb ? ANT_FIT_FB : ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
       pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: 0, lenK: fitFb ? 1 : Math.min(pose.lenK, 0.8) };
       A.hookSide = 1; G = antennaGeom(A, base, P.headW, pose);
-      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && fit)); k++) {
-        if (r === 'legs') { pose.ang = Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') pose.lenK *= ANT_SHRINK.fbStep; else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
+      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && fit) || (r === 'wing' && R.back)); k++) {
+        if (r === 'wing') pose.ang -= 4;   // a back sweep into the elytra leaves the root further out
+        else if (r === 'legs') { pose.ang = R.back ? Math.min(80, pose.ang + 4) : Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') pose.lenK *= ANT_SHRINK.fbStep; else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
         G = antennaGeom(A, base, P.headW, pose);
       }
     }
     L.antennae.push(...antennaEls(A, G, P.headW));
     G.pts.forEach(bb);
     meta.antennae = { kind: A.kind, pose: A.pose, club: A.club, pts: G.pts, lines: G.lines, tip: G.tip, base, attempts: attempt + 1, why, reasons, lenK: pose.lenK,
+      wTip: A.kind === 'filiform' ? G.w0 * A.taper : null,   // a filiform shaft's width at its tip (antennaEls tapers it from G.w0), for tests/check.js (#25)
       box0: { minX: ob.minX, maxX: ob.maxX, minY: ob.minY, maxY: ob.maxY }, fam: P.fam, headW: P.headW };   // box0: the plate box before the antennae, for the fit checks
     B.sig.push(A.kind, A.club || '-', A.pose, Math.round(A.nSeg / 4), A.kind === 'lamellate' ? A.lamellae.n : (A.kind === 'pectinate' || A.kind === 'bipectinate') ? Math.round(A.rami.n / 6) : 0,
       Math.round(pose.ang / 10), Math.round(pose.curve / 15), Math.round(G.len / P.headW * 2), Math.round(A.socket[0] * 20));
