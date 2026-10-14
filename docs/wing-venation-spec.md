@@ -135,11 +135,27 @@ Rules (implemented 2026-10-02 on `growVeins` v2, after Hoffmann et al. 2018; see
   like any other and every cell closes against a vein or the margin.
 - **Named crossveins** through `place` (angle rule, slide, no dangling): the antenodals as aligned
   C–Sc–R1 pairs (`then` chains the Sc–R1 segment at the same lean; the first two heavier), the
-  subnodus (C–R1 at the nodus, O), the two pterostigma end crossveins (lean gene 18–38° from
+  subnodus (Sc–R1 just under the nodus, oblique, O), the two pterostigma end crossveins (lean gene 18–38° from
   perpendicular, O, lower end distal; the strip under the stigma is a `gap` with no other
   crossvein), the arculus stepping from R2 through the fan to the median lane (O), the discoidal
   triangle (two rungs from one point, the long side with a relaxed band) or the damselfly
   quadrilateral (two rungs), and the bridge (a short oblique R1–R2 behind the subnodus).
+- **Diagnostic cells and the family cue (#17).** The discoidal triangle / quadrilateral and the
+  subnodus are on every wing (they were rolled at 0.8 / 0.85, so a fifth of the plates lacked the
+  cell that identifies the suborder). Their sides, the subnodus and the damselfly arculus are
+  structural crossveins with their own wide band (75–179°, the subnodus 60–179°), so the rung band
+  never drops them; `meta.wingStats.discoidal` / `.subnodus` count the wings that have them and
+  `tests/check.js` (`odoCells`) wants 2 of 2 on the plate and on the device plate. The damselfly's
+  antenodal regime is the family: a coenagrionid (70%) has exactly two antenodals, Ax1 just past
+  the stalk and Ax2 over the arculus, both heavy (Ris plate 2); a calopterygid (30%) the ladder on a
+  short stalk (0.07–0.11 of the span). Every dragonfly has a ladder. `meta.fam` carries it and the
+  common name's noun follows it (Bluet / Damsel / Dancer / … vs Demoiselle / Jewelwing / Rubyspot).
+  The triangle's base lies distal to the arculus on both wings (the hindwing's sat 0.03 of the span
+  basal to it; `wingStats.triOff` > 0), and the discoidal sides are drawn heavy (O) so the cell reads.
+  The damselfly arculus stands square 0.08 of the span past the stalk with the quadrilateral's
+  proximal side straight under it (it used to float 15–20% of the span distal). R1 keeps 0.8 units
+  under Sc before the nodus (Sc's bow used to cross it just past a damselfly's stalk). `odoAntenodal`
+  asserts the counts (2 exactly, or a ladder of 5+), the name and `wingStats.qGap` ≤ 0.02.
 - **Secondaries, regime per strip segment**: cell size `cell(u, s)` = 0.03 Lw × `cells` gene
   (libellulid 0.7 .. aeshnid 1.3; damselfly 1.0–1.5) × (1 − 0.3 u) × (1 − 0.25 s), floored at
   3.2 units; the postnodal ladder uses its own `postStep`. Along every strip, where

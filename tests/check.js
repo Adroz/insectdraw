@@ -63,6 +63,13 @@ let neuSeenPlates = 0;   // lacewing plates in the run, counted by the seed loop
 const NEU_MIN = 20;   // lacewing plates a run needs before a #19 check that never ran fails rather than being reported (~8% of plates)
 const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
+// #17, from the references (odo-damsel-ris1921: a coenagrionid, two antenodals and the quadrilateral from the arculus;
+// Calopterygidae carry an antenodal ladder) and the common names of each family, stated here rather than read from the engine
+const ODO_NOUNS = { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'] };
+const ODO_LADDER_MIN = 5;   // antenodals on a ladder wing (the ticket's 5-9 on the damselflies it calls a ladder)
+const ODO_Q_GAP = 0.02;   // the quadrilateral's proximal side within this of the arculus (span fractions)
+const odoSeen = {};   // damselfly family -> plates odoAntenodal saw, for POST.odoAntenodal
+const ODO_MIN = 40;   // damselfly plates a run needs before a family with no plate fails rather than being reported
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
 // antialiased ink averaged over every 9 x 9 px window: a window at LEP_INK_MAX or more reads as a black blotch on the 1-bit
@@ -583,6 +590,44 @@ const CHECKS = {
     one(meta.wingStats, '');
     one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
   },
+  // Odonata diagnostic cells (#17): every anisopteran wing closes its discoidal triangle and every zygopteran its
+  // quadrilateral, and every odonate wing has its subnodus (odo-anax-ris1921, odo-damsel-ris1921): wingStats.discoidal and
+  // .subnodus count the wings (of 2) where they were placed; the triangle lies distal to the arculus (wingStats.triOff: the
+  // smallest distance on a wing from the arculus to the triangle's base, span fractions)
+  odoCells(meta, svg, fail, { dev }) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const cell = meta.type === 'dragonfly' ? 'discoidal triangle' : 'quadrilateral';
+    const one = (s, what) => {
+      if (!s || typeof s.discoidal !== 'number' || typeof s.subnodus !== 'number') return fail(what + 'odonate wingStats has no discoidal / subnodus count');
+      if (s.discoidal !== 2) fail(what + 'odonate wing without its ' + cell + ': ' + s.discoidal + ' of 2 wings');
+      if (s.subnodus !== 2) fail(what + 'odonate wing without its subnodus: ' + s.subnodus + ' of 2 wings');
+      if (meta.type === 'dragonfly' && !(s.triOff > 0)) fail(what + 'dragonfly discoidal triangle not distal to the arculus: ' + (s.triOff === undefined ? 'no triOff' : s.triOff.toFixed(3)) + ' of the span');
+    };
+    one(meta.wingStats, '');
+    one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
+  },
+  // Odonata antenodals as the family cue (#17): a coenagrionid damselfly has exactly two antenodals (Ax1, Ax2) and a
+  // calopterygid a ladder, as does every dragonfly (wingStats.antMin / .antMax: the fewest and most antenodals placed on
+  // one wing); the common name's noun is one of the drawn family's; and the damselfly quadrilateral starts at the arculus
+  // (wingStats.qGap: the largest distance on a wing from the arculus to the quadrilateral's proximal side, span fractions)
+  odoAntenodal(meta, svg, fail, { dev }) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const fam = meta.type === 'dragonfly' ? 'anisopteran' : meta.fam;
+    if (meta.type === 'damselfly') {
+      if (!ODO_NOUNS[fam]) return fail('damselfly plate has no antenodal family (meta.fam ' + fam + ')');
+      odoSeen[fam] = (odoSeen[fam] || 0) + 1;
+      const words = meta.name.common.split(' '), other = Object.keys(ODO_NOUNS).filter(f => f !== fam).flatMap(f => ODO_NOUNS[f]);
+      if (!ODO_NOUNS[fam].some(n => words.includes(n)) || other.some(n => words.includes(n))) fail('damselfly name disagrees with its antenodals: "' + meta.name.common + '" on a ' + fam);
+    }
+    const one = (s, what) => {
+      if (!s || typeof s.antMin !== 'number') return fail(what + 'odonate wingStats has no antenodal count');
+      if (fam === 'coenagrionid' && (s.antMin !== 2 || s.antMax !== 2)) fail(what + 'coenagrionid antenodals not exactly 2: ' + s.antMin + '-' + s.antMax);
+      if (fam !== 'coenagrionid' && s.antMin < ODO_LADDER_MIN) fail(what + fam + ' antenodal ladder too short: ' + s.antMin + ' (min ' + ODO_LADDER_MIN + ')');
+      if (meta.type === 'damselfly' && !(s.qGap <= ODO_Q_GAP)) fail(what + 'damselfly quadrilateral floats off the arculus: ' + (s.qGap === undefined ? 'no qGap' : s.qGap.toFixed(3)) + ' of the span (max ' + ODO_Q_GAP + ')');
+    };
+    one(meta.wingStats, '');
+    one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
+  },
   // #19 lacewing (neu-nothochrysa): the strip under R1 (R1-Rs) carries a few rungs, 2-5 on the reference, never none (Sc,
   // R1 and Rs would read as three ruled parallels) and never the costal ladder's density; the engine reports the
   // forewing's R1-Rs rung count as wingStats.r1rs. Default and device plate (pass 2's geometry).
@@ -796,6 +841,13 @@ const POST = {
     if (missing.length && total >= HYM_MIN) fail('no Hymenoptera plate of family ' + missing.join(', ') + ' in ' + total + ' Hymenoptera plates: the cell-plan assertions for it never ran');
     console.log('Hymenoptera cell plans asserted on:', fams.map(f => f + ' ' + (hymSeen[f] || 0)).join(', ') +
       (missing.length && total < HYM_MIN ? '; too few Hymenoptera plates (' + total + ' < ' + HYM_MIN + ') to require ' + missing.join(', ') : ''));
+  },
+  // odoAntenodal asserts a damselfly family only on its own plates: both need a plate once the run has ODO_MIN damselflies
+  odoAntenodal(fail) {
+    const total = Object.values(odoSeen).reduce((a, b) => a + b, 0), missing = Object.keys(ODO_NOUNS).filter(f => !odoSeen[f]);
+    if (missing.length && total >= ODO_MIN) fail('no damselfly plate of family ' + missing.join(', ') + ' in ' + total + ' damselfly plates: its antenodal assertions never ran');
+    console.log('damselfly antenodal families asserted on:', Object.keys(ODO_NOUNS).map(f => f + ' ' + (odoSeen[f] || 0)).join(', ') +
+      (missing.length && total < ODO_MIN ? '; too few damselfly plates (' + total + ' < ' + ODO_MIN + ') to require ' + missing.join(', ') : ''));
   },
   // the report for CHECKS.lepInk: plates rasterised per variant, the largest tone share of a solid window, and the plates
   // with a solid window from the line art alone; a run long enough to hold both variants fails without one (never by silence)
