@@ -122,7 +122,10 @@ contract for changes.
   only changes what follows that block for the same seed; the body plan and everything drawn
   earlier stay put.
 - Names use their own PRNG (`insectName`) and must never touch the drawing's `rng`. A new epithet stem
-  is written out in `tests/names.js` `FORMS` too (check.js `epithets`); only adjectives are declined.
+  is written out in `tests/names.js` `FORMS` too (check.js `epithets`); only adjectives are declined. The common name
+  reads the plate (#28): a family's noun from `famNouns`, a gene word for the marking or a rare antenna kind; a new
+  marking or antenna adjective goes into `GENE_MARK_ADJ` / `GENE_ANT_ADJ` and `tests/names.js` `MARK_CLAIMS` /
+  `ANT_CLAIMS`, never into a general adjective list (check.js `nameFamilies`, `nameFamily`, `nameGenes`).
 - Per-seed variation is the whole point. Each winged body plan rolls a "wing genes" object
   (outline shape, vein counts, cell plan, crossvein spacing ...) at the top of its wing block and
   exposes a discrete `meta.wingSig`. `tests/check.js` fails if one signature covers more than 10%
@@ -189,7 +192,7 @@ node tests/check.js 3000                 # invariants + determinism + wing uniqu
 node tests/check.js 300 --only antennae  # just the named checks (a,b,...), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists them
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:daily                      # daily plate script: files, sidecar, 1-bit 440 raster
-node tests/names.js                      # names audit: every epithet stem x gender, and repeated-stem common names over seeds 1-3000 (a few minutes)
+node tests/names.js                      # names audit: every epithet stem x gender; repeated-stem, gene-disagreeing and duplicate common names over seeds 1-3000 (a few minutes)
 node tests/pages.js                      # the three pages in headless Chromium: chrome, panes, hash, redirect
 node tests/snapshot.js write|check f.json 3000 [--engine old.html]   # byte-identity fixture for engine refactors (write on the old engine, check on the new)
 node tests/sheet.js /tmp/wasp.png 3 wasp:6    # contact sheet via headless Chromium; LOOK at it

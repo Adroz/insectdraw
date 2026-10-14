@@ -4,9 +4,11 @@
 //   node tests/names.js [N | --seeds A-B]
 //
 // Prints every epithet stem x gender the engine can produce, checks them against FORMS below, then scans seeds 1..N
-// (default 3000) for a common name that repeats a stem and lists each one. Exits 1 on any mismatch or repeat. The same
-// two checks run inside tests/check.js as `epithets` (PRE) and `nameStems` (per seed), which import FORMS and
-// repeatedStem from here, so the gate and this script cannot disagree.
+// (default 3000) for a common name that repeats a stem, one that disagrees with the plate's marking or antenna genes
+// (#28), and lists every common name more than one plate shares. Exits 1 on any mismatch, repeat or disagreement, or
+// when DUP_MAX or more of the plates share an earlier plate's name. The same checks run inside tests/check.js as
+// `epithets` (PRE), `nameStems` and `nameGenes` (per seed, nameGenes also in POST for the duplicates), which import
+// their rules from here, so the gate and this script cannot disagree.
 'use strict';
 
 // Every epithet stem the engine declines, each written out once per genus gender [masculine, feminine, neuter], from
@@ -90,7 +92,54 @@ function repeatedStem(common) {
   return null;
 }
 
-module.exports = { FORMS, epithetProblems, repeatedStem };
+// ---- #28: the name agrees with the plate ----
+// Words that claim an abdominal marking (meta.bodyGenes.abd.mark): a common name may carry one only when the plate
+// draws that marking, so a plain abdomen is never "Banded" and a banded one never "Spotted". Written from English
+// usage, not copied from the engine: the engine's gene words must be a subset of these (tests/check.js nameGenes).
+const MARK_CLAIMS = {
+  banded: ['Banded', 'Ringed', 'Girdled', 'Belted'],
+  spotted: ['Spotted', 'Four-spotted', 'Six-spotted', 'Twin-spot', 'Dotted'],
+  striped: ['Striped', 'Lined', 'Streaked'],
+  tipdark: ['Black-tailed', 'Dark-tipped', 'Black-tipped'],
+  hairy: ['Hairy', 'Downy', 'Velvet', 'Woolly', 'Shaggy'],
+};
+// Words that claim an antenna kind (meta.antenna): the same rule (a "Feathered" moth has feathered antennae).
+const ANT_CLAIMS = {
+  moniliform: ['Bead-horned'], lamellate: ['Fan-horned'], serrate: ['Saw-horned'], pectinate: ['Comb-horned'],
+  bipectinate: ['Feathered'], plumose: ['Plumed'], clubbed: ['Club-horned'],
+};
+// The family nouns the ticket names: the drawn family's noun table must hold these (an ichneumonid is an Ichneumon,
+// a papilionid a Swallowtail), keyed by the names table (type, or the variant for the moth's butterfly table).
+const FAM_NOUN_SPEC = {
+  wasp: { ichneumonid: ['Ichneumon'] },
+  bee: { apid: ['Bumble', 'Mining'] },
+  butterfly: { papilionid: ['Swallowtail'], satyrine: ['Brown', 'Ringlet'] },
+  damselfly: { coenagrionid: ['Bluet', 'Damsel'], calopterygid: ['Demoiselle', 'Jewelwing'] },
+};
+// a phrase (one or more words) appears in the common name as whole words
+const hasPhrase = (common, w) => (' ' + common + ' ').includes(' ' + w + ' ');
+// What a common name gets wrong about its plate's genes, as a list (empty when it agrees): a marking or antenna word
+// the plate does not draw; and, when the plate has a gene word to give (a marking other than plain, or an antenna kind
+// its family draws on under half its plates: antDistinct), a name that carries none of them.
+function geneProblems(common, mark, antenna, antDistinct) {
+  const out = [];
+  for (const m in MARK_CLAIMS) if (m !== mark) for (const w of MARK_CLAIMS[m]) if (hasPhrase(common, w)) out.push('"' + w + '" on a ' + mark + ' abdomen');
+  for (const k in ANT_CLAIMS) if (k !== antenna) for (const w of ANT_CLAIMS[k]) if (hasPhrase(common, w)) out.push('"' + w + '" on ' + antenna + ' antennae');
+  const own = [...(MARK_CLAIMS[mark] || []), ...(antDistinct ? ANT_CLAIMS[antenna] || [] : [])];
+  if (own.length && !own.some(w => hasPhrase(common, w))) out.push('no gene word (' + own.join(' / ') + ') for a ' + mark + ' abdomen' + (antDistinct && ANT_CLAIMS[antenna] ? ' with ' + antenna + ' antennae' : ''));
+  return out;
+}
+// Whether a plate's antenna kind is a gene word to give: its family's antenna table (the order's ORDERS entry `ant`, base
+// plus the family's override) draws that kind on under half its plates; a kind the family always draws says nothing.
+function antRare(ORDERS, type, fam, kind) {
+  const T = ORDERS[type].ant, k = Object.assign({}, T.base, T[fam] || {}).kinds;
+  return (k[kind] || 0) < 0.5 * Object.values(k).reduce((a, w) => a + w, 0);
+}
+// The share of plates whose common name an earlier plate already had: (plates - distinct names) / plates
+function duplicateShare(commons) { return commons.length ? (commons.length - new Set(commons).size) / commons.length : 0; }
+const DUP_MAX = 0.1;   // the ticket's ceiling over seeds 1-3000 (21% at main 37a7371, 32% at backlog 14ee739)
+
+module.exports = { FORMS, epithetProblems, repeatedStem, MARK_CLAIMS, ANT_CLAIMS, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX };
 
 if (require.main === module) {
   const { loadEngine } = require('./engine');
@@ -105,15 +154,23 @@ if (require.main === module) {
   const ep = epithetProblems(E.EPITHETS);
   for (const p of ep) console.log('EPITHET:', p);
   bad += ep.length;
-  const hits = [];
+  const hits = [], genes = [], commons = [], seen = new Map();
   for (let seed = from; seed <= to; seed++) {
     const { meta } = E.generateInsectDetailed(seed);
     const r = repeatedStem(meta.name.common);
     if (r) hits.push(seed + ' ' + meta.type + ': "' + meta.name.common + '" (' + r.join(' / ') + ')');
+    // #28: the name agrees with the marking and antenna genes (tests/check.js nameGenes holds the same rule)
+    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(E.ORDERS, meta.type, meta.bodyGenes.fam, meta.antenna))) genes.push(seed + ' ' + meta.type + ': ' + p + ' ("' + meta.name.common + '")');
+    commons.push(meta.name.common);
+    (seen.get(meta.name.common) || seen.set(meta.name.common, []).get(meta.name.common)).push(seed);
   }
   for (const h of hits) console.log('REPEAT:', h);
-  bad += hits.length;
-  console.log('epithet stems:', (E.EPITHETS || []).length, '| seeds scanned:', to - from + 1, '| repeated-stem names:', hits.length);
+  for (const g of genes) console.log('GENES:', g);
+  const share = duplicateShare(commons);
+  for (const [name, seeds] of seen) if (seeds.length > 1) console.log('DUPLICATE:', '"' + name + '"', seeds.join(' '));
+  bad += hits.length + genes.length + (share >= DUP_MAX ? 1 : 0);
+  console.log('epithet stems:', (E.EPITHETS || []).length, '| seeds scanned:', to - from + 1, '| repeated-stem names:', hits.length,
+    '| gene disagreements:', genes.length, '| duplicate names:', commons.length - seen.size, '(' + (share * 100).toFixed(1) + '%, max ' + DUP_MAX * 100 + '%)');
   console.log(bad ? 'FAIL' : 'OK');
   process.exit(bad ? 1 : 0);
 }

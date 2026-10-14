@@ -16,7 +16,7 @@
 'use strict';
 const { loadEngine, engineContract } = require('./engine');
 const raster = require('./raster');
-const { epithetProblems, repeatedStem } = require('./names');
+const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX } = require('./names');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
@@ -109,6 +109,9 @@ const rightmostAt = (poly, y) => {
 };
 const leftmostAt = (poly, y) => { const m = rightmostAt(poly.map(p => [-p[0], p[1]]), y); return m === null ? null : -m; };
 const distToPl = (p, pl) => { let d = Infinity; for (let i = 0; i + 1 < pl.length; i++) { const a = pl[i], b = pl[i + 1], v = [b[0] - a[0], b[1] - a[1]], L2 = v[0] * v[0] + v[1] * v[1] || 1e-9, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * v[0] + (p[1] - a[1]) * v[1]) / L2)); d = Math.min(d, Math.hypot(p[0] - a[0] - t * v[0], p[1] - a[1] - t * v[1])); } return d; };
+// #28 names: the names table a plate's common name comes from (the variant's, else the order's), and the run's common names
+const namesTable = (type, variant) => { const o = E.ORDERS[type]; return (variant && o.variantNames && o.variantNames[variant]) || o.names; };
+const commons = [];
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 // #17, from the references (odo-damsel-ris1921: a coenagrionid, two antenodals and the quadrilateral from the arculus;
 // Calopterygidae carry an antenodal ladder) and the common names of each family, stated here rather than read from the engine
@@ -355,6 +358,29 @@ const PRE = {
   // tests/names.js FORMS, from the Latin, and none ends -oris / -ore (saltator is a noun, not a class B adjective)
   epithets(fail) {
     for (const msg of epithetProblems(E.EPITHETS)) fail('epithet: ' + msg);
+  },
+  // Family nouns (#28): a names table whose order rolls two or more families (per variant) has a noun list per family
+  // (common.famNouns) keyed only by families it rolls, the lists disjoint (so a noun names one family), and holding the
+  // nouns the ticket names (tests/names.js FAM_NOUN_SPEC: an ichneumonid is an Ichneumon, a papilionid a Swallowtail)
+  nameFamilies(fail) {
+    E.generateInsect(1);   // seeds the module rng so proportions can be rolled outside a plate
+    const rolled = {};   // names-table key (variant or type) -> Set of families
+    for (const type of E.TYPES) for (let i = 0; i < 400; i++) {
+      const P = { variant: null, fam: null, abdOverlap: 8 };
+      E.ORDERS[type].proportions(P);
+      const key = (P.variant && E.ORDERS[type].variantNames && E.ORDERS[type].variantNames[P.variant]) ? P.variant : type;
+      (rolled[key] ||= { type, variant: key === type ? null : P.variant, fams: new Set() }).fams.add(P.fam);
+    }
+    for (const key in rolled) {
+      const { type, variant, fams } = rolled[key], c = namesTable(type, variant).common, fn = c.famNouns || {}, f = msg => fail('names ' + key + ': ' + msg);
+      const real = [...fams].filter(Boolean);
+      if (real.length >= 2) for (const fam of real) if (!Array.isArray(fn[fam]) || !fn[fam].length) f('no family nouns for ' + fam);
+      for (const fam of Object.keys(fn)) if (!real.includes(fam) && type !== 'damselfly')   // the damselfly's families are its antenodal plans, set by the wing block (#17)
+        f('famNouns.' + fam + ' keys a family the order never rolls');
+      const owner = {};
+      for (const fam of Object.keys(fn)) for (const n of fn[fam]) { if (owner[n] && owner[n] !== fam) f('noun ' + n + ' is in both ' + owner[n] + ' and ' + fam); owner[n] = fam; }
+      for (const fam in (FAM_NOUN_SPEC[key] || {})) for (const n of FAM_NOUN_SPEC[key][fam]) if (!(fn[fam] || c.nouns).includes(n)) f(fam + ' has no noun ' + n);
+    }
   },
 };
 
@@ -1205,6 +1231,23 @@ const CHECKS = {
     const r = repeatedStem(meta.name.common);
     if (r) fail('common name repeats a stem: "' + meta.name.common + '" (' + r.join(' / ') + ')');
   },
+  // the common name's noun is the drawn family's (#28): a table with family nouns gives the plate one of meta.fam's and
+  // none of another family's (an ichneumonid is never a "Gall Wasp", a papilionid never a "Brown")
+  nameFamily(meta, svg, fail) {
+    const fn = namesTable(meta.type, meta.variant).common.famNouns;
+    if (!fn || !meta.fam) return;
+    if (!fn[meta.fam]) return fail('names table has no family nouns for the drawn ' + meta.fam);
+    const common = meta.name.common;
+    if (!fn[meta.fam].some(n => hasPhrase(common, n))) fail('common name has no ' + meta.fam + ' noun: "' + common + '"');
+    for (const fam in fn) if (fam !== meta.fam) for (const n of fn[fam]) if (hasPhrase(common, n)) fail('common name carries the ' + fam + ' noun ' + n + ' on a ' + meta.fam + ': "' + common + '"');
+  },
+  // the common name agrees with the body genes (#28): no marking or antenna word the plate does not draw, and a gene word
+  // whenever the plate has one to give (tests/names.js geneProblems: a marking other than plain, a rare antenna kind)
+  nameGenes(meta, svg, fail) {
+    commons.push(meta.name.common);
+    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(E.ORDERS, meta.type, meta.bodyGenes.fam, meta.antenna)))
+      fail('common name disagrees with the genes: ' + p + ' ("' + meta.name.common + '")');
+  },
 };
 
 // ---- whole-run checks after the seed loop: (fail) => void, fail(msg, type) records a seed-0 finding ----
@@ -1233,6 +1276,12 @@ const sigRule = (sigs, what, distinctFloor, fail) => {
   }
 };
 const POST = {
+  // duplicate common names (#28): under DUP_MAX of the run's plates share a common name with an earlier plate
+  nameGenes(fail) {
+    const share = duplicateShare(commons);
+    if (share >= DUP_MAX) fail('common names repeat: ' + (share * 100).toFixed(1) + '% of ' + commons.length + ' plates share an earlier plate\'s name (max ' + DUP_MAX * 100 + '%)');
+    console.log('common names: ' + new Set(commons).size + ' distinct in ' + commons.length + ' plates (' + (share * 100).toFixed(1) + '% repeat)');
+  },
   // Diptera wing outline (#9): the median forewing W/L per family within 0.05 of its reference (dip-eristalis 0.40 for
   // the muscid / syrphid / tabanid plan, dip-asilid-photo 0.30, dip-limonia 0.30, and no crane fly median above 0.35;
   // the nematoceran flies have no reference image and take 0.35, between the brachycerans and the crane fly), and the
