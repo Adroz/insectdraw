@@ -64,13 +64,15 @@ contract for changes.
 - Minimum stroke 0.5 px after the plate scale; use the `SW.H/O/D/F` tokens, never literal widths.
 - Hatching spacing never below ~1.8 px or e-ink fills in.
 - Dark tones come from hatch pitch, never from stacking full hatch families. On a lepidopteran plate no 9×9 px window
-  of the wings reaches 55% ink at 600 px with the tone layers (hatch, stipple, fringe) putting a quarter of it there
-  (`lepInk` in `tests/check.js` rasterises every lep plate's `meta.lepInkSvg` against its line art alone,
-  `meta.lepArtSvg`, #13). Where the cross set lies over the fan the fan drops every other line; the hatch stops
-  `LEP_HUG` short of the veins, band edges and cross-lines and never runs alongside one; the hindwing hatch and
-  fringe keep `LEP_CLEAR` off the forewing's edge. A window the line art makes solid on its own (the costa beside Sc
-  and R1, a vein fork) is converging line art (#67), counted in the report, not failed.
-- Lanes never fuse into a bar (#14): on every `growVeins` order the registry does not opt out (`laneFloor: false`: the moth, #67), lanes and crossveins are drawn by one
+  of the wings reaches 55% ink at 600 px, whatever made it (`lepInk` in `tests/check.js` rasterises every lep plate's
+  `meta.lepInkSvg` and splits a failing window's ink against its line art alone, `meta.lepArtSvg`; #13, #67). Where the
+  cross set lies over the fan the fan drops every other line; the hatch stops `LEP_HUG` short of the veins, band edges
+  and cross-lines and never runs alongside one; the hindwing hatch and fringe keep `LEP_CLEAR` off the forewing's edge.
+  The line art holds its own (#67): the veins go through the lane floor (`lepVeinFloor`) with the leading edge as a
+  wall (on the hindwing only the runs that show outside the forewing, with its outline as a second wall), so Sc and the R branches merge into the costa instead
+  of running beside it; a cross-line tooth is at least `LEP_TOOTH` hatch pitches wide and no deeper than wide; band
+  edges and cross-lines stop `LEP_LINE_CLEAR` short of the costa and the veins; spot rings keep that far apart.
+- Lanes never fuse into a bar (#14): on every `growVeins` order the registry does not opt out (`laneFloor: false`: the beetle), and on the moth's veins (#67), lanes and crossveins are drawn by one
   deferred element resolved at the plate scale (`laneFloor`, see the spec's Growth section), which merges a lane into
   its neighbour where they converge under the floor; `meta.wingLanes` carries the drawn lanes and `laneSep` in
   `tests/check.js` asserts no two centre-lines within 1.8 px away from a junction. New lanes go through `growVeins`
@@ -90,7 +92,11 @@ contract for changes.
   a row of punctures (punctate) or dashes, the marks a floor apart; there are no puncture rows between the striae.
   `meta.elytra` records what it drew; `elytraPitch` and `elytraTexture` in `tests/check.js` measure it on the default
   and the device plate. The beetle's pronotum is held to the research proportions by the entry's `pronotum` bands
-  (`beetleProportions`) and the rove family draws short truncate elytra over a tapering, hatched abdomen (`roveBody`).
+  (`beetleProportions`) and the rove family draws short truncate elytra over a tapering, hatched abdomen (`roveBody`). The
+  within-family genes (#53: elytral outline, sculpture, pattern; pronotal pattern and width class; horns, spines, the
+  fossorial tibia, stag jaws) live in the entry's `elytra`, `pronotum`, `armature` and `legs` tables; a tone over a
+  shape (an elytral or pronotal pattern) goes through `hatchRegions` at the plate pitch inside a deferred element,
+  never as a fill (`elytraPattern`, `pronotumPattern`).
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px

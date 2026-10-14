@@ -639,7 +639,10 @@ to its `deflect` step:
   dropped and moved), where `tests/check.js` (`laneSep`) asserts no two lane centre-lines closer than
   1.8 px away from a junction (6 px), on the default and the device plate. `meta.wingStats` stays the
   growth's count. An order opts out on its registry entry (`laneFloor: false`, read by the wing block
-  and by `laneSep`): Lepidoptera (#67 owns the lep costa) and the beetle (no lanes). `growVeins`
+  and by `laneSep`): the beetle (no lanes). Lepidoptera grow their lanes with the floor off and draw
+  the veins through `laneFloor` themselves (`lepVeinFloor`, #67), with the leading edge as a wall lane
+  (to the apex; on the hindwing also the forewing's outline over it), so Sc and R1 merge into the
+  costa rather than fuse with it. `growVeins`
   returns the resolver as `floor(s, W)` (memoised; `{ els, ends }`, `ends` saying per lane whether its
   root or its end gave way), so an element that depends on a cut (the lacewing end twigs) asks it
   instead of relying on its place in the layer.

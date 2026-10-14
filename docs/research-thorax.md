@@ -71,6 +71,19 @@ end are what `rollBodyGenes` → `B.thorax` draws from. Images in `ref/` with th
     "modeled boldly in curved lines, crossing each other in the darker shades, but left single in
     the passages from dark to light and breaking away in fine dots as they approach the light
     itself, which is of pure white paper".
+15. Beetles within a family (#53): G. Jacobson, *Beetles of Russia and Western Europe* (1905–1915), plate 26
+    (`ref/thorax-col-jacobson-plate26.jpg`: Lucanidae and Scarabaeoidea in dorsal view: *Lucanus cervus* ♂ with
+    antler mandibles about the head's width, branched and toothed inside, ♀ with short jaws; the dung beetles' fore
+    tibiae broad and toothed along the outer edge; *Trox* with rows of tubercles on the elytra; elytra parallel,
+    oval or rounded within one superfamily); Jacobson's *Lucanus cervus* ♂ (`ref/thorax-col-lucanus-jacobson.jpg`)
+    and *Coccinella septempunctata* (`ref/thorax-col-coccinella-jacobson.jpg`: a hemisphere from above, the elytra
+    together about as broad as long, round black spots, a short transverse pronotum with pale front corners, the
+    head mostly under it, short clubbed antennae, short legs); D. Drury, *Illustrations of Natural History* (1777),
+    *Dynastes hercules* ♂ (`ref/thorax-col-dynastes-drury.jpg`: a long pronotal horn projecting forward over a
+    shorter cephalic horn); Wikipedia *Coccinellidae*, *Chrysomelidae* (short convex oval leaf beetles, often
+    striped or spotted elytra: *Chrysomela*, *Leptinotarsa*), *Lucanidae*, *Dynastinae* (cephalic and pronotal
+    horns of the males), *Cerambycidae* (pronotum "often with a lateral spine or tubercle on each side"),
+    *Carabus* (costate and tuberculate elytra, e.g. *C. intricatus*, *C. coriaceus*).
 
 ## What the sources establish
 
@@ -100,6 +113,29 @@ straight hind margin), the hindwings folded away under them, over a long abdomen
 the tip with every exposed tergite shaded. Engine: the beetle entry's `pronotum` bands (soft-clipped
 in `rollBodyGenes`), `elytra` (puncture style gene, the rove's short truncate elytra) and
 `abdFams.rove`; asserted by `beetleProportions`, `elytraTexture` and `roveBody` in `tests/check.js`.
+Within a family (#53, sources 10 and 15): the round families are a family pick of their own, the ladybird
+(Coccinellidae: elytra together about as broad as long, a short head under the pronotum, short clubbed antennae)
+and the leaf beetle (Chrysomelidae: a short convex oval, filiform or moniliform antennae), and the stag beetle
+(Lucanidae: a broad head carrying antler mandibles about its width, each bowed out, curving back in to the tip
+with an inner tooth; elbowed antennae with a club). Inside every family the elytral **outline** varies: parallel
+(the carabid and longhorn ground plan), oval (widest at the middle, narrowing to both ends: weevils, leaf
+beetles), rounded (broad to a round apex: scarabs, ladybirds) or tapering (widest at the shoulders, narrowing to
+a pointed apex: longhorns, some weevils); the **shoulders** square (the base nearly the elytron's width) or
+rounded (curving out from near the scutellum, as on flightless carabids). **Sculpture** families beyond the
+striae of #24: costae (a few raised ribs, *Carabus*), tubercle rows (*Trox*, many weevils), and glabrous elytra
+with only the sutural stria (ladybirds, stag beetles, many longhorns). **Pattern** families, drawn as hatched
+shapes (an engraver tones a dark area by line, never by fill): spots (one to five per elytron), transverse
+zigzag bands (longhorns, some scarabs), a longitudinal vitta (leaf beetles), or the dark elytron round pale
+spots (melanic ladybirds); the pronotum carries its own (a dark disc, dark sides, two spots, two vittae). The
+pronotum : elytra width falls in three classes inside the 0.55–0.9 band (narrow carabid, middle, broad
+scarab / stag / rove). **Armature**: a scarab's cephalic horn rising from the middle of the head or a pronotal
+horn projecting forward over it (Dynastinae, Geotrupinae), a longhorn's lateral pronotal spine. The fore tibia
+is **fossorial** (broadened, 3–4 teeth along the outer edge, the last at the apex) in scarabs, stag beetles and
+the digging carabids, slender otherwise. Engine: the beetle entry's `elytra` (`outlines`, `shapes`, `square`,
+`patterns`, per family `styles`), `pronotum` (`shapes`, `classes`, `patterns`, `punct`), `armature`,
+`legs.<fam>.fossorial` and the new `headFams`; asserted by `colFamily`, `elytraOutline`, `elytraTexture`,
+`elytraPattern`, `pronotumPattern`, `pronotumRatio`, `beetleArmature`, `stagMandibles` and `foretibia`, with
+`colGenes` holding every gene value to 5 % of the plates that roll it.
 
 **Diptera.** Prothorax and metathorax "considerably reduced"; the mesonotum "occupies most of the
 region" (2, 3). Dorsal landmarks (fig. `thorax-diptera-dorsal.png`): postpronotal lobes =

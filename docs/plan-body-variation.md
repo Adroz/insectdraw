@@ -4,7 +4,7 @@ Status: two plans in one file. The first, the per-seed genes for legs, body, hea
 steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07); it follows the wing-genes work (see
 README "Venation" and `meta.wingSig`). The second, "Nine plates, nine insects (#30)" at the end, is open: the
 perceptual criterion (`tests/perceptual.js`) and nine steps, one ticket per order (#48–#55, and #72 for the
-grasshopper, added by #57); step 2 (cicada, #49) is done.
+grasshopper, added by #57); step 2 (cicada, #49) and step 7 (fly, #54) are done.
 
 ### Status detail
 
@@ -459,12 +459,43 @@ rules for all of them:
    foretibia type (fossorial toothed / slender), plus the round families the sheet never shows (coccinellid,
    chrysomelid) as new entries in the `P.fam` pick. Grounded in `research-thorax.md` (Coleoptera) and
    `research-head-eyes.md`; #25 and #47 cover the head, antennae and longhorn forelegs.
+
+   **Done (2026-10-14), floor reached on 1–60, not risen on 61–120.** Implemented as specified (`research-thorax.md`
+   Coleoptera "Within a family", refs `docs/ref/thorax-col-*`): `P.fam` adds coccinellid, chrysomelid and lucanid (the
+   stag beetle, its antler jaws with an inner tooth); every beetle rolls an elytral outline and shoulders, a sculpture
+   family (costate, glabrous and tubercle beside the #24 striae), an elytral pattern (spots, bands, stripe, a dark
+   elytron round pale spots) and a pronotal one, both hatched at the plate pitch (`hatchRegions`), a pronotum : elytra
+   width class, armature (scarab cephalic / pronotal horns, longhorn lateral spines) and a fossorial fore tibia; the
+   rove adds a head breadth and a fusiform abdomen. `colFamily`, `elytraOutline`, `elytraTexture`, `elytraPattern`,
+   `pronotumPattern`, `pronotumRatio`, `beetleArmature`, `stagMandibles`, `foretibia` and `colGenes` in
+   `tests/check.js` assert them. `tests/perceptual.js`, N = 60, main (c0e86fe) / backlog before (dcb2b9f) → after:
+
+   | view | min 1–60 | min 61–120 | sheet9 1–60 | sheet9 61–120 | median 1–60 |
+   |---|---|---|---|---|---|
+   | plate | 8.77 / 9.14 → 10.38 | 11.52 / 12.27 → 10.79 | 14.90 / 15.69 → 17.15 | 16.42 / 17.34 → 17.23 | 28.43 / 27.89 → 28.78 |
+   | body | 10.20 / 8.89 → 9.01 | 12.64 / 11.73 → 10.60 | 15.98 / 15.56 → 15.68 | 17.00 / 16.46 → 16.98 | 29.84 / 28.46 → 27.71 |
+
+   The minimum clears the floor on seeds 1–60 and stays within 1 of it on 61–120, but there it falls (11.52 on main):
+   the new families concentrate plates into look-alike pairs, two dark-spotted ladybirds (4,9) or two spotted weevils
+   (64,106), while the long-bodied families pull apart. `sheet9` rises on both blocks against main. A seeds 1–9 sheet
+   reads as 9 distinct insects, nine ground beetles as about 8, nine ladybirds as about 7. Raising the second block's
+   minimum without fitting it needs more spread inside the round families (ladybird body proportions and pronotal
+   markings beyond the four patterns, leaf-beetle sculpture), left to a follow-up.
 7. **Fly: wing set and abdomen families, #54** (10.59 under 12.5; body view 9.54). The wing outline covers the body on
    every plate. Genes: wing set (spread / half-folded / folded over the abdomen, scissor-wise, the resting pose that
    shows the abdomen's sides and is how most fly plates are drawn), abdomen family by `P.fam` (syrphid flat oval with
    bands, tachinid round with bristle rows, asilid long and tapering, tabanid broad and flat, bombyliid round and
    hairy, conopid petiolate), abdominal macrochaetae, leg pose and length per family (asilid long raptorial legs).
    #9 and #10 cover the wing outline and venation.
+   **Done (#54, 2026-10-14)**, grounded in `research-diptera-habitus.md` (refs `docs/ref/dip-hab-*`): `P.fam` adds
+   tachinid, bombyliid and conopid (eight families; the new ones drawn on their nearest family's venation plan,
+   `wingPlans`), the wing set spread / half-folded / folded scissor-wise over the abdomen (`B.wing.set`, per-family
+   weights; a folded wing turns in until the abdomen's sides show), the abdomen family per `P.fam` (`habitus`,
+   `abdFams`), abdominal macrochaetae and pile (`chaetae`), and legs, antennae and head per family (asilid long
+   raptorial legs, conopid porrect antennae and broad head); `dipWingSet`, `dipHabitus`, `dipChaetae`, `dipLegs` and the
+   `dipShares` audit in `tests/check.js`. `node tests/perceptual.js 60 --type fly` before (backlog at 1a52ddd) -> after:
+   seeds 1-60 min 9.32 -> 13.85 (floor 12.5), sheet9 13.29 -> 18.16; seeds 61-120 min 9.07 -> 12.09, sheet9
+   14.38 -> 18.27; `--view body` 8.86 -> 13.49 (1-60) and 9.16 -> 12.93 (61-120).
 8. **Crane fly: pose families and Tipulomorpha families, #55** (11.28 under 12.5). One leg pose on every plate, and the
    wings always spread. Genes: leg pose families for very long legs (spread as now; trailing, hind pairs swept back
    past the abdomen tip; forward, front pair reaching ahead past the antennae; and a pose with the mid legs out and
