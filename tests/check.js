@@ -16,6 +16,7 @@
 'use strict';
 const { loadEngine, engineContract } = require('./engine');
 const raster = require('./raster');
+const { epithetProblems, repeatedStem } = require('./names');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
@@ -287,6 +288,11 @@ const PRE = {
       for (const [tab, T] of [['headFams', o.headFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
+  },
+  // Latin agreement (#29): every epithet stem x genus gender the engine declines (E.EPITHETS) is written out once in
+  // tests/names.js FORMS, from the Latin, and none ends -oris / -ore (saltator is a noun, not a class B adjective)
+  epithets(fail) {
+    for (const msg of epithetProblems(E.EPITHETS)) fail('epithet: ' + msg);
   },
 };
 
@@ -964,6 +970,12 @@ const CHECKS = {
     o.n++; if (artSolid) o.art++; if (share > o.share) { o.share = share; o.seed = seed; }
     const c = LEP_WIN >> 1, xy = at < 0 ? '' : (at % ink.w + c) + ',' + (Math.floor(at / ink.w) + c);
     if (share >= LEP_TONE_SHARE) fail('lep wing solid at 1 bit from its tone layers: a ' + LEP_WIN + 'x' + LEP_WIN + ' window at ' + ink.win[at].toFixed(3) + ' ink (max ' + LEP_INK_MAX + '), ' + share.toFixed(3) + ' of it tone (max ' + LEP_TONE_SHARE + '), centred at ' + xy + ' px');
+  },
+  // the common name never repeats a stem (#29): no two of its words equal ignoring case, nor one the start of another
+  // when the shorter has 4+ letters ("Dark Darkling", "Blue-tailed Bluet"); tests/names.js repeatedStem
+  nameStems(meta, svg, fail) {
+    const r = repeatedStem(meta.name.common);
+    if (r) fail('common name repeats a stem: "' + meta.name.common + '" (' + r.join(' / ') + ')');
   },
 };
 

@@ -1944,7 +1944,9 @@ const NAME_PREFIX = ['Chryso', 'Callo', 'Lepto', 'Macro', 'Micro', 'Ortho', 'Neu
   'Eury', 'Poly', 'Hetero', 'Aniso', 'Cteno', 'Dolicho', 'Brachy', 'Trachy', 'Tricho', 'Erythro', 'Leuco', 'Cyano', 'Chloro',
   'Phaeo', 'Sphaero', 'Rhino', 'Acantho', 'Hoplo', 'Dory', 'Cosmo', 'Pseudo', 'Para', 'Proto', 'Meta', 'Hemi', 'Oxy', 'Dasy', 'Lasio',
   'Calli', 'Nemo', 'Hydro', 'Helio', 'Argyro', 'Stigmo', 'Campto', 'Cyclo', 'Lio', 'Gono'];
-// species epithets: [stem, declension]  A = -us/-a/-um, B = -is/-is/-e, X = invariable, M = minor/minus style
+// species epithets: [stem, declension]  A = -us/-a/-um, B = -is/-is/-e, X = invariable, M = minor/minus style. Only
+// adjectives go in A / B: a noun such as saltator (a leaper) is not declined (it gave "saltatoris"), its adjective
+// saltatorius is (#29). tests/names.js FORMS writes out every stem x gender; tests/check.js `epithets` holds this to it.
 const EPITHET = [
   ['fuscat', 'A'], ['aurat', 'A'], ['maculat', 'A'], ['punctat', 'A'], ['striat', 'A'], ['marginat', 'A'], ['fasciat', 'A'], ['lineat', 'A'],
   ['obscur', 'A'], ['flav', 'A'], ['ruf', 'A'], ['cinere', 'A'], ['livid', 'A'], ['pallid', 'A'], ['splendid', 'A'], ['venust', 'A'], ['hirt', 'A'],
@@ -1955,16 +1957,34 @@ const EPITHET = [
   ['limbat', 'A'], ['nigrocinct', 'A'], ['pulchell', 'A'], ['bicolor', 'X'], ['concolor', 'X'], ['tricolor', 'X'],
   ['vulgar', 'B'], ['boreal', 'B'], ['austral', 'B'], ['oriental', 'B'], ['occidental', 'B'], ['sylvestr', 'B'], ['pratens', 'B'], ['arvens', 'B'],
   ['palustr', 'B'], ['fluviatil', 'B'], ['lacustr', 'B'], ['campestr', 'B'], ['nigricorn', 'B'], ['flavicorn', 'B'], ['tenu', 'B'], ['gracil', 'B'],
-  ['agil', 'B'], ['virid', 'B'], ['lugubr', 'B'], ['nobil', 'B'], ['mirabil', 'B'], ['moll', 'B'], ['brev', 'B'], ['grand', 'B'], ['saltator', 'B'],
+  ['agil', 'B'], ['virid', 'B'], ['lugubr', 'B'], ['nobil', 'B'], ['mirabil', 'B'], ['moll', 'B'], ['brev', 'B'], ['grand', 'B'], ['saltatori', 'A'],
   ['flavipes', 'X'], ['rufipes', 'X'], ['longipes', 'X'], ['nigripes', 'X'], ['albipes', 'X'], ['elegans', 'X'], ['nitens', 'X'], ['splendens', 'X'],
   ['virens', 'X'], ['lucens', 'X'], ['rutilans', 'X'], ['fulgens', 'X'], ['repens', 'X'], ['nigricans', 'X'], ['albicans', 'X'], ['flavescens', 'X'],
   ['rufescens', 'X'], ['minor', 'M'], ['major', 'M'],
 ];
 // epithets built from the genus syllable table: lowercase prefix + tail
 const EPITHET_TAIL = [['pter', 'A'], ['som', 'A'], ['cephal', 'A'], ['dactyl', 'A'], ['not', 'A'], ['pus', 'X'], ['gnath', 'A'], ['cer', 'A']];
+// the epithet in agreement with the genus gender (m / f / n)
+function declineEpithet(stem, cls, gender) {
+  if (cls === 'A') return stem + (gender === 'm' ? 'us' : gender === 'f' ? 'a' : 'um');
+  if (cls === 'B') return stem + (gender === 'n' ? 'e' : 'is');
+  if (cls === 'M') return gender === 'n' ? stem.slice(0, -2) + 'us' : stem;   // minor -> minus, major -> majus
+  return stem;
+}
+// every stem x gender the namer can produce, exported read-only for tests/names.js; a tail stem is written '-pter'
+const EPITHETS = Object.freeze([...EPITHET, ...EPITHET_TAIL.map(([t, cls]) => ['-' + t, cls])].map(([stem, cls]) =>
+  Object.freeze({ stem, m: declineEpithet(stem.replace(/^-/, ''), cls, 'm'), f: declineEpithet(stem.replace(/^-/, ''), cls, 'f'), n: declineEpithet(stem.replace(/^-/, ''), cls, 'n') })));
 const COMMON_ADJ = ['Lesser', 'Greater', 'Banded', 'Spotted', 'Velvet', 'Marsh', 'Heath', 'Northern', 'Southern', 'Common', 'Dusky', 'Golden',
   'Striped', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Scarce', 'Brindled', 'Clouded', 'Bronze', 'Silver', 'Ruddy', 'Small',
   'Large', 'Variable', 'Four-spotted', 'Dark', 'Pale', 'Hairy', 'Black-tailed', 'White-legged', 'Emerald', 'Scarlet', 'Twin-spot', 'Chalk', 'River'];
+
+// two common-name parts repeat a stem: a word of one equals a word of the other ignoring case, or starts it when the
+// shorter has 4+ letters (tests/names.js repeatedStem states the same rule independently)
+function nameClash(a, b) {
+  const words = s => (s || '').toLowerCase().split(/[ -]+/).filter(Boolean);
+  const wb = words(b);
+  return words(a).some(x => wb.some(y => x === y || (x.length >= 4 && y.startsWith(x)) || (y.length >= 4 && x.startsWith(y))));
+}
 
 function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta.fam); a names table with famNouns takes its noun from it
   const r = mulberry32((((seed >>> 0) ^ 0x9E3779B9) >>> 0));   // private PRNG: never touches the drawing's rng
@@ -1980,12 +2000,7 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
   genus = genus.charAt(0).toUpperCase() + genus.slice(1).toLowerCase();
 
   // species epithet: either a Latin adjective or one built from the same syllable tables; agree with genus gender
-  const decline = (stem, cls) => {
-    if (cls === 'A') return stem + (gender === 'm' ? 'us' : gender === 'f' ? 'a' : 'um');
-    if (cls === 'B') return stem + (gender === 'n' ? 'e' : 'is');
-    if (cls === 'M') return gender === 'n' ? stem.slice(0, -2) + 'us' : stem;   // minor -> minus, major -> majus
-    return stem;
-  };
+  const decline = (stem, cls) => declineEpithet(stem, cls, gender);
   let species;
   if (r() < 0.25) {
     let p2 = pk(NAME_PREFIX);
@@ -1999,12 +2014,21 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
     species = decline(stem, cls);
   }
 
-  // common name: <Adjective> <Noun> [<Base>], never repeating a word
+  // common name: <Adjective> <Noun> [<Base>], never repeating a stem across the three (#29): no word equal to another
+  // ignoring case, nor the start of another when the shorter has 4+ letters ("Dark Darkling", "Blue-tailed Bluet",
+  // "Twin-spot Spotted"). The noun re-rolls as before (so a name the old guard settled keeps its noun), then is picked
+  // from the nouns that clear, and the adjective too if none does; the name PRNG is private, so this moves no drawing.
   const c = names.common;
   const adjs = c.adj || COMMON_ADJ;
   const nouns = (fam && c.famNouns && c.famNouns[fam]) || c.nouns;
+  const fits = (a, n) => !nameClash(a, n) && !nameClash(a, c.base) && !nameClash(n, c.base);
   let adj = pk(adjs), noun = pk(nouns);
-  for (let i = 0; i < 8 && (adj === noun || adj.split(/[ -]/).includes(noun) || noun.split(/[ -]/).includes(adj)); i++) noun = pk(nouns);
+  for (let i = 0; i < 8 && !fits(adj, noun); i++) noun = pk(nouns);
+  if (!fits(adj, noun)) {
+    const ok = nouns.filter(n => fits(adj, n));
+    if (ok.length) noun = pk(ok);
+    else { const pairs = adjs.flatMap(a => nouns.filter(n => fits(a, n)).map(n => [a, n])); if (pairs.length) [adj, noun] = pk(pairs); }
+  }
   const common = [adj, noun, c.base].filter(Boolean).join(' ');
 
   return { genus, species, common, binomial: genus + ' ' + species };
@@ -2375,6 +2399,9 @@ const ORDERS = {
     legThick: 0.62,
     wings: wingsOdonata,
     names: {
+      // -agrion is neuter (#29), as the ICZN-era genera built on it are: Coenagrion hastulatum / pulchellum / mercuriale,
+      // Ceriagrion tenellum, Pseudagrion microcephalum, Megalagrion pacificum. "Agrion puella" (Fabricius) is no evidence of
+      // a feminine: puella is a noun in apposition and does not agree. The dragonfly's tails share this entry's reading.
       tails: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
       common: { nouns: ['Demoiselle', 'Bluet', 'Spreadwing', 'Damsel', 'Featherleg', 'Jewelwing', 'Bluetail', 'Redtail'], base: '',
         famNouns: { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'] },   // the noun follows the drawn antenodals (#17)
@@ -4987,7 +5014,7 @@ function generatePart(seed, type, part, size) {
 }
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName, dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H };
+  module.exports = { generateInsect, generateInsectDetailed, generatePart, insectName, EPITHETS, dailySeed, brisbaneDay, hashString, mulberry32, TYPES, ORDERS, PARTS, DEVICE, SW_PX, CAPTION_H };
 }
 </script>
 
