@@ -497,8 +497,12 @@ coordinates, and the `eph*` checks of `tests/check.js` assert the rules below on
 
 - **Outline (1).** Forewing length : width 2.3–2.7 (gene `w`, width 0.37–0.44 of the length); the costa nearly straight
   (sagitta under 0.05 of the length from 0.1 of the length to the apex, `ephOutline`), the apex the costal corner, the
-  outer margin sloping back to the hind margin, deepest at `deep` 0.40–0.50 of the length. #21 still owns the apex
-  hook and the hindwing masking.
+  outer margin sloping back to the hind margin, deepest at `deep` 0.40–0.50 of the length. The apex (#21) is a
+  circular arc of radius 0.045–0.06 of the length (larger on a blunter wing, gene `sharp`) from the costa round to the
+  outer margin, its first point kept behind the costal knee so the spline cannot hook there: no outline point more than
+  0.001 of the length in front of the costal tangent (taken over 0.7–0.85 of the length) and no bend tighter than 0.03
+  of the length past 0.85 (`ephApex`). The costa's sagitta is measured from 0.1 to 0.9 of the length, where the arc
+  begins (`ephOutline`; the chord to the apex point would measure the arc).
 - **Costal field (2, 3).** Sc and R1 pre-built under the costa, each strip `sub` 0.05–0.07 of the wing's width (so they
   run nearly parallel, never more than a fifth of the local chord), Sc ending on the costa at 0.9, R1 at the apex. The
   C–Sc ladder takes `costStep` 0.020–0.026 of the length over the apical third and `costBase` 2.2–3.0 times that over
@@ -528,10 +532,17 @@ coordinates, and the `eph*` checks of `tests/check.js` assert the rules below on
   (1 − 0.25 s)); the order's own band `angBand` [90, 123] (inside the asserted 88–125), target `angle` 94–104, `lean` 0:
   each rung draws its own preferred lean, measured against its near lane's tangent, so the two leans come out about
   even (`wingStats.leans`, each at least 20% of the leaning rungs, mean junction under 110°, `ephLean`, default and
-  device plate). `gapNear` 0.2 and `reachW` 0.7 as before.
+  device plate). `gapNear` 0.2 and `reachW` 0.7 as before. Open cells (#21): a rung that cannot be placed at its
+  bisector is tried again at 0.3, 0.7, 0.15 and 0.85 of its cell (`refill`), and a far end keeps only 0.3 of a step
+  clear of the junctions already on its lane (`gapFar`; the default 0.5 left no room where the ladder on the lane's
+  other side had the same step, so whole stretches of a strip went unrunged beside crowded ones). No gap between
+  neighbouring rungs of a non-costal strip of four or more is over 3 times the strip's median gap (`ephOpen`).
 - **Hindwing (12).** Present with odds 0.8, `hindL` 0.22–0.36 of the forewing; length : width 1.6, broadest at about
   40%, with an angular costal process at 0.12 of its length and a notch behind it (Sc and R1 run under the process, not
   over it); R1 and `nH` 6–9 veins radiating from the base, so 7–10 behind Sc; the cell 1.6 times coarser (`ephHind`).
+  It is painted first, so the forewing's white fill masks it where they overlap, and every one of its veins is rooted
+  under the forewing or the thorax, so the root fan never shows (`ephMask`, #21; `meta.mayfly.paint`, and each wing's
+  `base` / `th` place it in body coordinates).
 - **Weights (11).** Sc O, R1 D (O on a `heavy` wing), Rs / MA / MP and their branches D, one level heavier before their
   first fork (CuA and CuP before their first veinlet); otherwise CuA, CuP, the anals, intercalaries, veinlets and rungs F.
 
@@ -615,7 +626,9 @@ to its `deflect` step:
   own band (`angBand`; the mayfly's [90, 123], #59) and `lean` 0, under which each rung draws its own preferred lean
   (measured against its near lane's tangent) instead of the order-wide one; `wingStats.leans` counts the rungs
   leaning more than 3° each way. `walls` (per lane pair, span fractions) add ladder stops, so a strip changes step
-  there (the mayfly's costal field).
+  there (the mayfly's costal field). `refill` retries a ladder rung that fails at its bisector further along its
+  cell (0.3, 0.7, 0.15, 0.85; one drop counted if every try fails) and `gapFar` sets the far end's junction clearance
+  in steps (default 0.5 with `evenSites`, else 0.35); the mayfly passes `refill` and `gapFar` 0.3 (#21).
 - **Open apex** (R-F): joins stop at `uOpen`; a stub lane is cut `stubLen` past its last junction and
   drawn at `SW.F` from there.
 - **Weight** (R-G): stems `SW.O` (Sc+R, M+Cu to its fork), named branches `SW.D`, A and
@@ -774,6 +787,15 @@ apically, the marginal intercalaries and the cubital veinlets read as on the ref
 square, leaning both ways. Weaker than the reference: the cubital and anal field carries fewer rungs (its strips are
 wide and the ladder stays one row); Sc can still merge into the costa in short stretches where the lane floor holds
 them apart (#14); the forked costal cells are not drawn (see above). #21 owns the apex hook and the hindwing masking.
+
+Audit of 2026-10-15 (#21), Ephemeroptera against `eph-ameletus-li2021` (4× zooms beside the reference, the audit's
+evidence seeds and nine random seeds before and after, on `evidence/ticket-21`): the apex is a smooth curve with the
+costa running down into it (the hook at 0.95–0.96 of the length, up to 0.0075 of the length in front of the costal
+tangent, is gone); the hindwing lies under the forewing (already so since #59; now asserted); the fan's stems leave
+the base a strip apart (#59), so no root convergence; open cells beside crowded ones are gone from the long strips
+(worst gap over the median 3.8 median plate, 7.3 worst, before; about 1.6 and 2.5 after). The fore coxa (a body rule,
+`ORDERS.mayfly.foreCoxa`) now sits on the prothorax behind the head (`ephForeleg`). Still weaker than the reference:
+the central field between MA and MP carries few rungs where its strips are short.
 
 ## Sequencing
 

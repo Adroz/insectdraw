@@ -45,10 +45,14 @@ const RUNG_BAND = { mayfly: [88, 125] }, RUNG_BAND_ALL = [100, 145];
 // rungs and the mean junction angle at most meanMax (9); hind: the hindwing's length over the forewing's (12, 0.33), its
 // length over width, the veins behind Sc (R1 and the radiating veins), and the costal process: the costal edge's peak
 // between proc[0] and proc[1] of the length with a notch behind it at least notch of the length deep
-const EPH = { aspect: [2.2, 2.9], apex: 0.35, deep: [0.35, 0.55], sag: 0.05, sagFrom: 0.1, ends: [12, 16], stems: [5, 7], stemAt: 0.08, stemGap: 0.012,
+const EPH = { aspect: [2.2, 2.9], apex: 0.35, deep: [0.35, 0.55], sag: 0.05, sagFrom: 0.1, sagTo: 0.9, ends: [12, 16], stems: [5, 7], stemAt: 0.08, stemGap: 0.012,
   forks: 3, forkMax: 0.55, cost: 1.5, marg: [3, 0.2], margFrom: 0.45, margRung: 0.5, cub: [4, 7], cubEnd: 0.5, cubBow: 0.03, lean: 0.2, meanMax: 110,
-  hind: { len: [0.2, 0.38], aspect: [1.3, 2.0], veins: [7, 10], proc: [0.05, 0.3], notch: 0.02 } };
-const ephSeen = { ephOutline: 0, ephFan: 0, ephCostal: 0, ephMarginal: 0, ephCubital: 0, ephLean: 0, ephHind: 0, ephLanes: 0 };   // mayfly plates each #59 check asserted on, for POST.ephSeen
+  hind: { len: [0.2, 0.38], aspect: [1.3, 2.0], veins: [7, 10], proc: [0.05, 0.3], notch: 0.02 },
+  // #21: the apex (no outline point more than apexOver of the length in front of the costal tangent taken over 0.7-0.85 of
+  // the length; the tightest bend past 0.85 a circle of at least apexR of the length through points apexArc either side);
+  // open cells (no gap between neighbouring rungs of a strip more than `open` times the strip's median gap)
+  apexOver: 0.001, apexR: 0.03, apexArc: 0.015, open: 3, openMin: 4 };
+const ephSeen = { ephOutline: 0, ephFan: 0, ephCostal: 0, ephMarginal: 0, ephCubital: 0, ephLean: 0, ephHind: 0, ephLanes: 0, ephApex: 0, ephMask: 0, ephForeleg: 0, ephOpen: 0 };   // mayfly plates each #59 / #21 check asserted on, for POST.ephSeen
 let ephSeenPlates = 0, ephHindPlates = 0;   // mayfly plates (with a hindwing) in the run, counted by the seed loop whichever checks are selected
 const EPH_MIN = 20;   // mayfly plates a run needs before a #59 check that never ran fails rather than being reported
 // geometry for the #59 checks (wing-local polylines)
@@ -540,6 +544,7 @@ const PRE = {
       if (o.legThick !== undefined && !(typeof o.legThick === 'number' && o.legThick > 0)) f('legThick is not a positive factor: ' + o.legThick);
       if (o.elytra !== undefined && (!o.elytra || !o.elytra.styles || !range2(o.elytra.pitch) || !range2(o.elytra.dash) || Object.values(o.elytra.fams || {}).some(e => e.len !== undefined && !range2(e.len)))) f('elytra is not { styles, pitch: [min, max], dash: [min, max], fams?: { fam: { len?: [min, max], truncate?, outlines?, square? } } }');
       if (o.pronotum !== undefined && (!o.pronotum || !range2(o.pronotum.wl) || !range2(o.pronotum.ely))) f('pronotum is not { wl: [min, max], ely: [min, max] }: ' + JSON.stringify(o.pronotum));
+      if (o.foreCoxa !== undefined && !(o.foreCoxa && o.foreCoxa.clear >= 0 && typeof o.foreCoxa.dir === 'number')) f('foreCoxa is not { clear >= 0, dir (degrees) }: ' + JSON.stringify(o.foreCoxa));
       if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
       // #51: or named sets { name: { w, fw, hw } } with abdWing, the family's sets replacing the order's
       const setsBad = w => !w.sets || !range2(w.abdWing) || Object.values(w.sets).some(v => !(v.w > 0) || !range2(v.fw) || !range2(v.hw));
@@ -1478,7 +1483,7 @@ const CHECKS = {
     }
   },
   // #59 forewing outline (1): about 2.5 times as long as wide, the apex the costal corner, the hind margin deepest near
-  // 45% of the length, the costa nearly straight from near the base to the apex
+  // 45% of the length, the costa nearly straight from near the base to where the apex rounds off (#21)
   ephOutline(meta, svg, fail) {
     if (meta.type !== 'mayfly') return;
     ephSeen.ephOutline++;
@@ -1489,9 +1494,11 @@ const CHECKS = {
     if (Lx / W < EPH.aspect[0] || Lx / W > EPH.aspect[1]) fail('mayfly forewing length to width ' + (Lx / W).toFixed(2) + ' outside ' + EPH.aspect.join('-'));
     if ((apex[1] - yT) / W > EPH.apex) fail('mayfly forewing apex not at the costal corner: ' + ((apex[1] - yT) / W).toFixed(2) + ' of the width behind the front (max ' + EPH.apex + ')');
     if (lowest[0] / Lx < EPH.deep[0] || lowest[0] / Lx > EPH.deep[1]) fail('mayfly hind margin deepest at ' + (lowest[0] / Lx).toFixed(2) + ' of the length (want ' + EPH.deep.join('-') + ')');
-    const x0 = EPH.sagFrom * Lx, y0 = Math.min(...outlineYs(P, x0));
+    // the costa from sagFrom to sagTo of the length, where the rounded apex (#21) begins: the chord to the apex point
+    // itself would measure the apex's curve, which lies off the costa's line by design
+    const x0 = EPH.sagFrom * Lx, y0 = Math.min(...outlineYs(P, x0)), x1 = EPH.sagTo * Lx, y1 = Math.min(...outlineYs(P, x1));
     let sag = 0;
-    for (let k = 1; k < 40; k++) { const x = lerp(x0, apex[0], k / 40), ys = outlineYs(P, x); if (!ys.length) continue; sag = Math.max(sag, Math.abs(Math.min(...ys) - lerp(y0, apex[1], k / 40))); }
+    for (let k = 1; k < 40; k++) { const x = lerp(x0, x1, k / 40), ys = outlineYs(P, x); if (!ys.length) continue; sag = Math.max(sag, Math.abs(Math.min(...ys) - lerp(y0, y1, k / 40))); }
     if (sag / Lx > EPH.sag) fail('mayfly costa domed: ' + (sag / Lx).toFixed(3) + ' of the length off its chord (max ' + EPH.sag + ')');
   },
   // #59 the fan (4, 6): a few stems a strip apart at the base, branches forking off them in the basal half, 12-16 vein ends
@@ -1579,6 +1586,77 @@ const CHECKS = {
       const [a, b] = s.leans, n = a + b;
       if (!n || Math.min(a, b) < EPH.lean * n) fail(what + 'mayfly rungs lean one way: ' + a + ' / ' + b);
       if (s.meanAngle > EPH.meanMax) fail(what + 'mayfly rungs not near-perpendicular: mean junction ' + s.meanAngle.toFixed(1) + ' (max ' + EPH.meanMax + ')');
+    }
+  },
+  // #21 a smooth rounded apex: the costa runs into the apex without a hook or spur (no outline point in front of the costal
+  // tangent) and the apex is a curve, not a point
+  ephApex(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephApex++;
+    const f = meta.mayfly && meta.mayfly.fore;
+    if (!f) return fail('mayfly plate has no meta.mayfly.fore');
+    const P = f.outline, n = P.length, Lx = Math.max(...P.map(p => p[0])), top = x => Math.min(...outlineYs(P, x));
+    const xa = 0.7 * Lx, xb = 0.85 * Lx, ya = top(xa), yb = top(xb);
+    let over = 0, at = 0;
+    for (const p of P) if (p[0] > xb) { const d = ya + (yb - ya) * (p[0] - xa) / (xb - xa) - p[1]; if (d > over) { over = d; at = p[0]; } }
+    if (over > EPH.apexOver * Lx) fail('mayfly forewing apex hooks ' + (over / Lx).toFixed(4) + ' of the length in front of the costal tangent at ' + (at / Lx).toFixed(3) + ' (max ' + EPH.apexOver + ')');
+    const step = (i, dir) => { let j = i, d = 0; while (d < EPH.apexArc * Lx) { const k = (j + dir + n) % n; d += Math.hypot(P[k][0] - P[j][0], P[k][1] - P[j][1]); j = k; } return P[j]; };
+    let rMin = Infinity, rAt = 0;
+    for (let i = 0; i < n; i++) {
+      const b = P[i]; if (b[0] < xb) continue;
+      const a = step(i, -1), c = step(i, 1), cr = Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0]));
+      const r = cr ? Math.hypot(b[0] - c[0], b[1] - c[1]) * Math.hypot(a[0] - c[0], a[1] - c[1]) * Math.hypot(a[0] - b[0], a[1] - b[1]) / (2 * cr) : Infinity;
+      if (r < rMin) { rMin = r; rAt = b[0]; }
+    }
+    if (rMin < EPH.apexR * Lx) fail('mayfly forewing apex pointed: bend radius ' + (rMin / Lx).toFixed(4) + ' of the length at ' + (rAt / Lx).toFixed(3) + ' (min ' + EPH.apexR + ')');
+  },
+  // #21 the hindwing lies under the forewing: painted first (the forewing's white fill masks it, so no hindwing vein shows
+  // across a forewing rung), and every one of its veins rooted under the forewing or the thorax (the root fan never shows)
+  ephMask(meta, svg, fail) {
+    if (meta.type !== 'mayfly' || !(meta.mayfly && meta.mayfly.hind)) return;
+    ephSeen.ephMask++;
+    const { fore: f, hind: h, paint } = meta.mayfly;
+    if (!paint || paint.indexOf('hind') < 0 || paint.indexOf('hind') > paint.indexOf('fore')) return fail('mayfly hindwing not painted under the forewing: ' + JSON.stringify(paint));
+    if (!f.base || !h.base) return fail('mayfly wings carry no base / th on meta.mayfly');
+    const T = w => p => { const a = w.th * Math.PI / 180; return [w.base[0] + p[0] * Math.cos(a) - p[1] * Math.sin(a), w.base[1] + p[0] * Math.sin(a) + p[1] * Math.cos(a)]; };
+    const fo = f.outline.map(T(f)), hidden = p => inPoly(p, fo) || Math.abs(p[0]) <= profHw(meta.thorax.profile, p[1]);
+    for (const l of h.lanes) {
+      const p = T(h)(l.pl[0]);
+      if (!hidden(p)) return fail('mayfly hindwing vein ' + l.id + ' rooted in the open at ' + p.map(v => v.toFixed(1)) + ', not under the forewing or the thorax');
+    }
+  },
+  // #21 the fore coxa sits on the prothorax below the head: the leg is rooted between the thorax front and the forewing
+  // root, its femur starts behind the head, and it comes out from under the body behind the head (not beside the eyes,
+  // where a long foreleg held forward reads as an antenna); right leg and its skewed left copy
+  ephForeleg(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephForeleg++;
+    const leg = meta.legs && meta.legs.find(l => l.pair === 'front');
+    if (!leg) return fail('mayfly plate has no front leg on meta.legs');
+    const hb = Math.max(...meta.head.outline.map(p => p[1])), th = meta.thorax, yF = th.yTop + th.wingRoots[0] * (th.yBot - th.yTop);
+    const r = leg.pts[0];
+    if (r[1] < th.yTop || r[1] > yF) fail('mayfly fore coxa rooted at y ' + r[1].toFixed(1) + ', off the prothorax (' + th.yTop.toFixed(1) + '-' + yF.toFixed(1) + ')');
+    for (const [pts, side] of [[leg.pts, 'right'], [skewedPts(leg), 'left']]) {
+      if (pts[2][1] < hb) { fail('mayfly ' + side + ' fore femur starts beside the head: y ' + pts[2][1].toFixed(1) + ' ahead of the head\'s back ' + hb.toFixed(1)); continue; }
+      let e = null;
+      for (let i = 0; i + 1 < pts.length && !e; i++) { const a = pts[i], b = pts[i + 1], k = Math.max(1, Math.ceil(Math.hypot(b[0] - a[0], b[1] - a[1]) / 0.25)); for (let q = 0; q <= k; q++) { const p = [a[0] + (b[0] - a[0]) * q / k, a[1] + (b[1] - a[1]) * q / k]; if (!inPoly(p, meta.head.outline) && Math.abs(p[0]) > profHw(th.profile, p[1])) { e = p; break; } } }
+      if (e && e[1] < hb) fail('mayfly ' + side + ' foreleg comes out from under the body beside the head: y ' + e[1].toFixed(1) + ' (head back ' + hb.toFixed(1) + ')');
+    }
+  },
+  // #21 no open cell beside crowded ones: in every forewing strip of openMin rungs or more (the costal strip excepted: it
+  // is sparse over the basal half by design, #59), no two neighbouring rungs more than `open` times the strip's median gap apart
+  ephOpen(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephOpen++;
+    const f = meta.mayfly && meta.mayfly.fore;
+    if (!f) return fail('mayfly plate has no meta.mayfly.fore');
+    const by = {};
+    for (const j of f.joins) if (j[0] !== 'C' && j[1] !== 'C') (by[j[0] + '|' + j[1]] ||= []).push(j[2]);
+    for (const k in by) {
+      const u = by[k].sort((a, b) => a - b); if (u.length < EPH.openMin) continue;
+      const g = []; for (let i = 1; i < u.length; i++) g.push(u[i] - u[i - 1]);
+      const med = g.slice().sort((a, b) => a - b)[g.length >> 1], i = g.indexOf(Math.max(...g));
+      if (g[i] > EPH.open * med) return fail('mayfly open cell in strip ' + k + ': rungs at ' + u[i].toFixed(3) + ' and ' + u[i + 1].toFixed(3) + ', ' + (g[i] / med).toFixed(1) + 'x the strip\'s median gap (max ' + EPH.open + ')');
     }
   },
   // #59 hindwing (12): about a third of the forewing, a rounded oval with an angular costal process near the base, 7-10
@@ -2200,9 +2278,9 @@ const POST = {
   // the #26 checks assert only on cicada plates: once the run has CIC_MIN of them every selected one must have run
   // the #59 checks assert only on mayfly plates: once the run has EPH_MIN of them every selected one must have run
   ephSeen(fail) {
-    const n = ephSeenPlates, idle = Object.keys(ephSeen).filter(k => ran.has(k) && !ephSeen[k] && (k !== 'ephHind' || ephHindPlates));
-    if (idle.length && n >= EPH_MIN) fail('#59 mayfly checks that never ran in ' + n + ' mayfly plates: ' + idle.join(', '));
-    console.log('#59 mayfly checks asserted on (of ' + n + ' mayfly plates):', Object.keys(ephSeen).filter(k => ran.has(k)).map(k => k + ' ' + ephSeen[k]).join(', ') +
+    const n = ephSeenPlates, idle = Object.keys(ephSeen).filter(k => ran.has(k) && !ephSeen[k] && (!['ephHind', 'ephMask'].includes(k) || ephHindPlates));
+    if (idle.length && n >= EPH_MIN) fail('#59 / #21 mayfly checks that never ran in ' + n + ' mayfly plates: ' + idle.join(', '));
+    console.log('#59 / #21 mayfly checks asserted on (of ' + n + ' mayfly plates):', Object.keys(ephSeen).filter(k => ran.has(k)).map(k => k + ' ' + ephSeen[k]).join(', ') +
       (n < EPH_MIN ? '; too few mayfly plates (' + n + ' < ' + EPH_MIN + ') to require every check' : ''));
   },
   cicSeen(fail) {

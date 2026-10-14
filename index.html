@@ -1718,7 +1718,7 @@ function growVeins(g, G) {
     const bow = o.bow === undefined ? randRange(-0.03, 0.03) : o.bow;
     if (lean === 0 && !o.ang) o = Object.assign({}, o, { pref: rng() < 0.5 ? 1 : -1 });   // no order-wide lean: each rung prefers one, either way (the mayfly, #59)
     const best = bestPlacement(la, A, dA, lb, xb, reach, o, bow);
-    if (!best) { stats.dropped++; return null; }
+    if (!best) { if (!o.retry) stats.dropped++; return null; }   // o.retry: the ladder tries this rung again further along (G.refill) and counts one drop if every try fails
     drawPl(best.pl, o.sw, { ends: [la, lb], named: !!o.named }); lastPl = best.pl;
     stats.joins++;
     if (!o.ang) { stats.rungs++; stats.angSum += best.aA + best.aB; stats.minAngle = Math.min(stats.minAngle, best.aA, best.aB); stats.maxAngle = Math.max(stats.maxAngle, best.aA, best.aB);
@@ -1803,19 +1803,26 @@ function growVeins(g, G) {
     // than ~1.5 spacings stays one cell (with G.evenSites the sites divide the interval evenly instead). Returns the
     // number of rungs placed.
     const ladder = (ua, ub) => {
-      const sites = [], before = stats.joins, gapK = G.evenSites ? 0.5 : 0.35, gapA = G.gapNear === undefined ? gapK : G.gapNear;   // gapNear: clearance of a rung's near end from the junctions the lane already carries (ladder-everywhere orders share every lane between two strips, so they pass a small one)
+      const sites = [], before = stats.joins, gapK = G.gapFar !== undefined ? G.gapFar : G.evenSites ? 0.5 : 0.35, gapA = G.gapNear === undefined ? gapK : G.gapNear;   // gapNear: clearance of a rung's near end from the junctions the lane already carries (ladder-everywhere orders share every lane between two strips, so they pass a small one)
       if (G.evenSites) {   // mesh orders: the sites divide the interval evenly (Hoffmann's evenly spaced centres), so no cell is much longer than its neighbours
         const len = (ub - ua) * Lw, n = Math.max(1, Math.min(Math.round(len / sp((ua + ub) / 2)), siteMin ? Math.floor(0.8 * len / siteMin) : Infinity));   // siteMin: no two sites closer (each moves at most a tenth of the step)
         for (let i = 0; i < n; i++) sites.push(lerp(ua, ub, (i + 0.5) / n) + (ub - ua) / n * randRange(-0.1, 0.1));
       } else for (let u = ua + 0.5 * sp(ua) / Lw * jitter(0.3); u < ub - 0.35 * sp(u) / Lw; u += sp(u) / Lw * jitter(0.25)) sites.push(u);
       if (cell) for (let i = 0; i + 1 < sites.length; i++) stats.cellMin = Math.min(stats.cellMin, (sites[i + 1] - sites[i]) * Lw);
+      // G.refill (the mayfly, #21): a rung that cannot be placed at the bisector (next to a junction, or no in-band far
+      // end) is tried again further along its cell, so a strip never keeps an open cell beside crowded ones
+      const tries = G.refill ? [0.5, 0.3, 0.7, 0.15, 0.85] : [0.5];
       for (let i = 0; i + 1 < sites.length; i++) {   // the Voronoi edge between two consecutive sites, clipped to the lanes
-        const um = (sites[i] + sites[i + 1]) / 2, spx = sp(um), t = at2(um);
-        if (!t) continue;
-        const P = lerpP(t.ha.p, t.hb.p, 0.5), dir = perp(norm(add(t.ha.d, t.hb.d)));
-        const hA = hitPl(a.pl, P, dir) || t.ha, hB = hitPl(b.pl, P, dir) || t.hb;
-        if (!junctionOK(a, hA.p[0], gapA * spx)) continue;
-        place(a, hA.p, hA.d, b, hB.p[0], Math.max(spx, (G.reachW || 0) * t.w), { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw });   // reachW: the slide also grows with the strip width, so a rung across a wide strip can still lean into the band
+        let placed = false;
+        for (const f of tries) {
+          const um = lerp(sites[i], sites[i + 1], f), spx = sp(um), t = at2(um);
+          if (!t) continue;
+          const P = lerpP(t.ha.p, t.hb.p, 0.5), dir = perp(norm(add(t.ha.d, t.hb.d)));
+          const hA = hitPl(a.pl, P, dir) || t.ha, hB = hitPl(b.pl, P, dir) || t.hb;
+          if (!junctionOK(a, hA.p[0], gapA * spx)) continue;
+          if (place(a, hA.p, hA.d, b, hB.p[0], Math.max(spx, (G.reachW || 0) * t.w), { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw, retry: tries.length > 1 })) { placed = true; break; }   // reachW: the slide also grows with the strip width, so a rung across a wide strip can still lean into the band
+        }
+        if (!placed && tries.length > 1) stats.dropped++;
       }
       return stats.joins - before;
     };
@@ -2810,6 +2817,7 @@ const ORDERS = {
     wingRoots: [0.45, 0.78],
     wingRootX: 0.8,
     legThick: 0.72,
+    foreCoxa: { clear: 3, dir: 10 },   // #21: the fore coxa on the prothorax behind the head, pointing out and a little back (drawLegs)
     wings: wingsEphemeroptera,
     names: {
       tails: [['phlebia', 'f'], ['ephemera', 'f'], ['nema', 'n'], ['baetis', 'f'], ['genia', 'f'], ['ptera', 'f'], ['neura', 'f'], ['philus', 'm'], ['bius', 'm'], ['urus', 'm'], ['cercus', 'm']],
@@ -3955,9 +3963,14 @@ function drawLegs(C) {
       basket:  [{ F: [-66, -45], tib: [-128, -100], T: [-15, -4] }, { F: [-35, -15], tib: [-110, -85], T: [-15, -4] }, { F: [-16, 2], tib: [-95, -70], T: [-18, -6] }],
     };
     const safeDirs = isOdo ? [[-60, -55, -120, -130], [-30, -25, -95, -105], [-12, -8, -75, -90]] : [[-50, -45, -105, -120], [-10, -5, 50, 70], [25, 35, 85, 100]];
-    const attachOf = g => { const y = thorax.yAt(g.t), hw = thorax.hwAt(y); return { y, hw, p: [hw - Math.min(g.inset, hw * 0.45), y] }; };
+    // order.foreCoxa (the mayfly, #21): the fore coxa on the prothorax at least `clear` behind the head's back, pointing
+    // `dir` (outward, a little back), so the femur starts behind the head and the leg comes out from under the prothorax,
+    // not beside the eyes where a long foreleg held forward reads as an antenna; no rng (the gene's t is clamped)
+    const fc = order.foreCoxa, headBack = fc ? Math.max(...meta.head.outline.map(p => p[1])) : 0;
+    const attachOf = g => { const y = fc && g === B.legs[0] ? Math.max(thorax.yAt(g.t), headBack + fc.clear) : thorax.yAt(g.t), hw = thorax.hwAt(y); return { y, hw, p: [hw - Math.min(g.inset, hw * 0.45), y] }; };
     const makeSpec = (i, dirs, lenK) => {
       const g = B.legs[i], wk = wk0 * g.wk;
+      if (fc && i === 0) dirs = [fc.dir].concat(dirs.slice(1));
       const spec = {
         dirs, lens: g.lens.map((l, k) => k === 0 ? l : l * lenK),
         widths: [[6, 5], [7 * g.swell, 5], [5, 3.2 * g.flare], [3, 1.8]].map(w => [w[0] * wk, w[1] * wk]),
@@ -5152,19 +5165,22 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
   const defs = [{ L: Lw * G.hindL, th: randRange(10, 30), t: order.wingRoots[1], hind: true }, { L: Lw, th: randRange(-22, 4), t: order.wingRoots[0], hind: false }];
   const s = G.sharp;
   const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0, leanD: 0, leanP: 0 };
-  const rec = { fore: null, hind: null };   // meta.mayfly: each wing's outline, lanes and rungs in wing-local coordinates, for tests/check.js
+  const rec = { fore: null, hind: null }, paint = [];   // meta.mayfly: each wing's outline, lanes and rungs in wing-local coordinates (base, th: makeWing's placement), and the paint order, for tests/check.js
   let foreGrown = null, nEnds = 0;
   for (const d of defs) {
     if (d.hind && !G.hasHind) continue;
     const byy = thorax.yAt(d.t), bxx = thorax.hwAt(byy) * 0.72;
     const X = f => f * d.L, Y = f => f * d.L * (d.hind ? 0.625 : G.w);   // y in widths (hindwing length : width 1.6)
+    // the apex (#21): a circular arc of radius apR (span fraction; y in widths) from the costa round to the outer margin,
+    // so the costa runs down into a rounded apex with no hook or spur; its first point kept behind the costal knee (a
+    // narrow wing with a big arc would otherwise lift it above the knee and the spline would hook there)
+    const apR = lerp(0.045, 0.06, 1 - s), apY = Math.max(0.05 + G.tipY / 4, -0.13 * G.top + 0.035 + apR * Math.sin(60 * D2R) / G.w), apexArc = [-60, -20, 20, 60].map(a => [1 - apR + apR * Math.cos(a * D2R), apY + apR * Math.sin(a * D2R) / G.w]);
     const o = d.hind
       // hindwing (12): a rounded oval broadest at about 40%, the angular costal process near the base, a notch behind it
       ? [[0, 0.03], [0.05, -0.22], [0.12, -0.5 * G.proc], [0.17, -0.3], [0.3, -0.36], [0.55, -0.44], [0.8, -0.34], [0.95, -0.14], [1, 0.06], [0.92, 0.28], [0.72, 0.46], [0.45, 0.55], [0.2, 0.45], [0.06, 0.22]].map(p => [X(p[0]), Y(p[1])])
       // forewing (1): the costa nearly straight, the apex the costal corner, the outer margin sloping back and down to
       // the hind margin, deepest at G.deep, which curves up to a narrow base
-      : [[0, 0.04], [0.03, -0.14], [0.1, -0.21 * G.top], [0.35, -0.205 * G.top], [0.65, -0.175 * G.top], [lerp(0.86, 0.9, s), -0.13 * G.top], [0.965, -0.1 * G.top + G.tipY / 2], [1, -0.04 + G.tipY],
-        [lerp(0.97, 0.985, s), 0.08], [0.9, 0.26], [0.76, 0.48], [0.6, 0.66], [G.deep, 0.77], [G.deep - 0.17, 0.68], [0.14, 0.5], [0.05, 0.24]].map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+      : [[0, 0.04], [0.03, -0.14], [0.1, -0.21 * G.top], [0.35, -0.205 * G.top], [0.65, -0.175 * G.top], [lerp(0.86, 0.9, s), -0.13 * G.top], ...apexArc, [0.9, 0.26], [0.76, 0.48], [0.6, 0.66], [G.deep, 0.77], [G.deep - 0.17, 0.68], [0.14, 0.5], [0.05, 0.24]].map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
     const wing = makeWing([bxx, byy], d.th, o, 0.9), poly = wing.localPoly, apex = tipPoint(wing), ia = poly.indexOf(apex);
     L.wings.push(pathEl(wing.path, SW.O, '#fff'));
     const g = wingGraph(wing, d.L);
@@ -5321,16 +5337,17 @@ function wingsEphemeroptera(C) {   // (type === 'mayfly')
     const costF = u => u < 0.5 ? G.costBase : u > 0.62 ? 1 : lerp(G.costBase, 1, (u - 0.5) / 0.12);
     const cellFn = (u, sMid, A, B) => (A === 'C' || B === 'C') ? d.L * G.costStep * (d.hind ? 1.5 : 1) * costF(u) : base * (1 - 0.3 * u) * (1 - 0.25 * sMid);
     const grown = growVeins(g, { lanes, named: [], forks: 0, uOpen: 1.0, k: G.k, minSep: 0.02, angle: G.angle, angBand: [90, 123], lean: 0, stubProb: 0, bowAmt: 0,
-      evenSites: true, gapNear: 0.2, reachW: 0.7, cell: cellFn, cellMin: 3.0, joinSw: SW.F, walls: { 'C|Sc': [0.5, 0.62] } });   // one-row ladders everywhere (9); every lane is shared by two ladders, so near ends need little clearance, and the slide grows with the strip
+      evenSites: true, gapNear: 0.2, gapFar: 0.3, reachW: 0.7, refill: true, cell: cellFn, cellMin: 3.0, joinSw: SW.F, walls: { 'C|Sc': [0.5, 0.62] } });   // one-row ladders everywhere (9); every lane is shared by two ladders, so near ends need little clearance, and the slide grows with the strip
     L.wings.push(...g.emit());
     L.wings.push(...costaEls(wing, X(0), apex[0]));
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle);
     S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi; S.leanD += st.leanD; S.leanP += st.leanP;
-    rec[d.hind ? 'hind' : 'fore'] = { L: d.L, outline: poly, apex, lanes: lanes.filter(l => !l.noDraw).map(l => ({ id: l.id, kind: kinds[l.id], parent: l.parent || null, pl: l.pl })), joins: grown.joins.map(j => [j[0], j[1], j[2]]) };
+    paint.push(d.hind ? 'hind' : 'fore');   // the wings' paint order in the wing layer: the forewing's white fill masks the hindwing under it (#21)
+    rec[d.hind ? 'hind' : 'fore'] = { L: d.L, base: [bxx, byy], th: d.th, outline: poly, apex, lanes: lanes.filter(l => !l.noDraw).map(l => ({ id: l.id, kind: kinds[l.id], parent: l.parent || null, pl: l.pl })), joins: grown.joins.map(j => [j[0], j[1], j[2]]) };
     if (!d.hind) foreGrown = grown;
   }
-  meta.mayfly = rec;
+  meta.mayfly = Object.assign(rec, { paint });
   meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi, leans: [S.leanD, S.leanP] };
   meta.wingSig = ['eph', G.heavy ? 1 : 0, G.nRs, G.nA, nEnds, G.nCub, G.hasHind ? G.nH : 0, foreGrown.joins.length, S.multi, Math.round(G.top * 10), Math.round(G.tipY * 20), Math.round(G.sharp * 2), Math.round(G.w * 20),
     Math.round(G.cells * 4), Math.round(G.costStep * 300), Math.round(G.hindL * 20), Math.round(G.sub * 100), Math.round(G.u0i * 20)].join(',');
