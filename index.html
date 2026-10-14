@@ -195,6 +195,15 @@ function pointInPoly(p, poly) {
   }
   return inside;
 }
+// half width of a body profile sampled every 2 px ([y, hw], as meta.thorax.profile / meta.abdomen.profile hold it) at y:
+// 0 outside it, where "outside" past the last sample tolerates tol. tests/check.js reads the body the same way.
+function profHw(prof, y, tol = 0) {
+  if (!prof.length || y < prof[0][0]) return 0;
+  const last = prof[prof.length - 1];
+  if (y > last[0]) return y - last[0] < tol ? last[1] : 0;
+  const k = Math.min(prof.length - 2, Math.floor((y - prof[0][0]) / 2)), a = prof[k], b = prof[k + 1];
+  return a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 0 : (y - a[0]) / (b[0] - a[0]));
+}
 function outlineYRange(poly, x) {
   let top = Infinity, bot = -Infinity;
   for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
@@ -506,6 +515,22 @@ const ANT_POSES = {
 // shaft; tests/check.js asserts the result. antBaseW is the shaft width at the socket, the one width both blocks share.
 const ANT_CLEAR = 3, ANT_LEAN = 2;
 const antBaseW = (hw, wK) => Math.max(1.3, hw * 0.05) * wK;
+// Legs vs wings (#8, "under the wing, cleanly"): a leg joint (femur base on) keeps its half width + WING_LEG_CLEAR off every
+// wing margin, and a hidden leg keeps it under the wings everywhere (placeLegs). LEG_REPAIR is the rng-free repair search
+// for a pair that breaks the rule: (femur, tibia, coxa) direction offsets in degrees, nearest first (a femur turn costs
+// twice a tibia or coxa turn; the coxa offset adds to the femur's, the tarsus turns with the tibia).
+const WING_LEG_CLEAR = 1.5;
+const DISC16 = Array.from({ length: 16 }, (_, q) => [Math.cos(q * Math.PI / 8), Math.sin(q * Math.PI / 8)]);   // the rim points of a joint's disc (wingWhy)
+const LEG_REPAIR = (() => {
+  const c = [];
+  for (let f = -60; f <= 60; f += 5) for (let t = -120; t <= 120; t += 10) for (let x = -60; x <= 60; x += 15) c.push([f, t, x]);
+  const cost = o => 2 * Math.abs(o[0]) + Math.abs(o[1]) + Math.abs(o[2]);
+  return c.map(o => [...o, cost(o)]).sort((a, b) => a[3] - b[3] || a[0] - b[0] || a[1] - b[1] || a[2] - b[2]);
+})();
+// the repair's budget (placeLegs): the first LEG_KEEP passing poses of each pair are combined; failing that, the pairs are
+// placed depth first, hardest first, trying at most lim[depth] passing poses at each depth (each lim of LEG_DFS in turn:
+// the second lets the middle pair go as far as it must), with at most LEG_PAIR_BUDGET two-pair tests per pass
+const LEG_KEEP = 6, LEG_DFS = [[48, 400, Infinity], [48, Infinity, Infinity]], LEG_PAIR_BUDGET = 40000;
 // After a leg or wing hit the antenna pose is straightened (R-D): per reason, the known-good fallback pose and the bound
 // the re-roll walks toward (straight ahead is -90). A plume or bristle with no clear pose at full length is shortened
 // from the ANT_SHRINK.from-th attempt overall, once straightened, by `step` per attempt, never under `floor`; the
@@ -2729,8 +2754,9 @@ function drawPlate(seed, opts, dev) {
   partStart(); drawAbdomen(C); partEnd('abdomen');
   partStart(); drawThorax(C); drawHead(C); partEnd('head');
   drawTegulae(C);
-  partStart(); drawLegs(C); partEnd('legs');
+  drawLegs(C);                                          // rolls the leg pose against the body (the rng draws; draws nothing)
   partStart(); order.wings(C); partEnd('wings');
+  partStart(); placeLegs(C); partEnd('legs');           // #8: settles the pose against the wing outlines (no rng) and draws the legs
   partStart(); drawAntennae(C); partEnd('antennae');   // after the wings since #6: the pose is checked against their outlines
   return assemblePlate(C);
 }
@@ -3254,37 +3280,92 @@ function drawLegs(C) {
     };
     // Validate a pose against the body: femur tips ordered front < mid < hind along the axis, nothing on the mirror
     // line, no femur tip / tibia / tarsus inside the abdomen outline below the thorax, no two legs within a femur
-    // width of each other, and the legs alone must not push the plate scale under 0.62 (wings come later).
+    // width of each other, and the legs alone must not push the plate scale under 0.62 (wings come later; placeLegs
+    // then holds the pose to the wing rule below without rng and draws it).
     const halfW = (sp, k) => (k <= 1 ? sp.widths[0][0] : k === 2 ? sp.widths[1][0] : k === 3 ? Math.max(sp.widths[2][0], sp.widths[2][1]) : sp.widths[3][0]) / 2;   // half width of joint segment k
     // ahead of the head a leg also stays off the antenna socket by the antenna clearance (#7: ANT_CLEAR + both half
     // widths, the antenna's at its base width) plus ANT_LEAN for the lean of a near-straight shaft, or no antenna pose
     // could clear it; the odonate basket is exempt like the midline rule below (a bristle antenna beside a wide head)
     const antX = P.headW * B.ant.socket[0] + (ANT_CLEAR + ANT_LEAN) + antBaseW(P.headW, B.ant.wK) / 2;
-    const legsOk = (joints, specs) => {
-      const fy = joints.map(j => j[3][1]);
-      if (!(fy[0] < fy[1] && fy[1] < fy[2])) return 'order';
+    // #8, legs and wings ("under the wing, cleanly"): the legs are drawn under the wings' white fill and under the body,
+    // so from the femur base on, sampled every ~2 px, a pair either shows or is fully hidden. It shows when, once out, it
+    // never goes back under a wing or the body (no re-entry, no stub between two wings), its tibia tip and every later
+    // point lie outside every wing (the tibia's end and the whole tarsus show) and no joint's disc (its half width +
+    // WING_LEG_CLEAR) straddles a wing margin (no knot; a joint 1 px or more under the body is not drawn, the leg leaves the body there); it is fully hidden when no sample's disc reaches past the wings
+    // and the body (nothing pokes out). wings: right-side outlines in body coordinates (wingPolys); null skips the rule
+    // (the body-only roll, before the wings exist). tests/check.js legWings asserts the result.
+    // under the body: within the thorax or abdomen profile as meta exposes it (sampled every 2 px), so the rule and its
+    // test in tests/check.js see the same body; m: by at least m px
+    const underBody = (p, m = 0) => Math.abs(p[0]) < Math.max(profHw(meta.thorax.profile, p[1], 0.11), profHw(meta.abdomen.profile, p[1])) - m;
+    let wingBoxes = null, boxesFor = null;
+    const wingWhy = (joints, specs, wings, idx) => {
+      if (boxesFor !== wings) { boxesFor = wings; wingBoxes = wings.map(poly => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const q of poly) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); } return { poly, x0, x1, y0, y1 }; }); }
+      // W in a wing, B under the body, V visible
+      const state = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] >= w.y0 && p[1] <= w.y1 && pointInPoly(p, w.poly)) ? 'W' : underBody(p) ? 'B' : 'V';
+      const seen = s => s === 'V';
+      const discHas = (p, r, a, b = a) => {   // the disc of radius r round p (its centre and 16 points on its rim) holds a state passing a and one passing b
+        let ha = false, hb = false;
+        for (let q = -1; q < 16; q++) { const s = state(q < 0 ? p : [p[0] + r * DISC16[q][0], p[1] + r * DISC16[q][1]]); if (a(s)) ha = true; if (b(s)) hb = true; if (ha && hb) return true; }
+        return false;
+      };
+      for (const i of idx) {
+        const j = joints[i], samples = [];   // [point, the segment whose half width it takes, is a joint, the joint index it is at or before]
+        for (let k = 2; k + 1 < j.length; k++) {
+          const a = j[k], b = j[k + 1], m = Math.max(1, Math.ceil(vlen(sub(b, a)) / 2));
+          for (let q = k === 2 ? 0 : 1; q <= m; q++) samples.push([lerpP(a, b, q / m), Math.min(q === m ? k + 1 : k, j.length - 2), q === 0 || q === m, q === m ? k + 1 : k]);
+        }
+        const st = samples.map(s => state(s[0]));
+        if (!st.some(seen)) {
+          if (samples.some(s => discHas(s[0], halfW(specs[i], s[1]) + WING_LEG_CLEAR, seen))) return 'wing-poke';
+          continue;
+        }
+        let out = false;
+        for (let q = 0; q < samples.length; q++) {
+          const s = st[q], [p, k, joint, at] = samples[q];
+          if (out && s !== 'V') return 'wing-reenter';
+          if (s === 'V') out = true;
+          if (at >= 4 && s === 'W') return 'wing-stub';
+          if (joint && !underBody(p, 1) && discHas(p, halfW(specs[i], k) + WING_LEG_CLEAR, seen, x => x === 'W')) return 'wing-knot';
+        }
+      }
+      return null;
+    };
+    // the pose rules for the pairs in idx (placeLegs repairs pair by pair), the wing rule last as the dearest
+    const ALL = [0, 1, 2];
+    // socketAll: hold an odonate to the socket rule too (a repaired pose: the rolled basket is exempt, a pose turned
+    // toward the head is not, or no antenna pose could clear it)
+    const legsOk = (joints, specs, wings = null, idx = ALL, socketAll = false) => {
+      const sockExempt = isOdo && !socketAll;
+      for (let q = 0; q + 1 < idx.length; q++) if (!(joints[idx[q]][3][1] < joints[idx[q + 1]][3][1])) return 'order';
       let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-      for (const j of joints) for (const p of j) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
-      for (let i = 0; i < 3; i++) for (let k = 0; k < joints[i].length; k++) {   // nothing on the mirror line; forelegs stay apart in front of the head
+      for (const i of idx) for (const p of joints[i]) { minX = Math.min(minX, p[0]); maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
+      for (const i of idx) for (let k = 0; k < joints[i].length; k++) {   // nothing on the mirror line; forelegs stay apart in front of the head
         const p = joints[i][k], need = halfW(specs[i], Math.max(1, k)) + 2;
         if (p[0] < (p[1] < 0 && !isOdo ? Math.max(need, P.headW * 0.3) : need)) return 'midline';   // the odonate basket is tiny beside its wide head
-        if (p[1] < 0 && !isOdo && p[0] < antX + halfW(specs[i], Math.max(1, k))) return 'socket';
+        if (p[1] < 0 && !sockExempt && p[0] < antX + halfW(specs[i], Math.max(1, k))) return 'socket';
       }
-      if (!isOdo) for (let i = 0; i < 3; i++) for (let k = 2; k + 1 < joints[i].length; k++) {   // and where a segment crosses the head top
+      if (!sockExempt) for (const i of idx) for (let k = 2; k + 1 < joints[i].length; k++) {   // and where a segment crosses the head top
         const a = joints[i][k], b = joints[i][k + 1];
         if ((a[1] < 0) !== (b[1] < 0) && lerpP(a, b, (0 - a[1]) / (b[1] - a[1]))[0] < antX + halfW(specs[i], k)) return 'socket';
       }
-      for (let i = 0; i < 3; i++) for (let k = 3; k + 1 < joints[i].length; k++) {
-        const j = joints[i], a = j[k], b = j[k + 1], n = Math.max(1, Math.ceil(vlen(sub(b, a)) / 3)), m = halfW(specs[i], k) + 3.5;
-        for (let q = 0; q <= n; q++) { const p = lerpP(a, b, q / n); if (p[1] > thorax.yBot + 1 && p[0] < abdomen.hwAt(p[1]) + m) return 'abdomen'; }
+      for (const i of idx) for (let k = 3; k + 1 < joints[i].length; k++) {
+        const j = joints[i], a = j[k], b = j[k + 1], m = Math.max(1, Math.ceil(vlen(sub(b, a)) / 3)), mg = halfW(specs[i], k) + 3.5;
+        for (let q = 0; q <= m; q++) { const p = lerpP(a, b, q / m); if (p[1] > thorax.yBot + 1 && p[0] < abdomen.hwAt(p[1]) + mg) return 'abdomen'; }
       }
-      for (let a = 0; a < 3; a++) for (let b = a + 1; b < 3; b++)
-        for (let k = 2; k + 1 < joints[a].length; k++) for (let m = 2; m + 1 < joints[b].length; m++)   // femur onward; coxae and trochanters sit under the thorax
-          if (segDist(joints[a][k], joints[a][k + 1], joints[b][m], joints[b][m + 1]) < halfW(specs[a], k) + halfW(specs[b], m) + 2.5) return 'cross';
+      for (let qa = 0; qa < idx.length; qa++) for (let qb = qa + 1; qb < idx.length; qb++) {
+        const a = idx[qa], b = idx[qb];
+        for (let k = 2; k + 1 < joints[a].length; k++) for (let m = 2; m + 1 < joints[b].length; m++) {   // femur onward; coxae and trochanters sit under the thorax
+          const a0 = joints[a][k], a1 = joints[a][k + 1], b0 = joints[b][m], b1 = joints[b][m + 1], t = halfW(specs[a], k) + halfW(specs[b], m) + 2.5;
+          if (Math.min(a0[0], a1[0]) - Math.max(b0[0], b1[0]) >= t || Math.min(b0[0], b1[0]) - Math.max(a0[0], a1[0]) >= t ||
+              Math.min(a0[1], a1[1]) - Math.max(b0[1], b1[1]) >= t || Math.min(b0[1], b1[1]) - Math.max(a0[1], a1[1]) >= t) continue;   // boxes apart by t: so are the segments
+          if (segDist(a0, a1, b0, b1) < t) return 'cross';
+        }
+      }
       const W = 2 * Math.max(maxX + 6, P.abdW / 2, P.thoraxW / 2, P.headW / 2) + 2 * 24, H = Math.max(maxY + 6, abdomen.yBot + 10) - Math.min(minY - 6, -10) + 2 * 24;
       if (Math.min(552 / W, 507 / H) < 0.62) return 'fit';
-      return null;
+      return wings ? wingWhy(joints, specs, wings, idx) : null;
     };
+    // the pose roll, against the body only (the wings are drawn after it, and its draws keep their place in the stream)
     let specs, joints, why = null, lenK = 1, pose = B.pose, attempt = 0;
     const reasons = [];
     for (; attempt < 48; attempt++) {
@@ -3299,40 +3380,124 @@ function drawLegs(C) {
       reasons.push(why);
       if (why === 'fit') lenK *= 0.92;   // long-legged family on a long body: clamp the splay rather than the plate scale
     }
-    // mirror skew: the left legs are the right legs rotated about their coxae (each pair its own angle) and then mirrored.
-    // The rotated set must pass every rule the right side passed (midline, abdomen, crossings, fit): as rolled, else with
-    // every angle reversed, else no skew.
-    const pivots = B.legs.map(g => attachOf(g).p);
-    const rotAbout = (p, c, deg) => add(c, rot(sub(p, c), deg * D2R));
-    let skewK = 1;   // 1 as rolled, -1 the other way round, 0 none: the realised skew stays in 2-6 degrees or is dropped
-    for (const kTry of [1, -1, 0]) {
-      skewK = kTry;
-      const rj = joints.map((j, i) => j.map(p => rotAbout(p, pivots[i], B.legs[i].skew * skewK)));
-      if (!legsOk(rj, specs)) break;
-    }
-    const skews = B.legs.map(g => g.skew * skewK);
-    for (let i = 0; i < 3; i++) for (const p of joints[i]) { const q = rotAbout(p, pivots[i], skews[i]); bb(q); bb([q[0] + 5, q[1] + 5]); bb([q[0] - 5, q[1] - 5]); }   // the rotated copy may reach further than the right side
-    meta.legSkew = skews;
-    meta.legRoll = { attempts: attempt + 1, pose, why, lenK, reasons, skewK };
-    B.sig.push(pose, ...specs.map(sp => Math.round(sp.dirs[1] / 12) + ':' + Math.round((sp.dirs[2] - sp.dirs[1]) / 12)));
-    const legMeta = [];
-    L.legPairs = [];
-    for (let i = 2; i >= 0; i--) {     // hind first so front overlaps
-      const at = attachOf(B.legs[i]);
-      const els = legEls(at.p, specs[i], legMeta);
-      L.legs.push(...els);
-      L.legPairs.push({ els, pivot: at.p, skew: skews[i] });
-      const lm = legMeta[legMeta.length - 1];
-      lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3]; lm.skew = skews[i]; lm.pivot = at.p;
-      lm.femW = specs[i].widths[1][0]; lm.femLen = specs[i].lens[1];
-      lm.segHw = joints[i].slice(0, -1).map((_, k) => halfW(specs[i], k));   // half width of segment k -> k+1, for the antenna clearance rule (#7) and tests/check.js
-    }
-    legMeta.reverse();   // front, mid, hind
-    meta.legs = legMeta;
+    // after the wings (placeLegs), without rng. The wing rule is per pair, so each pair gets its own list of passing
+    // poses, nearest first: as rolled (cost 0), then LEG_REPAIR offsets from its rolled dirs, then (when those run out of
+    // budget) the same offsets from the safe pose and from the middle of every pose family's range, ranked after the
+    // rolled dirs. The combination of one pose per pair with the least total cost that passes the joint rules (order,
+    // crossings, fit) is drawn; the lists grow while none does. With no combination the pose stays as rolled
+    // (legRoll.wingWhy says why, and tests/check.js legWings fails it).
+    const PAIR = ['front', 'mid', 'hind'];
+    const repair = wings => {
+      const mid = r => (r[0] + r[1]) / 2;
+      const famDirs = R => { const F = mid(R.F), tib = R.tib ? mid(R.tib) : F + mid(R.fold); return [F - 7, F, tib, tib + mid(R.T)]; };
+      const lists = [0, 1, 2].map(i => {
+        const bases = [specs[i].dirs, B.legs[i].safe || safeDirs[i], ...(B.legs[i].ang ? [famDirs(B.legs[i].ang)] : []), ...Object.keys(LEG_POSES).map(k => famDirs(LEG_POSES[k][i]))];
+        return { i, bases, bi: 0, k: 0, done: false, poses: [] };
+      });
+      const grow = (L, want) => {   // add passing poses to L until it holds want or its search is spent
+        const at = attachOf(B.legs[L.i]).p, S = [], J = [];
+        while (L.poses.length < want && !L.done) {
+          if (L.k >= LEG_REPAIR.length) { L.bi++; L.k = 0; if (L.bi >= L.bases.length) { L.done = true; break; } }
+          const o = LEG_REPAIR[L.k++], b = L.bases[L.bi];
+          S[L.i] = makeSpec(L.i, [b[0] + o[0] + o[2], b[1] + o[0], b[2] + o[1], b[3] + o[1]], lenK);
+          J[L.i] = legJoints(at, S[L.i]);
+          if (!legsOk(J, S, wings, [L.i], o[3] + L.bi > 0)) L.poses.push({ spec: S[L.i], joints: J[L.i], cost: o[3] + L.bi * 1000, label: (L.bi ? 'base ' + L.bi + ' ' : '') + o.slice(0, o[2] ? 3 : 2).join('/') });
+        }
+      };
+      // two poses of different pairs that may stand together (femur tips in order, no crossing; each has passed legsOk on
+      // its own), cached by pose id; LEG_PAIR_BUDGET of them at most per plate
+      const pairMemo = new Map();
+      let pairTests = 0, nextId = 0;
+      const pairOk = (a, b) => {   // a, b: poses of pairs a.i < b.i
+        const key = a.id + ',' + b.id;
+        let ok = pairMemo.get(key);
+        if (ok === undefined) { pairTests++; const J = [], S = []; J[a.i] = a.joints; S[a.i] = a.spec; J[b.i] = b.joints; S[b.i] = b.spec; ok = !legsOk(J, S, null, [a.i, b.i]); pairMemo.set(key, ok); }
+        return ok;
+      };
+      const poseAt = (L, n) => { if (L.poses.length <= n) grow(L, n + 1); const p = L.poses[n]; if (p && p.id === undefined) { p.id = nextId++; p.i = L.i; } return p; };
+      const settle = (cb, first = -1) => { for (let i = 0; i < 3; i++) { specs[i] = cb[i].spec; joints[i] = cb[i].joints; } return cb.map((p, i) => p.cost || i === first ? PAIR[i] + ' ' + p.label + (i === first ? ' (placed first)' : '') : null).filter(Boolean); };
+      const passes = cb => !legsOk(cb.map(p => p.joints), cb.map(p => p.spec));
+      // 1. the cheapest passing combination of each pair's first pose (the pose as rolled, when it passes), then of each
+      // pair's first LEG_KEEP
+      for (const keep of [1, LEG_KEEP]) {
+        for (const L of lists) for (let n = 0; n < keep; n++) poseAt(L, n);
+        const combos = [];
+        for (const a of lists[0].poses) for (const b of lists[1].poses) if (pairOk(a, b)) for (const c of lists[2].poses) if (pairOk(b, c) && pairOk(a, c)) combos.push([a, b, c]);
+        combos.sort((x, y) => (x[0].cost + x[1].cost + x[2].cost) - (y[0].cost + y[1].cost + y[2].cost));
+        for (const cb of combos) if (passes(cb)) return settle(cb);
+      }
+      // 2. a pair with little room (an earlier pair's nearest poses take it) is placed first: depth first, the pair with
+      // the fewest passing poses per offset tried first, each later pair taking its nearest pose that stands with the
+      // ones chosen (its list grown as far as it must go)
+      const ord = lists.slice().sort((x, y) => (x.poses.length / Math.max(1, x.k + x.bi * LEG_REPAIR.length)) - (y.poses.length / Math.max(1, y.k + y.bi * LEG_REPAIR.length)));
+      const chosen = [];
+      let lim;
+      const dfs = depth => {
+        if (depth === 3) return passes(chosen);
+        const L = ord[depth];
+        for (let n = 0; n < lim[depth]; n++) {
+          if (pairTests > budget) return false;
+          const p = poseAt(L, n);
+          if (!p) return false;
+          if (!ord.slice(0, depth).every(M => M.i < L.i ? pairOk(chosen[M.i], p) : pairOk(p, chosen[M.i]))) continue;
+          chosen[L.i] = p;
+          if (dfs(depth + 1)) return true;
+        }
+        return false;
+      };
+      let budget = 0;
+      for (lim of LEG_DFS) { budget = pairTests + LEG_PAIR_BUDGET; if (dfs(0)) return settle(chosen, ord[0].i); }
+      return ['none'];
+    };
+    // draw the settled pose. Mirror skew: the left legs are the right legs rotated about their coxae (each pair its own
+    // angle) and then mirrored. The rotated set must pass every rule the right side passed (midline, abdomen, crossings,
+    // fit, wings): as rolled, else with every angle reversed, else no skew.
+    const emit = wings => {
+      const wingFirst = legsOk(joints, specs, wings);
+      const repaired = wingFirst ? repair(wings) : [];
+      const pivots = B.legs.map(g => attachOf(g).p);
+      const rotAbout = (p, c, deg) => add(c, rot(sub(p, c), deg * D2R));
+      let skewK = 1;   // 1 as rolled, -1 the other way round, 0 none: the realised skew stays in 2-6 degrees or is dropped
+      for (const kTry of [1, -1, 0]) {
+        skewK = kTry;
+        const rj = joints.map((j, i) => j.map(p => rotAbout(p, pivots[i], B.legs[i].skew * skewK)));
+        if (!legsOk(rj, specs, wings)) break;
+      }
+      const skews = B.legs.map(g => g.skew * skewK);
+      for (let i = 0; i < 3; i++) for (const p of joints[i]) { const q = rotAbout(p, pivots[i], skews[i]); bb(q); bb([q[0] + 5, q[1] + 5]); bb([q[0] - 5, q[1] - 5]); }   // the rotated copy may reach further than the right side
+      meta.legSkew = skews;
+      // wingFirst: why the rolled pose broke against the wings (null: it passed); repaired: per pair the offset that fixed it
+      meta.legRoll = { attempts: attempt + 1, pose, why, lenK, reasons, skewK, wingFirst, repaired, wingWhy: legsOk(joints, specs, wings) };
+      B.sig.push(pose, ...specs.map(sp => Math.round(sp.dirs[1] / 12) + ':' + Math.round((sp.dirs[2] - sp.dirs[1]) / 12)));
+      const legMeta = [];
+      L.legPairs = [];
+      for (let i = 2; i >= 0; i--) {     // hind first so front overlaps
+        const at = attachOf(B.legs[i]);
+        const els = legEls(at.p, specs[i], legMeta);
+        L.legs.push(...els);
+        L.legPairs.push({ els, pivot: at.p, skew: skews[i] });
+        const lm = legMeta[legMeta.length - 1];
+        lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3]; lm.skew = skews[i]; lm.pivot = at.p;
+        lm.femW = specs[i].widths[1][0]; lm.femLen = specs[i].lens[1];
+        lm.segHw = joints[i].slice(0, -1).map((_, k) => halfW(specs[i], k));   // half width of segment k -> k+1, for the antenna clearance rule (#7) and tests/check.js
+      }
+      legMeta.reverse();   // front, mid, hind
+      meta.legs = legMeta;
+    };
+    C.placeLegs = emit;
     const prof = [];
     for (let y = abdomen.yTop; y <= abdomen.yBot; y += 2) prof.push([Math.round(y * 10) / 10, Math.round(abdomen.hwAt(y) * 10) / 10]);
     meta.abdomen = { yTop: abdomen.yTop, yBot: abdomen.yBot, profile: prof };
   }
+}
+
+// ---------- legs vs wings (#8) ----------
+// drawLegs rolls the pose against the body before the wings, so the wings keep their place in the rng stream; this runs
+// after the wing block and settles that pose against every wing outline (wingPolys): a pose that passes is drawn as
+// rolled, a pair that does not is turned to the nearest passing pose without rng (drawLegs' repair), then the legs are
+// drawn. Only the leg geometry of the affected plates (and so the antenna validation after it) can change.
+function placeLegs(C) {
+  C.placeLegs(wingPolys);
 }
 
 // ---------- antennae ----------

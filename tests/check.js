@@ -111,6 +111,8 @@ const segsCross = (a, b, c, d) => { const cr = (o, p, q) => (p[0] - o[0]) * (q[1
   const d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); };
 const rotAbout = (p, c, deg) => { const a = deg * Math.PI / 180, dx = p[0] - c[0], dy = p[1] - c[1]; return [c[0] + dx * Math.cos(a) - dy * Math.sin(a), c[1] + dx * Math.sin(a) + dy * Math.cos(a)]; };
 const skewedPts = leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew));   // the left leg before mirroring: the right leg rotated about its coxa by its skew (plan step 7)
+const LEG_WING_CLEAR = 1.5;   // legWings: a joint's disc beyond its half width, the engine's WING_LEG_CLEAR (the same 16 rim points; the engine leaves 0.5 px at the body's edge, where this file's sampled profile may differ)
+const legRun = {};   // type -> { n, reroll, repaired, placed } over the run (CHECKS.legWings, for POST.legWings): plates whose body-only pose roll re-rolled, whose rolled pose broke against the wings and was repaired, and where a pair was placed first
 const ANT_LEG_CLEAR = 2.5;   // antLegs: asserted clearance beyond the leg's half width (engine: 3 + the antenna's half width, at least 3.65)
 const ptSegDist = (p, u, v) => { const wx = v[0] - u[0], wy = v[1] - u[1], l2 = wx * wx + wy * wy, t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * wx + (p[1] - u[1]) * wy) / l2)) : 0; return Math.hypot(p[0] - u[0] - wx * t, p[1] - u[1] - wy * t); };
 const segDist = (a, b, c, d) => segsCross(a, b, c, d) ? 0 : Math.min(ptSegDist(a, c, d), ptSegDist(b, c, d), ptSegDist(c, a, b), ptSegDist(d, a, b));   // shortest distance between segments ab and cd
@@ -310,6 +312,47 @@ const CHECKS = {
     if (!meta.legSkew || meta.legSkew.length !== 3) return fail('no legSkew on meta');
     for (const leg of meta.legs) { const a = Math.abs(leg.skew); if (a !== 0 && (a < 2 || a > 6)) fail(leg.pair + ' leg skew ' + leg.skew.toFixed(1) + ' outside 2-6 degrees (or 0)'); }
     checkLegSet(meta, meta.legs.map(skewedPts), ' skewed', fail);
+  },
+  // legs and wings (#8, decision "under the wing, cleanly"): the legs are drawn under the wings' white fill (and under the
+  // body), so each pair, right side and skewed left set, against meta.wingOutlines (right side, body coordinates), from
+  // the femur base on, sampled every ~2 px, either
+  //  - shows: once a sample is visible no later one is hidden (no re-entry under a wing or the body, no stub between two
+  //    wings), every sample from the tibia tip on lies outside every wing (the tibia's end and the whole tarsus show,
+  //    never a claw poking out), and no joint's disc (its half width + LEG_WING_CLEAR) straddles a wing margin (no
+  //    knee or tarsal joint as a knot on the margin; a joint under the body is not drawn: the leg leaves the body there); or
+  //  - is fully hidden: no sample's disc reaches past the wings and the body (nothing pokes out).
+  // A sample is hidden when it is inside a wing outline or within the thorax or abdomen profile.
+  legWings(meta, svg, fail) {
+    const r = meta.legRoll, run = legRun[meta.variant || meta.type] ||= { n: 0, reroll: 0, repaired: 0, placed: 0 };
+    run.n++; if (r.attempts > 1) run.reroll++; if (r.wingFirst) run.repaired++; if ((r.repaired || []).some(x => /placed first/.test(x))) run.placed++;
+    const wings = meta.wingOutlines || [];
+    if (!wings.length) return fail('no wing outlines on meta');
+    const bodyHw = y => Math.max(profHw(meta.thorax.profile, y, 0.11), profHw(meta.abdomen.profile, y));
+    const inWing = p => wings.some(poly => inPoly(p, poly));
+    const state = p => inWing(p) ? 'W' : Math.abs(p[0]) < bodyHw(p[1]) ? 'B' : 'V';   // in a wing, under the body, visible
+    const disc = (p, r) => { const s = new Set([state(p)]); for (let a = 0; a < 16; a++) s.add(state([p[0] + r * Math.cos(a * Math.PI / 8), p[1] + r * Math.sin(a * Math.PI / 8)])); return s; };
+    for (const [label, get] of [['', leg => leg.pts], [' skewed', skewedPts]]) for (const leg of meta.legs) {
+      const pts = get(leg), samples = [];   // [point, segment index for its half width, is a joint]
+      for (let k = 2; k + 1 < pts.length; k++) {
+        const a = pts[k], b = pts[k + 1], n = Math.max(1, Math.ceil(dist(a, b) / 2));
+        for (let q = k === 2 ? 0 : 1; q <= n; q++) samples.push([[a[0] + (b[0] - a[0]) * (q / n), a[1] + (b[1] - a[1]) * (q / n)], Math.min(q === n ? k + 1 : k, pts.length - 2), q === 0 || q === n, q === n ? k + 1 : k]);
+      }
+      const what = leg.pair + label + ' leg';
+      if (!samples.some(s => state(s[0]) === 'V')) {
+        const poke = samples.find(([p, k]) => disc(p, leg.segHw[k] + LEG_WING_CLEAR).has('V'));
+        if (poke) fail(what + ' hidden under the wings but pokes out: at ' + poke[0].map(v => v.toFixed(1)).join(','));
+        continue;
+      }
+      let out = false, why = null;
+      for (const [p, k, joint, j] of samples) {
+        const s = state(p);
+        if (s !== 'V' && out) { why = 'emerges and goes back under the ' + (s === 'W' ? 'wing' : 'body'); break; }
+        if (s === 'V') out = true;
+        if (j >= 4 && s === 'W') { why = 'tibia end or tarsus under a wing (a stub)'; break; }
+        if (joint && Math.abs(p[0]) >= bodyHw(p[1])) { const d = disc(p, leg.segHw[k] + LEG_WING_CLEAR); if (d.has('V') && d.has('W')) { why = 'joint on a wing margin (a knot)'; break; } }
+      }
+      if (why) fail(what + ' ' + why);
+    }
   },
   // Head (meta.head, docs/research-head-eyes.md): every compound eye stays inside the head's bounding box with at most
   // 10% of its extent overhanging on any side (cicada and odonate eyes bulge past the capsule, never past headW), and
@@ -716,6 +759,12 @@ const POST = {
     console.log('lep wing ink (largest tone share of a solid ' + LEP_WIN + 'x' + LEP_WIN + ' window, max ' + LEP_TONE_SHARE + '; plates solid from line art alone):',
       ['moth', 'butterfly'].map(v => lepInk[v] ? v + ' ' + lepInk[v].share.toFixed(3) + ' (seed ' + lepInk[v].seed + ', n ' + lepInk[v].n + ', line art ' + lepInk[v].art + ')' : v + ' none').join('; ') +
       (missing.length && total < LEP_MIN ? '; too few lepidopteran plates (' + total + ' < ' + LEP_MIN + ') to require ' + missing.join(', ') : ''));
+  },
+  // the report for CHECKS.legWings (#8): per type, the share of plates whose leg pose re-rolled against the body, whose
+  // rolled pose broke against the wings and was repaired (no rng), and where a pair had to be placed before the others
+  legWings() {
+    const pc = (k, n) => Math.round(100 * k / n) + '%';
+    console.log('legs (body re-roll / wing repair / pair placed first, of n):', Object.keys(legRun).map(t => { const o = legRun[t]; return t + ' ' + pc(o.reroll, o.n) + '/' + pc(o.repaired, o.n) + '/' + pc(o.placed, o.n) + ' n ' + o.n; }).join('; '));
   },
   // the report for CHECKS.abdPitch: plates per type and the closest pair of abdominal marks seen
   abdPitch() {

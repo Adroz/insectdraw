@@ -13,8 +13,9 @@ contract for changes.
   genes, thorax and abdomen profiles, wing roots), `drawAbdomen`, `drawThorax`, `drawHead`,
   `drawTegulae`, `drawLegs`, the order's wing function from its `ORDERS` entry (`wingsLepidoptera`,
   `wingsDiptera`, `wingsNeuroptera`, `wingsCicada`, `wingsEphemeroptera`, `wingsHymenoptera`,
-  `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`), then `drawAntennae` (after the wings, so the
-  pose can be checked against their outlines) and `assemblePlate`.
+  `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`), `placeLegs` (#8: settles the leg pose `drawLegs`
+  rolled against the wing outlines, without rng, and draws the legs), then `drawAntennae` (after the
+  wings, so the pose can be checked against their outlines) and `assemblePlate`.
   `rollProportions` takes the type and returns `P`; every other section takes one context object `C`
   (`seed`, `type`, `order` (the type's `ORDERS` entry), `dev`, `replay`, `L`, `meta`, `outerBox` from
   the orchestrator; `P`, `B`, `thorax`, `abdomen`, `abdHW`, `headTop`, `headCy` added by `layoutBody`),
@@ -131,7 +132,14 @@ contract for changes.
   onto `B.sig`. The wing family is rolled in the entry's `proportions` as `P.fam` so body and wings
   share it; wing blocks read it, they do not roll it. Leg poses are validated against the body
   in the legs block (`legsOk`: ordering, mirror line, abdomen outline, pair clearance, fit) and
-  re-rolled; `tests/check.js` asserts the result on `meta.legs[i].pts`, so a new pose or family
+  re-rolled. The legs are drawn under the wings' white fill, so after the wing block `placeLegs` holds
+  the pose to "under the wing, cleanly" (#8): from the femur base on, a pair either shows (once out it
+  never goes back under a wing or the body, its tibia tip and whole tarsus are clear of every wing, no
+  joint's disc of half width + `WING_LEG_CLEAR` straddles a wing margin) or is fully hidden (nothing
+  pokes out). A pair that breaks it is turned to the nearest passing offset (`LEG_REPAIR`) with no rng
+  draw, so the wings and every draw after them keep their place in the stream; `meta.legRoll.wingFirst`
+  / `.repaired` say what was repaired. `tests/check.js` asserts the result on `meta.legs[i].pts` (and
+  `legWings` the wing rule, right and skewed sets), so a new pose or family
   range must keep those invariants rather than relax the test. The left legs are the right legs rotated per pair by `B.legs[i].skew` about the coxa
   (`L.legPairs` in the assembly); any new check on the right legs should also run on the rotated
   set, as `tests/check.js` does. Antennae follow the same shape:
