@@ -1578,7 +1578,8 @@ function growVeins(g, G) {
   const uOpen = G.uOpen, k = G.k === undefined ? 1.1 : G.k, minSep = G.minSep === undefined ? 0.07 : G.minSep, minSepAbs = (G.minSepAbs || 0) * g.Lw;   // minSepAbs: strips narrower than this (fraction of the span) carry no sites, e.g. the basal bundle of a fly wing
   const angLo = 105, angHi = 140, angT = G.angle === undefined ? 120 : G.angle, lean = G.lean === undefined ? -1 : G.lean;
   const bowAmt = G.bowAmt === undefined ? 0.02 : G.bowAmt, stubLen = G.stubLen === undefined ? 0.08 : G.stubLen;
-  const stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
+  const siteMin = G.siteMin || 0;   // mesh orders: no two neighbouring cell sites closer than this (body units), so no cell is narrower (#18)
+  const stats = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0, cellMin: Infinity };   // cellMin: the narrowest cell laid out (body units): the closest two neighbouring sites of a mesh or a ladder (#18)
   const joins = [], lanes = [], laneOf = {}, cellShapes = [];   // cellShapes: the multi-row regime's Voronoi cells, kept when G.cellShapes asks (the orthopteran archedictyon, #22)
   // #14: every lane and crossvein goes through drawPl; with the lane floor on (G.laneFloor !== false) they are collected and
   // drawn by one deferred element that holds lanes apart at plate scale (laneFloor), else emitted at once as before
@@ -1778,9 +1779,10 @@ function growVeins(g, G) {
     const ladder = (ua, ub) => {
       const sites = [], before = stats.joins, gapK = G.evenSites ? 0.5 : 0.35, gapA = G.gapNear === undefined ? gapK : G.gapNear;   // gapNear: clearance of a rung's near end from the junctions the lane already carries (ladder-everywhere orders share every lane between two strips, so they pass a small one)
       if (G.evenSites) {   // mesh orders: the sites divide the interval evenly (Hoffmann's evenly spaced centres), so no cell is much longer than its neighbours
-        const n = Math.max(1, Math.round((ub - ua) * Lw / sp((ua + ub) / 2)));
+        const len = (ub - ua) * Lw, n = Math.max(1, Math.min(Math.round(len / sp((ua + ub) / 2)), siteMin ? Math.floor(0.8 * len / siteMin) : Infinity));   // siteMin: no two sites closer (each moves at most a tenth of the step)
         for (let i = 0; i < n; i++) sites.push(lerp(ua, ub, (i + 0.5) / n) + (ub - ua) / n * randRange(-0.1, 0.1));
       } else for (let u = ua + 0.5 * sp(ua) / Lw * jitter(0.3); u < ub - 0.35 * sp(u) / Lw; u += sp(u) / Lw * jitter(0.25)) sites.push(u);
+      if (cell) for (let i = 0; i + 1 < sites.length; i++) stats.cellMin = Math.min(stats.cellMin, (sites[i + 1] - sites[i]) * Lw);
       for (let i = 0; i + 1 < sites.length; i++) {   // the Voronoi edge between two consecutive sites, clipped to the lanes
         const um = (sites[i] + sites[i + 1]) / 2, spx = sp(um), t = at2(um);
         if (!t) continue;
@@ -1840,6 +1842,7 @@ function growVeins(g, G) {
       const onBoundary = p => distLane(p, a.pl) < 0.3 || distLane(p, b.pl) < 0.3 || distPl(p, p0) < 0.3 || (p1 && distPl(p, p1) < 0.3) || (walk && distPl(p, walk) < 0.3);
       let xs = Infinity, xe = -Infinity; for (const p of ring) { xs = Math.min(xs, p[0]); xe = Math.max(xe, p[0]); }
       const sites = [], zig = G.grid ? 0 : G.zig === undefined ? 0.18 : G.zig, jg = G.grid ? 0.35 : 1;   // a grid has square rows: no zigzag of the outer rows
+      let gapMin = Infinity;   // the closest two neighbouring sites kept (stats.cellMin)
       for (let x = xs + 0.5 * cell(xs / Lw) * jitter(0.3), col = 0; x < xe; col++) {
         const c = cell(x / Lw), yr = outlineYRange(ring, x);
         if (yr) {
@@ -1851,8 +1854,9 @@ function growVeins(g, G) {
             const p = [x + (G.grid ? 0 : (rI % 2) * 0.5 * c) + randRange(-0.08, 0.08) * c * jg, yr[0] + h * (rI + 0.5 + edge * zig) / rows + randRange(-0.08, 0.08) * c * jg];
             if (!pointInPoly(p, ring)) continue;
             let ok = true;   // Poisson test against the sites of the last columns only (columns advance by at least 0.85 c)
-            for (let q = sites.length - 1; q >= 0 && sites[q][0] > p[0] - 1.2 * c; q--) if (vlen(sub(p, sites[q])) < 0.6 * c) { ok = false; break; }
-            if (ok) sites.push(p);
+            let dMin = Infinity;
+            for (let q = sites.length - 1; q >= 0 && sites[q][0] > p[0] - Math.max(1.2 * c, siteMin); q--) { const d = vlen(sub(p, sites[q])); if (d < Math.max(0.6 * c, siteMin)) { ok = false; break; } dMin = Math.min(dMin, d); }
+            if (ok) { sites.push(p); gapMin = Math.min(gapMin, dMin); }
           }
         }
         x += c * jitter(0.15);
@@ -1887,7 +1891,7 @@ function growVeins(g, G) {
         drawPl(seg, swJ, { ends: endL }); n++;
       }
       if (!n) return false;
-      stats.joins += n; stats.multi++; joins.push([a.id, b.id, (A0[0] + (w1 ? w1.pl[0][0] : a.x1)) / 2 / Lw]);
+      stats.joins += n; stats.multi++; stats.cellMin = Math.min(stats.cellMin, gapMin); joins.push([a.id, b.id, (A0[0] + (w1 ? w1.pl[0][0] : a.x1)) / 2 / Lw]);
       return true;
     };
     for (let bI = 0; bI + 1 < bps.length; bI++) {
@@ -4502,6 +4506,13 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
 
 const DAM_LADDER = 0.3;   // share of damselflies drawn as calopterygids (antenodal ladder); the rest are coenagrionids (#17)
 const DAM_ARC = 0.08;   // the damselfly arculus, span fraction past the end of the stalk
+const ODO_ROOT = 0.12;   // the fore and hind wings overlap only this near the hindwing's root (fraction of its span; tests/check.js allows 0.15)
+const ODO_HIND_MAX = 22;   // the hindwing sweeps back at most this far for it (degrees); the forewing sweeps forward for the rest
+const ODO_SWEEP_MAX = 60;   // degrees the two wings may be swept apart in all to meet ODO_ROOT (a broad pair on close roots needs ~45)
+const ODO_ARC_H = 0.22;   // a dragonfly's upper fan starts within this fraction of the depth under R1: the arculus's height (#18; 0.5 before)
+const ODO_FAN_GAP = 2.4;   // body units between neighbouring lanes of a dragonfly's upper fan at the arculus (the lane floor is 1.8 px)
+const ODO_TRI_H = 0.25;   // the discoidal triangle's strip at least this fraction of the chord gene deep at the arculus
+const ODO_CELL = 0.0135;   // the narrowest odonate cell, span fractions: a wing spans 228-270 plate px, so >= 3 px (#18; ~2 px read as stipple)
 const ODO_STRUCT = [75, 179];   // junction band of the structural odonate crossveins (discoidal sides, Ax1 / Ax2, the damselfly arculus): wide, so they are never dropped
 function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   const { type, order, L, meta, P, B, thorax } = C;
@@ -4521,9 +4532,10 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     tipY: randRange(-0.2, 0.12), sharp: randRange(0, 1), bulge: randRange(0.9, 1.1),
     nV: randInt(5, 8), pow0: randRange(1.3, 1.9), wig: randRange(-0.06, 0.06), und: randRange(0.0015, 0.005), period: randRange(0.12, 0.24),
     antStep: randRange(0.028, 0.05), postStep: randRange(0.02, 0.036),
-    ps0: randRange(0.72, 0.85), psL: randRange(0.05, 0.11), psStyle: pick(['solid', 'solid', 'cross', 'axis']), psLean: randRange(18, 38),
+    ps0: randRange(0.72, 0.85), psL: randRange(0.04, 0.075),   // psL: the stigma 4-8% of the span (odo-anax-ris1921; it reached 11%, #18)
+    psStyle: pick(['solid', 'solid', 'cross', 'axis']), psLean: randRange(18, 38),
     // cells: libellulid (small) .. aeshnid (large); k ladder spacing / strip width; angle, lean, zig: junction genes
-    cells: dam ? randRange(1.0, 1.5) : randRange(0.7, 1.3), k: randRange(1.0, 1.4), angle: randRange(108, 124), lean: rng() < 0.6 ? -1 : 1, zig: randRange(0.14, 0.24),
+    cells: dam ? randRange(1.0, 1.5) : randRange(0.95, 1.3), k: randRange(1.0, 1.4), angle: randRange(108, 124), lean: rng() < 0.6 ? -1 : 1, zig: randRange(0.14, 0.24),
     ladderR: rng(), bridge: rng() < 0.5, spare: rng(),   // ladderR picks the damselfly antenodal regime; spare: the old subnodus roll, kept so no later draw moves (#17)
     len: randRange(0.88, 1.12), heavy: rng() < 0.35,
   };
@@ -4537,17 +4549,36 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   const [tF, tH] = order.wingRoots;   // forewing / hindwing roots along the thorax (the damselfly's hind pair sits a little further forward)
   const wingDefs = dam
     ? [{ t: tF, theta: randRange(-16, -1), w: Lw * G.wF, baseW: 0.05, hind: false }, { t: tH, theta: randRange(2, 16), w: Lw * G.wF * G.wH, baseW: 0.05, hind: true }]
-    : [{ t: tF, theta: randRange(-14, -1), w: Lw * G.wF, baseW: 0.14, hind: false }, { t: tH, theta: randRange(3, 18), w: Lw * G.wF * G.wH, baseW: G.anal, hind: true }];
+    : [{ t: tF, theta: randRange(-14, -1), w: Lw * G.wF, baseW: 0.14, hind: false }, { t: tH, theta: randRange(3, 18), w: Lw * G.wF * G.wH, hind: true }];
   const ss = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
-  const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0, discoidal: 0, subnodus: 0, antMin: Infinity, antMax: 0, qGap: 0, triOff: Infinity };
-  for (const wd of wingDefs) {
-    const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * order.wingRootX;
+  const S = { cellMin: Infinity, stigma: 0, joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0, discoidal: 0, subnodus: 0, antMin: Infinity, antMax: 0, qGap: 0, triOff: Infinity };
+  for (const wd of wingDefs) { wd.by = thorax.yAt(wd.t); wd.bx = thorax.hwAt(wd.by) * order.wingRootX; }
+  const outlinePts = wd => {   // a wing's outline in its local frame (x along the span, y across it, negative toward the costa)
     const w = wd.w, s = G.sharp, bl = G.bulge;
     const apexPts = [[Lw * lerp(0.88, 0.94, s), -w * lerp(0.38, 0.22, s)], [Lw, w * G.tipY], [Lw * lerp(0.9, 0.95, s), w * lerp(0.33, 0.18, s) * bl]];
-    const pts = dam
+    return dam
       ? [[0, -w * 0.05], [Lw * G.petiole, -w * 0.34], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.48], ...apexPts, [Lw * 0.65, w * 0.5 * bl], [Lw * 0.35, w * 0.4 * bl], [Lw * G.petiole, w * 0.1], [0, w * 0.05]]
-      : [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], ...apexPts,
-      [Lw * 0.6, w * 0.5 * bl], [Lw * 0.25, w * (wd.hind ? 0.55 : 0.5) * bl], [Lw * 0.06, w * (wd.hind ? 0.45 : 0.3)], [0, w * wd.baseW]];
+      : wd.hind   // the anisopteran hindwing is widest at its base: a straighter costa, and the anal lobe (G.anal) rounding out of the hind margin against the body (odo-anax-ris1921, #18)
+        ? [[0, -w * 0.05], [Lw * 0.06, -w * 0.3], [Lw * 0.25, -w * 0.45], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], ...apexPts,
+          [Lw * 0.6, w * 0.45 * bl], [Lw * 0.32, w * 0.49 * bl], rot([Lw * 0.15, w * (0.64 + 0.5 * G.anal)], -0.5 * wd.theta * D2R), ...[[Lw * 0.05, w * (0.5 + G.anal)], [Lw * 0.01, w * (0.25 + G.anal)]].map(p => rot([p[0], p[1] / Math.cos(wd.theta * D2R)], -wd.theta * D2R))]   // the lobe laid out along the body (its shoulder half way), so however far the wing sweeps back it never reaches over the abdomen's midline, and as deep across the wing
+        : [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], ...apexPts,
+          [Lw * 0.6, w * 0.5 * bl], [Lw * 0.25, w * 0.5 * bl], [Lw * 0.06, w * 0.3], [0, w * wd.baseW]];
+  };
+  // the fore and hind wings meet only at their roots (#18; the hindwing's costa lay over the forewing's hind margin to 35-40% of
+  // the span): while either outline reaches into the other past ODO_ROOT of the hindwing's span from its root, the hindwing
+  // sweeps back and the forewing forward by turns, a degree at a time (no rng)
+  const [fwD, hwD] = wingDefs;
+  const bodyPoly = wd => sampleSmooth(outlinePts(wd), true, 0.8, 8).map(p => add([wd.bx, wd.by], rot(p, wd.theta * D2R)));
+  const overlapFar = () => {
+    const fp = bodyPoly(fwD), hp = bodyPoly(hwD);
+    let x0 = Infinity, x1 = -Infinity; for (const p of hp) { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); }
+    let far = 0;
+    for (const [a, b] of [[fp, hp], [hp, fp]]) for (const p of a) if ((p[0] - x0) / (x1 - x0) > far && pointInPoly(p, b)) far = (p[0] - x0) / (x1 - x0);
+    return far;
+  };
+  for (let k = 0; k < ODO_SWEEP_MAX && overlapFar() > ODO_ROOT; k++) if (k % 2 || hwD.theta >= ODO_HIND_MAX) fwD.theta -= 1; else hwD.theta += 1;
+  for (const wd of wingDefs) {
+    const { bx, by, w } = wd, pts = outlinePts(wd);
     const wing = makeWing([bx, by], wd.theta, pts, 0.8);
     const poly = wing.localPoly;
     L.wings.push(pathEl(wing.path, SW.O, '#fff'));
@@ -4556,7 +4587,7 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     // can close against the margin. Sc and R1 are offsets from the costa (C-Sc and Sc-R1 ~5% of the chord each before
     // the nodus, C-R1 ~7% after it, as on the Ris plates); the rest follow a power curve with the undulation genes. ----
     const x0 = dam ? Lw * G.petiole : Lw * 0.01, yr0 = wing.yRange(x0 + Lw * (dam ? 0.01 : 0.02)) || [-w * 0.3, w * 0.1];
-    const nV = G.nV, period = Lw * G.period;
+    const nV = G.nV, period = Lw * G.period, jF = Math.min(nV - 1, 1 + (nV >> 1));   // jF: the fan lane on the triangle's (quadrilateral's) costal side, where the arculus ends
     const apex = tipPoint(wing), ia = poly.indexOf(apex);
     const arc = [{ p: apex, d: 0 }];
     for (let i = ia + 1; i < poly.length && poly[i][0] >= Lw * 0.42; i++) arc.push({ p: poly[i], d: arc[arc.length - 1].d + vlen(sub(poly[i], arc[arc.length - 1].p)) });
@@ -4593,11 +4624,11 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     // plates); R3..A1 are laid out as fractions of the depth from R1 to the hind margin so they bow with the outline,
     // each easing to the margin by a power curve, steeper for the upper veins (which hug the costa longest)
     const r1At = x => { const y = plYAt(veins[1], x); return y === null ? topS(x) + 1.8 : y; };
-    const fanVein = (s0, gap, tg, pow, wig, und, phase) => {
+    const fanVein = (s0, gap, tg, pow, wig, und, phase, minOff = 0) => {   // minOff: never closer than that under R1
       const pl = [], steps = 48;
       for (let k = 0; k <= steps; k++) {
         const u = k / steps, x = x0 + (tg[0] - x0) * u, r = wing.yRange(x), top = r1At(x), bot = r ? r[1] : tg[1];
-        let y = gap !== null ? top + lerp(gap * 0.6, gap, ss(u / 0.3)) : top + (s0 + (1 - s0) * Math.pow(u, pow)) * Math.max(1, bot - top);
+        let y = gap !== null ? top + lerp(gap * 0.6, gap, ss(u / 0.3)) : top + Math.max(minOff, (s0 + (1 - s0) * Math.pow(u, pow)) * Math.max(1, bot - top));
         y += wig * w * Math.sin(Math.PI * u) + und * Lw * Math.sin(Math.PI * u) * Math.sin(2 * Math.PI * x / period + phase);
         const b = ss((u - 0.88) / 0.12); if (b > 0) y = lerp(y, tg[1], b);
         pl.push([x, y]);
@@ -4606,7 +4637,12 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
       return pl;
     };
     veins.push(fanVein(0, 4.5, fanTargets[0], 1, G.wig * 0.5, G.und, 1.7));   // R2
-    for (let i = 2; i <= nV; i++) { const f = (i - 2) / Math.max(1, nV - 2); veins.push(fanVein(lerp(0.2, 0.95, f), null, fanTargets[i - 1], G.pow0 * lerp(2.5, 1, f) * jitter(0.07), G.wig, G.und, i * 1.7)); }
+    // a dragonfly's sectors leave the arculus (odo-anax-ris1921): the upper fan, down to the triangle's top lane (V jF), starts in a
+    // narrow band under R2 (each lane ODO_FAN_GAP under the one above, clear of the lane floor), so the arculus that crosses it
+    // is short, and the lanes below start ODO_TRI_H of the chord further down, so the triangle between is no sliver (#18)
+    const s0At = i => dam ? lerp(0.2, 0.95, (i - 2) / Math.max(1, nV - 2))
+      : i <= jF ? lerp(0.1, ODO_ARC_H, (i - 2) / Math.max(1, jF - 2)) : lerp(ODO_ARC_H + 0.2, 0.95, (i - jF - 1) / Math.max(1, nV - jF - 1));
+    for (let i = 2; i <= nV; i++) { const f = (i - 2) / Math.max(1, nV - 2); veins.push(fanVein(s0At(i), null, fanTargets[i - 1], G.pow0 * lerp(2.5, 1, f) * jitter(0.07), G.wig, G.und, i * 1.7, dam ? 0 : 4.5 + ODO_FAN_GAP * (i - 1) + (i > jF ? ODO_TRI_H * w : 0))); }
     // petiole: the veins run to its end as two fused stems, Sc+R+M above and Cu+A below. They are lanes (#14), so the lane
     // floor draws them only where the stalk has room beside its two edges (walls PC / PT, the outline 0.3 inside it, up
     // to the petiole's end); out of the strips (noJoin), with no bow roll
@@ -4645,14 +4681,15 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     const psx0 = Lw * G.ps0, psx1 = psx0 + Lw * G.psL, psMid = (psx0 + psx1) / 2;
     const psSkew = Math.tan(G.psLean * D2R) * (r1y(psMid) - topAt(wing, psMid, 0.3));
     g.stigma(psx0, psx1, 0, 0, G.psStyle, r1y, psSkew);
+    S.stigma = Math.max(S.stigma, (psx1 - psx0) / apex[0]);   // along the costa, a fraction of the span (root to apex)
     for (const x of [psx0, psx1]) named.push({ a: 'C', ua: x / Lw, b: 'R1', ub: (x + psSkew) / Lw, reach: 0, bow: 0, ang: [60, 179], sw: SW.O });
     gaps.push(['C', 'R1', (psx0 - 1) / Lw, (psx1 + psSkew + 1) / Lw]);
     // arculus: a heavy crossvein stepping from R2 through the fan to the median lane; the discoidal triangle (dragonfly)
     // or quadrilateral (damselfly) just below it; the bridge vein, an oblique from R1 to R2 behind the subnodus
     // (a damselfly's arculus stands square, a structural crossvein with its own band, and the quadrilateral's proximal side
     // straight under it, as on odo-damsel-ris1921)
-    const jF = Math.min(nV - 1, 1 + (nV >> 1)), xa = Lw * arcU;
-    const arcSpec = { a: vId(1), ua: xa / Lw, b: vId(2), ub: xa / Lw + (dam ? 0 : 0.008), reach: 0.015, sw: SW.O, ang: dam ? ODO_STRUCT : undefined, then: jF > 2 ? Array.from({ length: jF - 2 }, (_, i) => vId(i + 3)) : undefined };
+    const xa = Lw * arcU;
+    const arcSpec = { a: vId(1), ua: xa / Lw, b: vId(2), ub: xa / Lw + (dam ? 0 : 0.008), reach: 0.015, sw: SW.O, ang: ODO_STRUCT, then: jF > 2 ? Array.from({ length: jF - 2 }, (_, i) => vId(i + 3)) : undefined };
     named.push(arcSpec);
     // the discoidal triangle / quadrilateral, on every wing (#17): the triangle distal to the arculus (the hindwing's sat
     // 0.03 of the span basal to it), the quadrilateral straight under it; drawn heavy so the diagnostic cell reads; its sides are
@@ -4668,12 +4705,12 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     const base = Lw * 0.03;
     const cellFn = (u, sMid, A, B) => (A === 'C' || B === 'C') ? Lw * G.postStep * (1 - 0.2 * Math.max(0, u - G.nodus)) : base * G.cells * (1 - 0.3 * u) * (1 - 0.25 * sMid);
     const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.015, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0,
-      rows2: true, rowsAt: 1.6, evenSites: true, cell: cellFn, cellMin: 3.2, zig: G.zig, joinSw: SW.F, gaps, noPair: [['C', 'Sc'], ['Sc', 'R1']] });   // the antenodal strips carry only the named antenodals
+      rows2: true, rowsAt: 1.6, evenSites: true, gapNear: 0.25, cell: cellFn, cellMin: 3.2, siteMin: floorPitch(ODO_CELL * Lw), zig: G.zig, joinSw: SW.F, gaps, noPair: [['C', 'Sc'], ['Sc', 'R1']] });   // the antenodal strips carry only the named antenodals
     L.wings.push(...g.emit());
     L.wings.push(...costaEls(wing, x0, apex[0]));   // the costa itself, heavy (R7)
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle);
-    S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi;
+    S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi; S.cellMin = Math.min(S.cellMin, st.cellMin);
     if (discSpecs.every(nv => nv.pl)) S.discoidal++;
     if (subSpec.pl) S.subnodus++;
     const nAnt = antSpecs.filter(nv => nv.pl).length; S.antMin = Math.min(S.antMin, nAnt); S.antMax = Math.max(S.antMax, nAnt);
@@ -4682,6 +4719,7 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   }
   meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi,
     discoidal: S.discoidal, subnodus: S.subnodus,   // wings (of 2) whose discoidal triangle / quadrilateral and subnodus were placed
+    cellMin: S.cellMin, stigma: S.stigma,   // the narrowest cell laid out on either wing (body units) and the longest pterostigma (fraction of its wing's span), #18
     antMin: S.antMin, antMax: S.antMax, ...(dam ? { qGap: S.qGap } : { triOff: S.triOff }) };   // antenodals placed on the sparest / densest wing; arculus to the quadrilateral (damselfly, largest) or to the triangle's base (dragonfly, smallest), span fractions
   meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, S.multi, G.psStyle, G.ladder ? 1 : 0, G.bridge ? 1 : 0, Math.round(G.psL * 100), Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
     Math.round(G.pow0 * 4), Math.round(G.antStep * 100), Math.round(G.ps0 * 20), Math.round(G.cells * 3), Math.round(G.wH * 5), Math.round(G.anal * 5), Math.round(G.period * 50)].join(',');

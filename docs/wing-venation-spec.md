@@ -137,7 +137,8 @@ Rules (implemented 2026-10-02 on `growVeins` v2, after Hoffmann et al. 2018; see
   C–Sc–R1 pairs (`then` chains the Sc–R1 segment at the same lean; the first two heavier), the
   subnodus (Sc–R1 just under the nodus, oblique, O), the two pterostigma end crossveins (lean gene 18–38° from
   perpendicular, O, lower end distal; the strip under the stigma is a `gap` with no other
-  crossvein), the arculus stepping from R2 through the fan to the median lane (O), the discoidal
+  crossvein), the arculus stepping from R2 through the fan to the median lane (O; a short step on a
+  dragonfly, see #18 below), the discoidal
   triangle (two rungs from one point, the long side with a relaxed band) or the damselfly
   quadrilateral (two rungs), and the bridge (a short oblique R1–R2 behind the subnodus).
 - **Diagnostic cells and the family cue (#17).** The discoidal triangle / quadrilateral and the
@@ -156,8 +157,31 @@ Rules (implemented 2026-10-02 on `growVeins` v2, after Hoffmann et al. 2018; see
   proximal side straight under it (it used to float 15–20% of the span distal). R1 keeps 0.8 units
   under Sc before the nodus (Sc's bow used to cross it just past a damselfly's stalk). `odoAntenodal`
   asserts the counts (2 exactly, or a ladder of 5+), the name and `wingStats.qGap` ≤ 0.02.
+- **Outline, sweep, arculus, stigma and cell floor (#18).** The anisopteran hindwing is widest at its
+  base: a straighter costa and the anal lobe (`anal` gene 0.2–0.42 of the chord) rounding out of the
+  hind margin, its last two points laid out along the body (and its shoulder half way), so however far
+  the wing sweeps back the lobe lies against the abdomen and never over its midline (it was a scaled
+  forewing, widest at ~25% span and narrowing into the root). The two wings meet only at their roots:
+  before drawing, while either outline reaches into the other past `ODO_ROOT` (0.12) of the hindwing's
+  span from its root, the hindwing sweeps back (to 22° at most) and the forewing forward by turns, a
+  degree at a time, no rng (the hindwing's costa lay over the forewing's hind margin to 35–40% of the
+  span on most plates; a broad pair on close roots needs ~45° between them). A dragonfly's sectors
+  leave the arculus as on odo-anax-ris1921: the upper fan, down to the triangle's costal lane, starts
+  in a narrow band under R2 (each lane 2.4 units under the one above, clear of the lane floor, within
+  0.22 of the depth), so the arculus that crosses it is short, and the lanes below start a quarter of
+  the chord gene further down, so the triangle is no sliver (the arculus was one bar through four lanes
+  half the chord deep); it is structural (the wide band) like the damselfly's. The pterostigma is
+  4–7.5% of the span (`psL`; it reached 11%). The `cells` gene's libellulid end is floored at 0.95 (at
+  0.7 the cells read as stipple), and no two neighbouring sites of a mesh or a ladder lie closer than
+  `ODO_CELL` (0.0135) of the span (`siteMin`: the Poisson test's floor, and a ladder holds fewer
+  rungs); a wing spans 228–270 plate px, so no cell is narrower than 3 px. `wingStats.cellMin` (body
+  units) and `.stigma` (fraction of the span) report them; `tests/check.js` asserts `odoMesh` (cellMin
+  × scale ≥ 3 px), `odoHindwing` (chord a tenth of the way out ≥ 0.9 of the widest, which lies in the
+  basal third), `odoOverlap` (no overlap past 15% of the hindwing span) and `odoStigma` (≤ 8%).
+  Odonate ladders keep `gapNear` 0.25 (as the grasshopper), so a lane shared with a dense strip above
+  still takes rungs below (a strip whose near lane was full of the other strip's junctions drew none).
 - **Secondaries, regime per strip segment**: cell size `cell(u, s)` = 0.03 Lw × `cells` gene
-  (libellulid 0.7 .. aeshnid 1.3; damselfly 1.0–1.5) × (1 − 0.3 u) × (1 − 0.25 s), floored at
+  (libellulid 0.95 .. aeshnid 1.3; damselfly 1.0–1.5) × (1 − 0.3 u) × (1 − 0.25 s), floored at
   3.2 units; the postnodal ladder uses its own `postStep`. Along every strip, where
   width / cell < 1.6 the segment is a **ladder**: evenly spaced sites, each rung the bisector of
   two neighbours clipped to the two primaries and slid until both junctions lie in 105–140°

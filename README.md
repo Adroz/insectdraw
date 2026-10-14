@@ -179,7 +179,11 @@ margin-terminating vein ends on an outline sample.
   The discoidal triangle (dragonfly) or quadrilateral (damselfly, square under
   the arculus) and the subnodus are on every wing; a damselfly is a
   coenagrionid with exactly two antenodals or a calopterygid with a ladder,
-  and its common name follows (#17).
+  and its common name follows (#17). The dragonfly hindwing is widest at its
+  base with an anal lobe against the body, the two wings meet only at their
+  roots (swept apart until they do), the arculus is a short step from the
+  sectors' stem to the triangle, the pterostigma is 4–8% of the span, and no
+  mesh cell is under 3 plate px (#18).
 - **Butterfly / moth** — Comstock–Needham layout grown as lanes: closed discal
   cell whose discocellular is three crossveins placed by the angle rule (a soft
   chevron pointing at the base, M1 and M2 leaving its bends), Sc+R1 along the
