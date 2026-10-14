@@ -227,7 +227,7 @@ headH + thoraxLen + abdLen, or forewing `fw` = wingSpan × family len)
 | dragonfly / damselfly | setaceous 1 | 0.12–0.22 hw | 4–7 |
 | grasshopper acridid | filiform 5, clubbed gradual 1 | 0.35–0.55 bl | 20–26 |
 | grasshopper tettigoniid | filiform 1 (swept back) | 1.0–1.8 bl | 30–45 |
-| grasshopper tetrigid | filiform 1 | 0.5–0.8 hw | 11–16 |
+| grasshopper tetrigid | filiform 1 | 0.9–1.4 hw (#23; was 0.5–0.8, which drew two hairs at 600 px) | 11–16 |
 | cranefly | moniliform-whorled 4, pectinate 0.6 | 0.6–1.0 hw | 13 (14–16) |
 | lacewing | filiform 5, moniliform 1 | 0.6–1.0 bl | 30–45 |
 | cicada | setaceous 1 | 0.1–0.18 hw | 7 |
@@ -302,3 +302,10 @@ x bucket (× 20).
 - The plan's "shaft curvature −40–40°" would let a −40° inward curve cross the midline on any long
   antenna; inward curvature is limited to −5° and the long kinds get the arc / swept poses instead.
 - Tip droop is kept (0–15°) but only on the forward poses; it is meaningless on a swept antenna.
+- Grasshopper fit (#23, `antFit` on the grasshopper registry entry): the antenna alone never takes a grasshopper plate
+  under scale 1.0 (the general rule is 0.6) and never reaches past 1.3× the half width of the rest of the plate (body,
+  legs, wings), so the acridid arc can no longer draw a hoop out past the hind legs. A katydid antenna (1.0–1.8 bl)
+  cannot be laid swept back past the raised forelegs without crossing them, so after its re-rolls it is laid straight
+  ahead and shortened until it fits at scale 1.0: on the plate it reaches the top margin, about 0.3–0.7 (median 0.4) of its rolled
+  length. A true swept-back katydid antenna (out past the forelegs and back beside the body) is a follow-up.
+  `grasshopperAntenna` in `tests/check.js` asserts all three numbers.

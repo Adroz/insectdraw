@@ -268,6 +268,17 @@ function limbGeom(A, B, w1, w2, bow) {
   };
   return { A, B, d, n, L, w1, w2, bow, e1: edge(1), e2: edge(-1), wAt: s => lerp(w1, w2, s) };
 }
+// Saltatorial hind femur (#23, docs/ref/leg-orth-femur.jpg): a drumstick, not a carrot. Deepest at about a fifth of the
+// length (wMax), 0.75 of that at the trochanter, down to 0.3 before the knee. One cubic per edge, fitted to the depths
+// measured on the reference (FEMUR_PROFILE: control x as fractions of the length, control half-widths as fractions of
+// wMax / 2), so bez3 on the edges, wAt and the herringbone's s all run on the same parameter as limbGeom's.
+const FEMUR_PROFILE = { x: [0, 0.26, 0.898, 1], h: [0.75, 1.625, -0.13, 0.3] };
+function femurGeom(A, B, wMax, bow) {
+  const d = norm(sub(B, A)), n = perp(d), L = vlen(sub(B, A)), F = FEMUR_PROFILE, bv = mul(n, bow);
+  const edge = side => F.x.map((x, i) => add(add(A, mul(d, x * L)), add(mul(n, side * F.h[i] * wMax / 2), i === 1 || i === 2 ? bv : [0, 0])));
+  const wAt = s => { const u = 1 - s; return wMax * (u * u * u * F.h[0] + 3 * u * u * s * F.h[1] + 3 * u * s * s * F.h[2] + s * s * s * F.h[3]); };
+  return { A, B, d, n, L, w1: wMax * F.h[0], w2: wMax * F.h[3], bow, e1: edge(1), e2: edge(-1), wAt };
+}
 function bez3(c, s) {
   const u = 1 - s;
   return [u * u * u * c[0][0] + 3 * u * u * s * c[1][0] + 3 * u * s * s * c[2][0] + s * s * s * c[3][0],
@@ -317,11 +328,13 @@ function limbSpines(g, side, spacing, len, s0, s1, sw) {
 }
 // chevron (herringbone) muscle pattern on a saltatorial femur
 function femurHerringbone(g, side) {
-  const els = [], step = floorPitch(Math.max(3.2, g.L / 22));
+  const els = [], step = floorPitch(Math.max(3.2, g.L / 18));   // about 15 chevrons, as on the reference
   const mid = s => lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.5 - side * 0.08);
-  const sm = 0.1, sM = 0.9;
+  const sm = 0.03, sM = 0.86;   // over the whole outer face, from the base to where it narrows before the knee (#23)
   els.push(pathEl(cubicBezierPath([mid(sm), mid(0.35), mid(0.65), mid(sM)], false), SW.D));
+  g.herring = [Infinity, -Infinity];   // the span of s the chevrons cover, for tests/check.js
   for (let s = sm + 0.05; s < sM; s += step / g.L) {
+    g.herring = [Math.min(g.herring[0], s), Math.max(g.herring[1], s)];
     const m = mid(s), w = g.wAt(s), ds = (step * 1.1) / g.L;
     const a1 = bez3(g.e1, s - ds), a2 = bez3(g.e2, s - ds);
     els.push(lineEl(m, lerpP(m, a1, 0.82), SW.F));
@@ -511,6 +524,7 @@ const antBaseW = (hw, wK) => Math.max(1.3, hw * 0.05) * wK;
 // from the ANT_SHRINK.from-th attempt overall, once straightened, by `step` per attempt, never under `floor`; the
 // fallback shortens by `fbStep` per step for at most `fbSteps` steps until it clears.
 const ANT_HIT = { legs: { ang: -86, curve: 6, minAng: -100 }, wing: { ang: -70, curve: 15, minAng: -95 } };
+const ANT_FIT_FB = { ang: -78, curve: 12 };   // an antFit order's fallback after a fit failure: forward, spread enough that the pair never reads as one line (#23)
 const ANT_SHRINK = { from: 4, step: 0.94, floor: 0.5, fbStep: 0.9, fbSteps: 12 };
 function rollAntGenes(type, P) {
   const T = ORDERS[type].ant, F = Object.assign({}, T.base, T[P.fam] || {});
@@ -744,7 +758,7 @@ function legEls(attach, spec, meta) {
   for (let k = 1; k < 3; k++) {                       // femur, tibia
     const q = add(p, mul(dirv(dirs[k]), lens[k]));
     const bow = lens[k] * 0.07 * (spec.bowSign || 1);
-    const g = limbGeom(p, q, ws[k][0], ws[k][1], bow);
+    const g = k === 1 && spec.herringbone ? femurGeom(p, q, ws[k][0], bow) : limbGeom(p, q, ws[k][0], ws[k][1], bow);
     geoms.push(g);
     els.push(pathEl(limbPath(g), SW.O, '#fff'));
     const outer = shadeSide(g);
@@ -795,7 +809,10 @@ function legEls(attach, spec, meta) {
   }
   const tr_ = tarsusEls(p, dirs[3], lens[3], ws[3][0], spec.tarsomeres || 5, spec.curl, { pulvilli: spec.pulvilli, basitarsus: spec.basitarsus, clawK: spec.clawK, padK: spec.padK });
   els.push(...tr_.els);
-  if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip });
+  // the drawn femur, for tests/check.js: its length and its outline's width every twentieth of the way (s = 0 at the trochanter)
+  const fg = geoms[0], fem = { L: fg.L, widths: [], herring: fg.herring || null };
+  for (let i = 0; i <= 20; i++) fem.widths.push(vlen(sub(bez3(fg.e1, i / 20), bez3(fg.e2, i / 20))));
+  if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip, fem });
   return els;
 }
 // The joint polyline legEls would draw, without drawing it: attach, coxa, trochanter, femur tip (index 3), tibia tip,
@@ -1939,7 +1956,7 @@ const COMMON_ADJ = ['Lesser', 'Greater', 'Banded', 'Spotted', 'Velvet', 'Marsh',
   'Striped', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Scarce', 'Brindled', 'Clouded', 'Bronze', 'Silver', 'Ruddy', 'Small',
   'Large', 'Variable', 'Four-spotted', 'Dark', 'Pale', 'Hairy', 'Black-tailed', 'White-legged', 'Emerald', 'Scarlet', 'Twin-spot', 'Chalk', 'River'];
 
-function insectName(seed, type, variant) {
+function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta.fam); a names table with famNouns takes its noun from it
   const r = mulberry32((((seed >>> 0) ^ 0x9E3779B9) >>> 0));   // private PRNG: never touches the drawing's rng
   const pk = arr => arr[Math.floor(r() * arr.length)];
   const order = ORDERS[type] || ORDERS.beetle, names = (variant && order.variantNames && order.variantNames[variant]) || order.names;
@@ -1975,8 +1992,9 @@ function insectName(seed, type, variant) {
   // common name: <Adjective> <Noun> [<Base>], never repeating a word
   const c = names.common;
   const adjs = c.adj || COMMON_ADJ;
-  let adj = pk(adjs), noun = pk(c.nouns);
-  for (let i = 0; i < 8 && (adj === noun || adj.split(/[ -]/).includes(noun) || noun.split(/[ -]/).includes(adj)); i++) noun = pk(c.nouns);
+  const nouns = (fam && c.famNouns && c.famNouns[fam]) || c.nouns;
+  let adj = pk(adjs), noun = pk(nouns);
+  for (let i = 0; i < 8 && (adj === noun || adj.split(/[ -]/).includes(noun) || noun.split(/[ -]/).includes(adj)); i++) noun = pk(nouns);
   const common = [adj, noun, c.base].filter(Boolean).join(' ');
 
   return { genus, species, common, binomial: genus + ' ' + species };
@@ -2229,7 +2247,8 @@ const ORDERS = {
       acridid: { hindK: [1.75, 2.1] }, tettigoniid: { lenK: [1.15, 1.4], wk: [0.8, 0.9], hindK: [1.6, 1.9] }, tetrigid: { lenK: [0.8, 0.95], wk: [1.0, 1.1], hindK: [1.6, 1.9] } },
     ant: { base: { ref: 'bl', len: [0.35, 0.55], seg: [20, 26], socket: [0.13, 0.24], kinds: { filiform: 5, clubbed: 1 }, club: 'gradual' },
       tettigoniid: { kinds: { filiform: 1 }, len: [1.0, 1.8], seg: [30, 45] },
-      tetrigid: { kinds: { filiform: 1 }, ref: 'hw', len: [0.5, 0.8], seg: [11, 16] } },
+      tetrigid: { kinds: { filiform: 1 }, ref: 'hw', len: [0.9, 1.4], seg: [11, 16] } },   // #23: short, but a head width or more, never two hairs
+    antFit: { scale: 1.0, width: 1.3 },   // #23: the antenna alone never takes the plate under scale 1.0, nor past 1.3x the body box's half width
     headScaleP5: 1.18,
     wingRoots: [0.45, 0.78],   // held for width by tests/check.js; the tegmen itself roots under the pronotum's hind margin (thorax.yBot - 6)
     legThick: 0.95,
@@ -2365,6 +2384,7 @@ const ORDERS = {
     names: {
       tails: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
       common: { nouns: ['Demoiselle', 'Bluet', 'Spreadwing', 'Damsel', 'Featherleg', 'Jewelwing', 'Bluetail', 'Redtail'], base: '',
+        famNouns: { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'] },   // the noun follows the drawn antenodals (#17)
         adj: ['Azure', 'Large Red', 'Small Red', 'Scarce', 'Emerald', 'Banded', 'White-legged', 'Variable', 'Northern', 'Blue-tailed', 'Willow', 'Dainty', 'Dusky', 'Southern', 'Copper'] },
     },
   },
@@ -2687,7 +2707,7 @@ function rollBodyGenes(type, P) {
     if (rng() < F.fringe) g.fringe = { spacing: randRange(2.6, 4.5), len: randRange(3, 7), tibia: true, femur: rng() < 0.5 };
     // order specifics
     if (saltatorial && i === 2) {   // saltatorial: huge femur with chevron muscles, serrated tibia, two pairs of apical spurs
-      g.herringbone = true; g.bowSign = -1; g.femFrac = randRange(0.24, 0.33);   // acridid hind femur: working estimate of 3-4x as long as deep (no leg reference in docs/ref yet; measure when one is added) g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);   // acridid femur a quarter to a third as wide as long (ref orth-grasshopper)
+      g.herringbone = true; g.bowSign = -1; g.femFrac = 1 / randRange(3.8, 4.6);   // acridid hind femur: 3.8-4.6x as long as its deepest point (#23; measured 3.6-4.4 on ref leg-orth-femur / leg-orth-psm1891, docs/research-legs-eyes-antennae.md) g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);   // acridid femur a quarter to a third as wide as long (ref orth-grasshopper)
       g.spines = { tibia: true, femur: false, side: 'outer', double: true, spacing: randRange(4, 6.5), len: randRange(0.6, 0.9) };
       g.ang = B.pose === 'tucked' ? { F: [40, 62], fold: [24, 40], T: [5, 18] } : { F: [40, 65], fold: [30, 52], T: [5, 20] };
     }
@@ -2796,7 +2816,7 @@ function layoutBody(C) {
   const B = rollBodyGenes(type, P);
   meta.antenna = B.ant.kind;
   meta.recipe = P.fam;
-  meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam
+  meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam; the damselfly wing block sets it (its antenodal family, #17)
   meta.bodyGenes = B;
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   P.thoraxAnchors = B.thorax.anchors;
@@ -3283,9 +3303,9 @@ function drawLegs(C) {
         fringe: g.fringe, pulvilli: g.pulvilli, padK: g.padK, clawK: g.clawK, herringbone: g.herringbone, femurTeeth: g.femurTeeth, shade: g.shade, corbicula: g.corbicula,
       };
       if (g.femW) spec.widths[1] = [g.femW * wk, 6 * wk];
-      if (g.femFrac) {   // saltatorial femur: width as a fraction of its own final length, and never under 1.9x the mid femur's width (the jumping leg must read as the big one)
+      if (g.femFrac) {   // saltatorial femur: deepest width as a fraction of its own final length, and never under 1.9x the mid femur's width (the jumping leg must read as the big one), nor stouter than 3.7x
         const midW = 7 * B.legs[1].swell * wk0 * B.legs[1].wk;
-        spec.widths[1] = [Math.min(spec.lens[1] / 3, Math.max(spec.lens[1] * g.femFrac, 1.9 * midW)), 6 * wk];
+        spec.widths[1] = [Math.min(spec.lens[1] / 3.7, Math.max(spec.lens[1] * g.femFrac, 1.9 * midW)), 6 * wk];
       }
       if (g.herringbone) spec.widths[2] = [5.5 * wk, 3.2 * g.flare * wk];
       if (g.corbicula) { spec.widths[2] = [4.5 * wk, 9.5 * wk]; spec.basitarsus = [7 * wk, 6 * wk]; }
@@ -3368,7 +3388,7 @@ function drawLegs(C) {
       L.legPairs.push({ els, pivot: at.p, skew: skews[i] });
       const lm = legMeta[legMeta.length - 1];
       lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3]; lm.skew = skews[i]; lm.pivot = at.p;
-      lm.femW = specs[i].widths[1][0]; lm.femLen = specs[i].lens[1];
+      lm.femW = Math.max(...lm.fem.widths); lm.femLen = lm.fem.L;   // as drawn: the outline's widest point and the trochanter-to-knee length
       lm.segHw = joints[i].slice(0, -1).map((_, k) => halfW(specs[i], k));   // half width of segment k -> k+1, for the antenna clearance rule (#7) and tests/check.js
     }
     legMeta.reverse();   // front, mid, hind
@@ -3389,9 +3409,10 @@ function drawLegs(C) {
 // docs/research-antennae.md R-A, R-C, R-D. Drawn after the legs and the wings so their geometry is known; the layer
 // order in the assembly is unchanged (antennae on top).
 function drawAntennae(C) {
-  const { L, meta, outerBox, P, B, thorax, abdomen, headTop } = C;
+  const { L, meta, outerBox, P, B, thorax, abdomen, headTop, order } = C;
   {
     const A = B.ant, R = ANT_POSES[A.pose];
+    const fit = order.antFit;   // the order's own antenna fit, if any (#23: a grasshopper's never shrinks the plate under 1.0, nor reaches past 1.3x the body box)
     const base = [P.headW * A.socket[0], headTop + P.headH * A.socket[1]];
     const ob = outerBox;   // everything drawn so far: body, legs and wings
     const wings = meta.wingOutlines = wingPolys;   // every outline makeWing (and the elytron) pushed for this plate, right side, body coordinates
@@ -3411,11 +3432,20 @@ function drawAntennae(C) {
       let maxX = 0, minY = Infinity, maxY = -Infinity;
       for (const p of G.pts) { if (p[0] < m) return 'cross'; maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
       // fit: the antenna alone must not push the plate scale under 0.6. The box already holds the wings, which on a
-      // broad-winged plate set a scale under 0.6 by themselves, so the antenna is blamed only where it extends that box
-      const W = 2 * Math.max(Math.abs(ob.minX), ob.maxX, maxX) + 48, H = Math.max(ob.maxY, maxY) - Math.min(ob.minY, minY) + 48;
-      const W0 = 2 * Math.max(Math.abs(ob.minX), ob.maxX) + 48, H0 = ob.maxY - ob.minY + 48;
+      // broad-winged plate set a scale under 0.6 by themselves, so the antenna is blamed only where it extends that box.
+      // An order with antFit holds its antenna to antFit.scale the same way, and within antFit.width times the box's
+      // half width (the arc pose's hoop, #23)
+      const hw0 = Math.max(Math.abs(ob.minX), ob.maxX);
+      const W = 2 * Math.max(hw0, maxX) + 48, H = Math.max(ob.maxY, maxY) - Math.min(ob.minY, minY) + 48;
+      const W0 = 2 * hw0 + 48, H0 = ob.maxY - ob.minY + 48;
       const sc = Math.min(552 / W, 507 / H), sc0 = Math.min(552 / W0, 507 / H0);
       if (sc < 0.6 && sc < sc0 - 1e-9) return 'fit';
+      if (fit) {   // the order's own bound, at assemblePlate's scale (the 0.6 rule above counts the margins twice)
+        const ps = (hw, h) => Math.min(552 / (2 * hw), 507 / h, 1.3);
+        const scA = ps(Math.max(hw0, maxX), H - 48), scA0 = ps(hw0, H0 - 48);
+        if (scA < fit.scale && scA < scA0 - 1e-9) return 'fit';
+        if (maxX > fit.width * hw0) return 'fit';
+      }
       for (const poly of wings) for (const p of G.pts) if (pointInPoly(p, poly)) return 'wing';   // the left side is the mirror image
       if (legSegs.length) for (const ln of G.lines) for (let i = 0; i + 1 < ln.pl.length; i++) {
         const a = ln.pl[i], b = ln.pl[i + 1];
@@ -3444,23 +3474,28 @@ function drawAntennae(C) {
       if (ANT_HIT[why]) straight = true;
       if (straight) {   // back off a little from the midline after a cross, else on toward straight ahead (a fit or cross hit while straightened keeps the wing's bound)
         pose.ang = why === 'cross' ? Math.min(-45, prev.ang + randRange(5, 15)) : Math.max((ANT_HIT[why] || ANT_HIT.wing).minAng, Math.min(prev.ang, -45) - randRange(5, 20));
+        if (why === 'fit' && fit) pose.ang = Math.min(prev.ang, ANT_FIT_FB.ang);   // #23: a fit hit only shortens; walking it toward the midline would lay the pair side by side
         pose.curve = randRange(5, 30); pose.droop = 0;
       }
     }
     if (why) {   // known-good fallback: ANT_HIT's pose after a leg or wing hit, else forward at 40 deg from the midline with a little
       // outward curve (the face pose keeps its angle); shortened, then after a leg hit shortened again (and angled back out of
       // the midline, for a plume) until it clears; antOk draws no rng
-      const fb = ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
-      pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: 0, lenK: Math.min(pose.lenK, 0.8) };
+      // An order with antFit whose antenna still does not fit (a katydid's, longer than the body, #23) is laid forward
+      // (ANT_FIT_FB) from full length and shortened until it fits, never curled into a stub.
+      const fitFb = why === 'fit' && !!fit;
+      const fb = fitFb ? ANT_FIT_FB : ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
+      pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: 0, lenK: fitFb ? 1 : Math.min(pose.lenK, 0.8) };
       A.hookSide = 1; G = antennaGeom(A, base, P.headW, pose);
-      for (let k = 0, r; k < ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross'); k++) {
-        if (r === 'legs') { pose.ang = Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
+      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && fit)); k++) {
+        if (r === 'legs') { pose.ang = Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') pose.lenK *= ANT_SHRINK.fbStep; else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
         G = antennaGeom(A, base, P.headW, pose);
       }
     }
     L.antennae.push(...antennaEls(A, G, P.headW));
     G.pts.forEach(bb);
-    meta.antennae = { kind: A.kind, pose: A.pose, club: A.club, pts: G.pts, lines: G.lines, tip: G.tip, base, attempts: attempt + 1, why, reasons, lenK: pose.lenK };
+    meta.antennae = { kind: A.kind, pose: A.pose, club: A.club, pts: G.pts, lines: G.lines, tip: G.tip, base, attempts: attempt + 1, why, reasons, lenK: pose.lenK,
+      box0: { minX: ob.minX, maxX: ob.maxX, minY: ob.minY, maxY: ob.maxY }, fam: P.fam, headW: P.headW };   // box0: the plate box before the antennae, for the fit checks
     B.sig.push(A.kind, A.club || '-', A.pose, Math.round(A.nSeg / 4), A.kind === 'lamellate' ? A.lamellae.n : (A.kind === 'pectinate' || A.kind === 'bipectinate') ? Math.round(A.rami.n / 6) : 0,
       Math.round(pose.ang / 10), Math.round(pose.curve / 15), Math.round(G.len / P.headW * 2), Math.round(A.socket[0] * 20));
     if (B.abd.filaments) L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 90 - B.abd.filaments.splay, P.abdLen * B.abd.filaments.len, 14, 8), false), SW.D));   // outer tail filaments (mirrored)
@@ -4454,6 +4489,9 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
     Math.round(G.uOpen * 10), Math.round(G.theta / 6), Math.round(G.spread / 6), Math.round(G.tipY * 6), Math.round(G.sharp * 2), Math.round(G.bulge * 10), Math.round(G.xStig * 10), Math.round(G.xMarg * 20), Math.round(G.len * 10)].join(',');
 }
 
+const DAM_LADDER = 0.3;   // share of damselflies drawn as calopterygids (antenodal ladder); the rest are coenagrionids (#17)
+const DAM_ARC = 0.08;   // the damselfly arculus, span fraction past the end of the stalk
+const ODO_STRUCT = [75, 179];   // junction band of the structural odonate crossveins (discoidal sides, Ax1 / Ax2, the damselfly arculus): wide, so they are never dropped
 function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   const { type, order, L, meta, P, B, thorax } = C;
   // ---- Odonata (docs/wing-venation-spec.md; refs odo-dragonfly, odo-anax-ris1921, odo-damsel-ris1921).
@@ -4475,16 +4513,22 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     ps0: randRange(0.72, 0.85), psL: randRange(0.05, 0.11), psStyle: pick(['solid', 'solid', 'cross', 'axis']), psLean: randRange(18, 38),
     // cells: libellulid (small) .. aeshnid (large); k ladder spacing / strip width; angle, lean, zig: junction genes
     cells: dam ? randRange(1.0, 1.5) : randRange(0.7, 1.3), k: randRange(1.0, 1.4), angle: randRange(108, 124), lean: rng() < 0.6 ? -1 : 1, zig: randRange(0.14, 0.24),
-    triangle: rng() < 0.8, bridge: rng() < 0.5, subnodus: rng() < 0.85,
+    ladderR: rng(), bridge: rng() < 0.5, spare: rng(),   // ladderR picks the damselfly antenodal regime; spare: the old subnodus roll, kept so no later draw moves (#17)
     len: randRange(0.88, 1.12), heavy: rng() < 0.35,
   };
+  // antenodal regime, the damselfly family cue (#17): Coenagrionidae carry exactly two antenodals (Ax1, Ax2; odo-damsel-ris1921),
+  // Calopterygidae a ladder on a wing that barely narrows to a stalk; every dragonfly a ladder. It names the plate (meta.fam).
+  G.ladder = !dam || G.ladderR < DAM_LADDER;
+  const fam = dam ? (G.ladder ? 'calopterygid' : 'coenagrionid') : null;
+  if (dam) meta.fam = fam;
+  if (fam === 'calopterygid') G.petiole = lerp(0.07, 0.11, (G.petiole - 0.12) / 0.14);   // the same roll, mapped onto a short stalk
   const Lw = P.wingLen * G.len, nodusX = Lw * G.nodus;
   const [tF, tH] = order.wingRoots;   // forewing / hindwing roots along the thorax (the damselfly's hind pair sits a little further forward)
   const wingDefs = dam
     ? [{ t: tF, theta: randRange(-16, -1), w: Lw * G.wF, baseW: 0.05, hind: false }, { t: tH, theta: randRange(2, 16), w: Lw * G.wF * G.wH, baseW: 0.05, hind: true }]
     : [{ t: tF, theta: randRange(-14, -1), w: Lw * G.wF, baseW: 0.14, hind: false }, { t: tH, theta: randRange(3, 18), w: Lw * G.wF * G.wH, baseW: G.anal, hind: true }];
   const ss = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
-  const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
+  const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0, discoidal: 0, subnodus: 0, antMin: Infinity, antMax: 0, qGap: 0, triOff: Infinity };
   for (const wd of wingDefs) {
     const by = thorax.yAt(wd.t), bx = thorax.hwAt(by) * order.wingRootX;
     const w = wd.w, s = G.sharp, bl = G.bulge;
@@ -4528,8 +4572,12 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
       return pl;
     };
     const veins = [];
-    veins.push(costaVein((u, x) => 1.0 + 0.05 * w * Math.sin(Math.PI * u), scTarget, 0, 0));                                                        // Sc: to the nodus
-    veins.push(costaVein((u, x) => 1.8 + w * (x < nodusX ? 0.1 * ss((x - x0) / (0.3 * Lw)) : lerp(0.1, 0.07, ss((x - nodusX) / (0.1 * Lw)))), r1Target, G.und * 0.4, 1));   // R1: to the apex
+    const scOff = u => 1.0 + 0.05 * w * Math.sin(Math.PI * u);
+    veins.push(costaVein(scOff, scTarget, 0, 0));                                                        // Sc: to the nodus
+    // R1 keeps at least 0.8 below Sc: on a stalked (damselfly) wing Sc's bow outran R1's ease-in and the two crossed just past
+    // the stalk, which dropped every antenodal there (#17)
+    const scOffAt = x => scOff(Math.max(0, Math.min(1, (x - x0) / (scTarget[0] - x0))));
+    veins.push(costaVein((u, x) => x < nodusX ? Math.max(1.8 + w * 0.1 * ss((x - x0) / (0.3 * Lw)), scOffAt(x) + 0.8) : 1.8 + w * lerp(0.1, 0.07, ss((x - nodusX) / (0.1 * Lw))), r1Target, G.und * 0.4, 1));   // R1: to the apex
     // the fan hangs off R1: R2 runs one cell under it (absolute gap, so that strip stays a one-row ladder as on the
     // plates); R3..A1 are laid out as fractions of the depth from R1 to the hind margin so they bow with the outline,
     // each easing to the margin by a power curve, steeper for the upper veins (which hug the costa longest)
@@ -4568,10 +4616,19 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     lanes.push({ id: 'TE', pl: edgePl, sw: SW.D, noDraw: true, noFork: true, stub: false }, ...petiole);
     const g = wingGraph(wing, Lw), named = [], gaps = [];
     // antenodal crossveins: aligned C-Sc-R1 pairs from the base to the nodus, the first two heavier (primary antenodals)
+    // (a coenagrionid draws the same jitters, so nothing after the ladder moves, and keeps only Ax1, just past the stalk,
+    // and Ax2 over the arculus, both heavy)
+    const antSpecs = [], ant = (u, sw, ang) => ({ a: 'C', ua: u, b: 'Sc', ub: u - G.lean * 0.012, reach: 0.01, sw, ang, then: ['R1'] });
     let kA = 0;
-    for (let u = dam ? G.petiole + 0.03 : 0.09, asp = floorFrac(G.antStep, Lw); u < G.nodus - 0.012; u += asp * jitter(0.08), kA++) named.push({ a: 'C', ua: u, b: 'Sc', ub: u - G.lean * 0.012, reach: 0.01, sw: kA < 2 && !dam ? SW.D : SW.F, then: ['R1'] });
+    for (let u = dam ? G.petiole + 0.03 : 0.09, asp = floorFrac(G.antStep, Lw); u < G.nodus - 0.012; u += asp * jitter(0.08), kA++) if (G.ladder) antSpecs.push(ant(u, kA < 2 && !dam ? SW.D : SW.F));
     rngSync();   // one jitter per antenodal, and a device plate has fewer
-    if (G.subnodus) named.push({ a: 'C', ua: G.nodus, b: 'R1', ub: G.nodus + 0.012, reach: 0.008, sw: SW.O });   // subnodus: the nodal crossvein C-R1
+    const arcU = dam ? G.petiole + DAM_ARC : 0.17;   // the arculus, span fraction
+    if (!G.ladder) antSpecs.push(ant(G.petiole + 0.025, SW.D, ODO_STRUCT), ant(arcU, SW.D, ODO_STRUCT));
+    named.push(...antSpecs);
+    let xSub = nodusX - Lw * 0.006;   // the subnodus leaves Sc where Sc still runs clear (1 unit) under the costa's wall lane, which it meets at the nodus
+    for (let k = 0; k < 20; k++, xSub -= Lw * 0.002) { const y = plYAt(veins[0], xSub); if (y !== null && y > topAt(wing, xSub, 0.3) + 1) break; }
+    const subSpec = { a: 'Sc', ua: xSub / Lw, b: 'R1', ub: xSub / Lw + 0.004, reach: 0.008, sw: SW.O, ang: [60, 179] };   // subnodus: Sc-R1 under the nodus, oblique, on every wing (#17)
+    named.push(subSpec);
     // pterostigma between C and R1 with slanted end crossveins (lower end distal); no other crossvein under it
     const r1y = x => { const y = plYAt(veins[1], x); return y === null ? topAt(wing, x, 3) : y; };
     const psx0 = Lw * G.ps0, psx1 = psx0 + Lw * G.psL, psMid = (psx0 + psx1) / 2;
@@ -4581,15 +4638,20 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     gaps.push(['C', 'R1', (psx0 - 1) / Lw, (psx1 + psSkew + 1) / Lw]);
     // arculus: a heavy crossvein stepping from R2 through the fan to the median lane; the discoidal triangle (dragonfly)
     // or quadrilateral (damselfly) just below it; the bridge vein, an oblique from R1 to R2 behind the subnodus
-    const jF = Math.min(nV - 1, 1 + (nV >> 1)), xa = Lw * (dam ? G.petiole + 0.06 : 0.17);
-    named.push({ a: vId(1), ua: xa / Lw, b: vId(2), ub: xa / Lw + 0.008, reach: 0.015, sw: SW.O, then: jF > 2 ? Array.from({ length: jF - 2 }, (_, i) => vId(i + 3)) : undefined });
-    if (G.triangle) {
-      const xT = Lw * (wd.hind ? 0.14 : 0.2) + (dam ? Lw * G.petiole : 0), xT2 = xT + Lw * (wd.hind ? 0.07 : 0.05);
-      named.push({ a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT / Lw, reach: 0.012, sw: SW.D });
-      if (dam) named.push({ a: vId(jF), ua: xT2 / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.D });                        // quadrilateral: two rungs
-      else named.push({ a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.D, ang: [95, 178] });            // triangle: the oblique side
-      gaps.push([vId(jF), vId(jF + 1), (xT - 1) / Lw, (xT2 + 1) / Lw]);
-    }
+    // (a damselfly's arculus stands square, a structural crossvein with its own band, and the quadrilateral's proximal side
+    // straight under it, as on odo-damsel-ris1921)
+    const jF = Math.min(nV - 1, 1 + (nV >> 1)), xa = Lw * arcU;
+    const arcSpec = { a: vId(1), ua: xa / Lw, b: vId(2), ub: xa / Lw + (dam ? 0 : 0.008), reach: 0.015, sw: SW.O, ang: dam ? ODO_STRUCT : undefined, then: jF > 2 ? Array.from({ length: jF - 2 }, (_, i) => vId(i + 3)) : undefined };
+    named.push(arcSpec);
+    // the discoidal triangle / quadrilateral, on every wing (#17): the triangle distal to the arculus (the hindwing's sat
+    // 0.03 of the span basal to it), the quadrilateral straight under it; drawn heavy so the diagnostic cell reads; its sides are
+    // structural, with their own wide band, so they are always placed (the rung band dropped one side on ~6% of plates). Read back (placed or not) for wingStats.
+    const xT = dam ? xa : xa + Lw * (wd.hind ? 0.02 : 0.03), xT2 = xT + Lw * (wd.hind ? 0.07 : 0.05);
+    const discSpecs = [{ a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT / Lw, reach: 0.012, sw: SW.O, ang: ODO_STRUCT },
+      dam ? { a: vId(jF), ua: xT2 / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.O, ang: ODO_STRUCT }   // quadrilateral: two rungs
+        : { a: vId(jF), ua: xT / Lw, b: vId(jF + 1), ub: xT2 / Lw, reach: 0.012, sw: SW.O, ang: ODO_STRUCT }];   // triangle: the oblique side
+    named.push(...discSpecs);
+    gaps.push([vId(jF), vId(jF + 1), (xT - 1) / Lw, (xT2 + 1) / Lw]);
     if (G.bridge) { named.push({ a: 'R1', ua: G.nodus + 0.03, b: vId(1), ub: G.nodus + 0.06, reach: 0.01, sw: SW.D, ang: [95, 178] }); gaps.push(['R1', vId(1), G.nodus + 0.025, G.nodus + 0.065]); }
     // cell size (R-H): base x cells gene, shrinking toward the tip and the trailing edge; the postnodal ladder has its own step
     const base = Lw * 0.03;
@@ -4601,9 +4663,16 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle);
     S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi;
+    if (discSpecs.every(nv => nv.pl)) S.discoidal++;
+    if (subSpec.pl) S.subnodus++;
+    const nAnt = antSpecs.filter(nv => nv.pl).length; S.antMin = Math.min(S.antMin, nAnt); S.antMax = Math.max(S.antMax, nAnt);
+    if (!dam) S.triOff = Math.min(S.triOff, arcSpec.pl && discSpecs[0].pl ? discSpecs[0].uMid - arcSpec.uMid : -Infinity);
+    if (dam) S.qGap = Math.max(S.qGap, arcSpec.pl && discSpecs[0].pl ? Math.abs(discSpecs[0].uMid - arcSpec.uMid) : Infinity);
   }
-  meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi };
-  meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, S.multi, G.psStyle, G.triangle ? 1 : 0, G.bridge ? 1 : 0, G.subnodus ? 1 : 0, Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
+  meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi,
+    discoidal: S.discoidal, subnodus: S.subnodus,   // wings (of 2) whose discoidal triangle / quadrilateral and subnodus were placed
+    antMin: S.antMin, antMax: S.antMax, ...(dam ? { qGap: S.qGap } : { triOff: S.triOff }) };   // antenodals placed on the sparest / densest wing; arculus to the quadrilateral (damselfly, largest) or to the triangle's base (dragonfly, smallest), span fractions
+  meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, S.multi, G.psStyle, G.ladder ? 1 : 0, G.bridge ? 1 : 0, Math.round(G.psL * 100), Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
     Math.round(G.pow0 * 4), Math.round(G.antStep * 100), Math.round(G.ps0 * 20), Math.round(G.cells * 3), Math.round(G.wH * 5), Math.round(G.anal * 5), Math.round(G.period * 50)].join(',');
 }
 
@@ -4822,7 +4891,7 @@ function assemblePlate(C) {
   const plateH = 600 - CAPTION_H;             // drawing is centred within the top 555px
   const s = Math.min((600 - 2 * margin) / bw, (plateH - 2 * margin) / bh, 1.3);
   const tx = 300, ty = plateH / 2 - (box.minY + box.maxY) / 2 * s;
-  meta.name = insectName(seed, type, P.variant);
+  meta.name = insectName(seed, type, P.variant, meta.fam);
   meta.bodySig = B.sig.join(',');
   meta.scale = s;
   meta.bbox = { minX: -halfW, maxX: halfW, minY: box.minY, maxY: box.maxY };

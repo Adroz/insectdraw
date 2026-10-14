@@ -19,6 +19,12 @@ const raster = require('./raster');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
+// #23 grasshopper hind femur, measured on docs/ref/leg-orth-femur.jpg (lateral micrograph, 4.4 long per depth, deepest at
+// 0.19 of the length) and the PSM 1891 engraving (3.6, deepest at 0.24); see docs/research-legs-eyes-antennae.md
+const HIND_FEMUR = { ratio: [3.6, 4.8], peak: [0.12, 0.4], herring: [0.1, 0.8] };
+// #23 grasshopper antennae: no plate under this scale because of the antenna alone, the antenna within this many times
+// the half width of the rest of the plate, a tetrigid antenna at least this many head widths long
+const GRASS_ANT = { scale: 1.0, width: 1.3, tetrigid: 0.5 };
 const DEV = 440;   // device plate size the device checks draw at (spec #32, ADR 0001)
 const SAMPLE = 50;   // the slow extras (parts, the 800 px device plate) run on every SAMPLE-th seed
 const SAMPLED = ['parts', 'device'];   // the checks that read ctx.sampled, for the report
@@ -57,6 +63,13 @@ let neuSeenPlates = 0;   // lacewing plates in the run, counted by the seed loop
 const NEU_MIN = 20;   // lacewing plates a run needs before a #19 check that never ran fails rather than being reported (~8% of plates)
 const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1]);
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
+// #17, from the references (odo-damsel-ris1921: a coenagrionid, two antenodals and the quadrilateral from the arculus;
+// Calopterygidae carry an antenodal ladder) and the common names of each family, stated here rather than read from the engine
+const ODO_NOUNS = { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'] };
+const ODO_LADDER_MIN = 5;   // antenodals on a ladder wing (the ticket's 5-9 on the damselflies it calls a ladder)
+const ODO_Q_GAP = 0.02;   // the quadrilateral's proximal side within this of the arculus (span fractions)
+const odoSeen = {};   // damselfly family -> plates odoAntenodal saw, for POST.odoAntenodal
+const ODO_MIN = 40;   // damselfly plates a run needs before a family with no plate fails rather than being reported
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
 // antialiased ink averaged over every 9 x 9 px window: a window at LEP_INK_MAX or more reads as a black blotch on the 1-bit
@@ -244,6 +257,7 @@ const PRE = {
       if (o.elytra !== undefined && (!o.elytra || !o.elytra.styles || !range2(o.elytra.pitch) || !range2(o.elytra.dash) || Object.values(o.elytra.fams || {}).some(e => !range2(e.len)))) f('elytra is not { styles, pitch: [min, max], dash: [min, max], fams?: { fam: { len: [min, max], truncate? } } }');
       if (o.pronotum !== undefined && (!o.pronotum || !range2(o.pronotum.wl) || !range2(o.pronotum.ely))) f('pronotum is not { wl: [min, max], ely: [min, max] }: ' + JSON.stringify(o.pronotum));
       if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
+      if (o.antFit !== undefined && !(o.antFit && o.antFit.scale > 0 && o.antFit.width > 0)) f('antFit is not { scale, width } (both > 0): ' + JSON.stringify(o.antFit));
       if (typeof o.wings !== 'function') f('wings is not a function');
       const nb = namesBad(o.names); if (nb) f('names: ' + nb);
       for (const v of Object.keys(o.variantNames || {})) { const vb = namesBad(o.variantNames[v]); if (vb) f('variantNames.' + v + ': ' + vb); }
@@ -329,12 +343,23 @@ const CHECKS = {
     const fr = byPair.front, mi = byPair.mid, hi = byPair.hind;
     if (fr && mi && hi && !(fr.femurTip[1] < mi.femurTip[1] && mi.femurTip[1] < hi.femurTip[1])) fail('femur tips not ordered front < mid < hind along the body');
     // saltatorial hind femur (docs/research-legs-eyes-antennae.md: "hind femur enormous"): it must read as a jumping leg, so
-    // it is at least 1.8x as wide as the mid femur and between 3 and 5 times as long as it is wide
+    // it is at least 1.8x as wide as the mid femur (its proportions are the hindFemur check)
     if (meta.type === 'grasshopper' && hi && mi && hi.femW !== undefined) {
       if (hi.femW < 1.8 * mi.femW) fail('grasshopper hind femur only ' + (hi.femW / mi.femW).toFixed(2) + 'x the mid femur width');
-      const r = hi.femLen / hi.femW; if (r < 3 || r > 5) fail('grasshopper hind femur length/width ' + r.toFixed(2) + ' outside 3-5');
     }
     checkLegSet(meta, meta.legs.map(l => l.pts), '', fail);
+  },
+  // #23 the saltatorial hind femur as drawn (meta.legs[2].fem: trochanter-to-knee length, outline width every twentieth,
+  // the span the herringbone chevrons cover) against docs/ref/leg-orth-femur.jpg: HIND_FEMUR.ratio long per widest width,
+  // widest in the proximal third (not at the trochanter: a drumstick, not a carrot), chevrons over the whole outer face
+  hindFemur(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    const f = meta.legs[2] && meta.legs[2].fem;
+    if (!f || !(f.L > 0) || !f.widths || f.widths.length !== 21) return fail('no drawn hind femur profile on meta.legs[2].fem');
+    const wMax = Math.max(...f.widths), at = f.widths.indexOf(wMax) / 20, r = f.L / wMax;
+    if (r < HIND_FEMUR.ratio[0] || r > HIND_FEMUR.ratio[1]) fail('grasshopper hind femur length/width ' + r.toFixed(2) + ' outside ' + HIND_FEMUR.ratio.join('-'));
+    if (at < HIND_FEMUR.peak[0] || at > HIND_FEMUR.peak[1]) fail('grasshopper hind femur widest at ' + at.toFixed(2) + ' of its length, not in ' + HIND_FEMUR.peak.join('-'));
+    if (!f.herring || f.herring[0] > HIND_FEMUR.herring[0] || f.herring[1] < HIND_FEMUR.herring[1]) fail('grasshopper hind femur herringbone covers ' + JSON.stringify(f.herring && f.herring.map(x => +x.toFixed(2))) + ', not ' + HIND_FEMUR.herring.join('-') + ' of the face');
   },
   // mirror skew (plan step 7): the left legs are the right legs rotated 0-6 degrees about their own coxa, then mirrored;
   // the rotated set must hold the same pose invariants as the right legs
@@ -395,6 +420,25 @@ const CHECKS = {
           if (d < leg.segHw[k] + ANT_LEG_CLEAR) return fail('antenna within ' + d.toFixed(1) + ' of the' + label + ' ' + leg.pair + ' leg ahead of the thorax (' + an.kind + ' ' + an.pose + ', legs ' + meta.legRoll.pose + ')');
         }
       }
+    }
+  },
+  // #23 grasshopper antennae: the antenna alone never pulls the plate under scale GRASS_ANT.scale (the plate scale
+  // against the scale of meta.antennae.box0, the box before the antennae: body, legs and wings, with the same margins and
+  // 1.3 cap as assemblePlate), the right antenna reaches no further out than GRASS_ANT.width x that box's half width (so
+  // the whole pair spans at most that many times the rest of the plate), and a tetrigid's shaft is at least
+  // GRASS_ANT.tetrigid head widths long as drawn
+  grasshopperAntenna(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    const an = meta.antennae, b = an && an.box0;
+    if (!b || !(an.headW > 0)) return fail('no pre-antenna box / head width on meta.antennae');
+    const hw = Math.max(Math.abs(b.minX), b.maxX), sc0 = Math.min(552 / (2 * hw), 507 / (b.maxY - b.minY), 1.3);
+    if (meta.scale < Math.min(GRASS_ANT.scale, sc0) - 1e-6) fail('grasshopper antenna alone pulls the plate under scale ' + GRASS_ANT.scale + ' (' + an.pose + ')');
+    const out = Math.max(...an.pts.map(p => p[0]));
+    if (out > GRASS_ANT.width * hw + 1e-6) fail('grasshopper antenna reaches past ' + GRASS_ANT.width + 'x the body box half width (' + an.pose + ')');
+    if (an.fam === 'tetrigid') {
+      const pl = an.lines[0].pl; let len = 0;
+      for (let i = 1; i < pl.length; i++) len += Math.hypot(pl[i][0] - pl[i - 1][0], pl[i][1] - pl[i - 1][1]);
+      if (len < GRASS_ANT.tetrigid * an.headW) fail('tetrigid antenna under ' + GRASS_ANT.tetrigid + ' head widths long');
     }
   },
   // #12 the caption and the drawing agree: type bee draws bee families only and type wasp none of them
@@ -565,6 +609,44 @@ const CHECKS = {
       if (want && (s.submarginal !== want.sub || s.discoidal !== want.disc)) fail(what + 'Hymenoptera ' + fam + ' cell plan: ' + s.submarginal + ' submarginal / ' + s.discoidal + ' discoidal cells (want ' + want.sub + ' / ' + want.disc + ')');
       if (HYM_AREOLET.includes(fam) && !(s.areolet && s.areoletLen <= HYM_AREOLET_MAX)) fail(what + 'Hymenoptera ' + fam + ' wing has no areolet' + (s.areolet ? ' (the cell is ' + s.areoletLen.toFixed(3) + ' of the span long, max ' + HYM_AREOLET_MAX + ')' : ''));
       if (s.hStubs !== 0) fail(what + 'Hymenoptera hindwing vein ends in the membrane (' + s.hStubs + ' stub lanes)');
+    };
+    one(meta.wingStats, '');
+    one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
+  },
+  // Odonata diagnostic cells (#17): every anisopteran wing closes its discoidal triangle and every zygopteran its
+  // quadrilateral, and every odonate wing has its subnodus (odo-anax-ris1921, odo-damsel-ris1921): wingStats.discoidal and
+  // .subnodus count the wings (of 2) where they were placed; the triangle lies distal to the arculus (wingStats.triOff: the
+  // smallest distance on a wing from the arculus to the triangle's base, span fractions)
+  odoCells(meta, svg, fail, { dev }) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const cell = meta.type === 'dragonfly' ? 'discoidal triangle' : 'quadrilateral';
+    const one = (s, what) => {
+      if (!s || typeof s.discoidal !== 'number' || typeof s.subnodus !== 'number') return fail(what + 'odonate wingStats has no discoidal / subnodus count');
+      if (s.discoidal !== 2) fail(what + 'odonate wing without its ' + cell + ': ' + s.discoidal + ' of 2 wings');
+      if (s.subnodus !== 2) fail(what + 'odonate wing without its subnodus: ' + s.subnodus + ' of 2 wings');
+      if (meta.type === 'dragonfly' && !(s.triOff > 0)) fail(what + 'dragonfly discoidal triangle not distal to the arculus: ' + (s.triOff === undefined ? 'no triOff' : s.triOff.toFixed(3)) + ' of the span');
+    };
+    one(meta.wingStats, '');
+    one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
+  },
+  // Odonata antenodals as the family cue (#17): a coenagrionid damselfly has exactly two antenodals (Ax1, Ax2) and a
+  // calopterygid a ladder, as does every dragonfly (wingStats.antMin / .antMax: the fewest and most antenodals placed on
+  // one wing); the common name's noun is one of the drawn family's; and the damselfly quadrilateral starts at the arculus
+  // (wingStats.qGap: the largest distance on a wing from the arculus to the quadrilateral's proximal side, span fractions)
+  odoAntenodal(meta, svg, fail, { dev }) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const fam = meta.type === 'dragonfly' ? 'anisopteran' : meta.fam;
+    if (meta.type === 'damselfly') {
+      if (!ODO_NOUNS[fam]) return fail('damselfly plate has no antenodal family (meta.fam ' + fam + ')');
+      odoSeen[fam] = (odoSeen[fam] || 0) + 1;
+      const words = meta.name.common.split(' '), other = Object.keys(ODO_NOUNS).filter(f => f !== fam).flatMap(f => ODO_NOUNS[f]);
+      if (!ODO_NOUNS[fam].some(n => words.includes(n)) || other.some(n => words.includes(n))) fail('damselfly name disagrees with its antenodals: "' + meta.name.common + '" on a ' + fam);
+    }
+    const one = (s, what) => {
+      if (!s || typeof s.antMin !== 'number') return fail(what + 'odonate wingStats has no antenodal count');
+      if (fam === 'coenagrionid' && (s.antMin !== 2 || s.antMax !== 2)) fail(what + 'coenagrionid antenodals not exactly 2: ' + s.antMin + '-' + s.antMax);
+      if (fam !== 'coenagrionid' && s.antMin < ODO_LADDER_MIN) fail(what + fam + ' antenodal ladder too short: ' + s.antMin + ' (min ' + ODO_LADDER_MIN + ')');
+      if (meta.type === 'damselfly' && !(s.qGap <= ODO_Q_GAP)) fail(what + 'damselfly quadrilateral floats off the arculus: ' + (s.qGap === undefined ? 'no qGap' : s.qGap.toFixed(3)) + ' of the span (max ' + ODO_Q_GAP + ')');
     };
     one(meta.wingStats, '');
     one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
@@ -837,6 +919,13 @@ const POST = {
     if (missing.length && total >= HYM_MIN) fail('no Hymenoptera plate of family ' + missing.join(', ') + ' in ' + total + ' Hymenoptera plates: the cell-plan assertions for it never ran');
     console.log('Hymenoptera cell plans asserted on:', fams.map(f => f + ' ' + (hymSeen[f] || 0)).join(', ') +
       (missing.length && total < HYM_MIN ? '; too few Hymenoptera plates (' + total + ' < ' + HYM_MIN + ') to require ' + missing.join(', ') : ''));
+  },
+  // odoAntenodal asserts a damselfly family only on its own plates: both need a plate once the run has ODO_MIN damselflies
+  odoAntenodal(fail) {
+    const total = Object.values(odoSeen).reduce((a, b) => a + b, 0), missing = Object.keys(ODO_NOUNS).filter(f => !odoSeen[f]);
+    if (missing.length && total >= ODO_MIN) fail('no damselfly plate of family ' + missing.join(', ') + ' in ' + total + ' damselfly plates: its antenodal assertions never ran');
+    console.log('damselfly antenodal families asserted on:', Object.keys(ODO_NOUNS).map(f => f + ' ' + (odoSeen[f] || 0)).join(', ') +
+      (missing.length && total < ODO_MIN ? '; too few damselfly plates (' + total + ' < ' + ODO_MIN + ') to require ' + missing.join(', ') : ''));
   },
   // the report for CHECKS.lepInk: plates rasterised per variant, the largest tone share of a solid window, and the plates
   // with a solid window from the line art alone; a run long enough to hold both variants fails without one (never by silence)
