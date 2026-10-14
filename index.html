@@ -3291,8 +3291,8 @@ function drawLegs(C) {
     // so from the femur base on, sampled every ~2 px, a pair either shows or is fully hidden. It shows when, once out, it
     // never goes back under a wing or the body (no re-entry, no stub between two wings), its tibia tip and every later
     // point lie outside every wing (the tibia's end and the whole tarsus show) and no joint's disc (its half width +
-    // WING_LEG_CLEAR) straddles a wing margin (no knot; a joint 1 px or more under the body is not drawn, the leg leaves the body there); it is fully hidden when no sample's disc reaches past the wings
-    // and the body (nothing pokes out). wings: right-side outlines in body coordinates (wingPolys); null skips the rule
+    // WING_LEG_CLEAR) straddles a wing margin (no knot; a joint 1 px or more under the body is not drawn, the leg leaves
+    // the body there); it is fully hidden when no sample's disc reaches past the wings and the body (nothing pokes out). wings: right-side outlines in body coordinates (wingPolys); null skips the rule
     // (the body-only roll, before the wings exist). tests/check.js legWings asserts the result.
     // under the body: within the thorax or abdomen profile as meta exposes it (sampled every 2 px), so the rule and its
     // test in tests/check.js see the same body; m: by at least m px
@@ -3302,7 +3302,6 @@ function drawLegs(C) {
       if (boxesFor !== wings) { boxesFor = wings; wingBoxes = wings.map(poly => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const q of poly) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); } return { poly, x0, x1, y0, y1 }; }); }
       // W in a wing, B under the body, V visible
       const state = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] >= w.y0 && p[1] <= w.y1 && pointInPoly(p, w.poly)) ? 'W' : underBody(p) ? 'B' : 'V';
-      const seen = s => s === 'V';
       const discHas = (p, r, a, b = a) => {   // the disc of radius r round p (its centre and 16 points on its rim) holds a state passing a and one passing b
         let ha = false, hb = false;
         for (let q = -1; q < 16; q++) { const s = state(q < 0 ? p : [p[0] + r * DISC16[q][0], p[1] + r * DISC16[q][1]]); if (a(s)) ha = true; if (b(s)) hb = true; if (ha && hb) return true; }
@@ -3315,8 +3314,8 @@ function drawLegs(C) {
           for (let q = k === 2 ? 0 : 1; q <= m; q++) samples.push([lerpP(a, b, q / m), Math.min(q === m ? k + 1 : k, j.length - 2), q === 0 || q === m, q === m ? k + 1 : k]);
         }
         const st = samples.map(s => state(s[0]));
-        if (!st.some(seen)) {
-          if (samples.some(s => discHas(s[0], halfW(specs[i], s[1]) + WING_LEG_CLEAR, seen))) return 'wing-poke';
+        if (!st.includes('V')) {
+          if (samples.some(s => discHas(s[0], halfW(specs[i], s[1]) + WING_LEG_CLEAR, x => x === 'V'))) return 'wing-poke';
           continue;
         }
         let out = false;
@@ -3325,7 +3324,7 @@ function drawLegs(C) {
           if (out && s !== 'V') return 'wing-reenter';
           if (s === 'V') out = true;
           if (at >= 4 && s === 'W') return 'wing-stub';
-          if (joint && !underBody(p, 1) && discHas(p, halfW(specs[i], k) + WING_LEG_CLEAR, seen, x => x === 'W')) return 'wing-knot';
+          if (joint && !underBody(p, 1) && discHas(p, halfW(specs[i], k) + WING_LEG_CLEAR, x => x === 'V', x => x === 'W')) return 'wing-knot';
         }
       }
       return null;
@@ -3383,9 +3382,9 @@ function drawLegs(C) {
     // after the wings (placeLegs), without rng. The wing rule is per pair, so each pair gets its own list of passing
     // poses, nearest first: as rolled (cost 0), then LEG_REPAIR offsets from its rolled dirs, then (when those run out of
     // budget) the same offsets from the safe pose and from the middle of every pose family's range, ranked after the
-    // rolled dirs. The combination of one pose per pair with the least total cost that passes the joint rules (order,
-    // crossings, fit) is drawn; the lists grow while none does. With no combination the pose stays as rolled
-    // (legRoll.wingWhy says why, and tests/check.js legWings fails it).
+    // rolled dirs. The cheapest combination of one pose per pair that passes the joint rules (order, crossings, fit) is
+    // drawn: first among each pair's first pose, then its first LEG_KEEP, then placed depth first (LEG_DFS). With none
+    // the pose stays as rolled (legRoll.wingWhy says why, and tests/check.js legWings fails it).
     const PAIR = ['front', 'mid', 'hind'];
     const repair = wings => {
       const mid = r => (r[0] + r[1]) / 2;
@@ -3477,7 +3476,7 @@ function drawLegs(C) {
         L.legs.push(...els);
         L.legPairs.push({ els, pivot: at.p, skew: skews[i] });
         const lm = legMeta[legMeta.length - 1];
-        lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3]; lm.skew = skews[i]; lm.pivot = at.p;
+        lm.hw = at.hw; lm.pair = PAIR[i]; lm.pts = joints[i]; lm.femurTip = joints[i][3]; lm.skew = skews[i]; lm.pivot = at.p;
         lm.femW = specs[i].widths[1][0]; lm.femLen = specs[i].lens[1];
         lm.segHw = joints[i].slice(0, -1).map((_, k) => halfW(specs[i], k));   // half width of segment k -> k+1, for the antenna clearance rule (#7) and tests/check.js
       }

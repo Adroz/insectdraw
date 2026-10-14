@@ -111,7 +111,7 @@ const segsCross = (a, b, c, d) => { const cr = (o, p, q) => (p[0] - o[0]) * (q[1
   const d1 = cr(c, d, a), d2 = cr(c, d, b), d3 = cr(a, b, c), d4 = cr(a, b, d); return ((d1 > 0) !== (d2 > 0)) && ((d3 > 0) !== (d4 > 0)); };
 const rotAbout = (p, c, deg) => { const a = deg * Math.PI / 180, dx = p[0] - c[0], dy = p[1] - c[1]; return [c[0] + dx * Math.cos(a) - dy * Math.sin(a), c[1] + dx * Math.sin(a) + dy * Math.cos(a)]; };
 const skewedPts = leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew));   // the left leg before mirroring: the right leg rotated about its coxa by its skew (plan step 7)
-const LEG_WING_CLEAR = 1.5;   // legWings: a joint's disc beyond its half width, the engine's WING_LEG_CLEAR (the same 16 rim points; the engine leaves 0.5 px at the body's edge, where this file's sampled profile may differ)
+const LEG_WING_CLEAR = 1.5;   // legWings: a joint's disc beyond its half width, the engine's WING_LEG_CLEAR (the same 16 rim points, and the same body: both read meta's sampled thorax and abdomen profiles)
 const legRun = {};   // type -> { n, reroll, repaired, placed } over the run (CHECKS.legWings, for POST.legWings): plates whose body-only pose roll re-rolled, whose rolled pose broke against the wings and was repaired, and where a pair was placed first
 const ANT_LEG_CLEAR = 2.5;   // antLegs: asserted clearance beyond the leg's half width (engine: 3 + the antenna's half width, at least 3.65)
 const ptSegDist = (p, u, v) => { const wx = v[0] - u[0], wy = v[1] - u[1], l2 = wx * wx + wy * wy, t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * wx + (p[1] - u[1]) * wy) / l2)) : 0; return Math.hypot(p[0] - u[0] - wx * t, p[1] - u[1] - wy * t); };
