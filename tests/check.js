@@ -68,12 +68,13 @@ const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hy
 // projects back over the tegmina). fanOut: how far (body units) the fan may stand past its tegmen's costa; overlap: the
 // inner margin crosses the midline by at least this over the middle of the tegmen; apexX: each apex at least this far
 // on its own side; tip: the last fraction of the tegmen length that stays clear of the midline; oblique: the share of
-// the archedictyon's cell outlines that may run obliqueBand degrees off the tegmen's axis (a honeycomb has a third); onVein: an
+// the archedictyon's cell outlines that may run obliqueBand degrees off the tegmen's axis (a honeycomb has a third),
+// asserted on a plate with cellsMin cells or more (seed 2103: 49 cells, mostly at the tapering tip, 22%); onVein: an
 // intercalary's root within this of another vein; base: a lane rooted within this fraction of the length of the tegmen's
 // base starts at the base; metazona: the pronotum is widest behind this fraction of its length; prozona: and at most this
 // fraction of that width ahead of the principal sulcus; hind: its half width at the hind margin at most this fraction of
 // the widest (an angled or rounded margin, never truncate); carinae: the lateral carina kinds the bodySig carries
-const ORTH = { fanOut: 0.5, overlap: 1, apexX: 2, tip: 0.04, oblique: 0.2, obliqueBand: [20, 65], onVein: 0.75, base: 0.12, metazona: 0.55, prozona: 0.96, hind: 0.6, carinae: ['straight', 'incurved', 'outcurved'] };
+const ORTH = { fanOut: 0.5, overlap: 1, apexX: 2, tip: 0.04, oblique: 0.2, obliqueBand: [20, 65], cellsMin: 60, onVein: 0.75, base: 0.12, metazona: 0.55, prozona: 0.96, hind: 0.6, carinae: ['straight', 'incurved', 'outcurved'] };
 const orthSeen = { orthFan: 0, orthTegmina: 0, orthCells: 0, orthIntercalary: 0, orthPronotum: 0 };   // grasshopper plates each #22 check asserted on, for POST.orthSeen
 let orthSeenPlates = 0;   // grasshopper plates in the run, counted by the seed loop whichever checks are selected
 const ORTH_MIN = 20;   // grasshopper plates a run needs before a #22 check that never ran fails rather than being reported (~8% of plates)
@@ -751,6 +752,7 @@ const CHECKS = {
       const a = cell[i], b = cell[(i + 1) % cell.length], L = dist(a, b), ang = Math.atan2(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) * 180 / Math.PI;
       tot += L; if (ang >= ORTH.obliqueBand[0] && ang <= ORTH.obliqueBand[1]) obl += L;
     }
+    if (c.length < ORTH.cellsMin) return;   // a sparse mesh (the tegmen mostly ladders, which are rows by construction) is too few cells to measure
     if (tot && obl / tot > ORTH.oblique) fail('grasshopper archedictyon is a honeycomb, not rows of rectangles: ' + Math.round(obl / tot * 100) + '% of the cell sides oblique (max ' + ORTH.oblique * 100 + '%)');
   },
   // #22 every intercalary vein starts on a vein: in the tegmen's drawn lanes (the meta.wingLanes entry with R), a lane

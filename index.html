@@ -4786,7 +4786,7 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
   const tegPts = [[-ov, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * G.bulge, by + Lt * G.midX], [wt * 0.55, by + Lt * 0.85], [ax, by + Lt],
     [lerp(-ov, ax, 0.3), by + Lt * lerp(qa, 1, 0.55)], [-ov, by + Lt * qa], [-ov, by + Lt * qa * 0.66], [-ov, by + Lt * qa * 0.33], [-ov, by + Lt * 0.03]];   // the last holds the inner margin straight to the base, under the pronotum
   const teg = frame([0, by], tegPts), tegWorld = teg.localPoly.map(teg.T);
-  const costaAt = y => { let best = -Infinity; for (let i = 0, j = tegWorld.length - 1; i < tegWorld.length; j = i++) { const a = tegWorld[i], b = tegWorld[j]; if ((a[1] > y) !== (b[1] > y)) best = Math.max(best, a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1])); } return best; };
+  const costaAt = y => { const r = teg.yRange(y - by); return r ? -r[0] : -Infinity; };   // body x of the tegmen's outer edge (the costa) at body y
   let fanJoins = 0, fanPoly = null;
   if (G.fan) {   // the folded hindwing fan under the tegmen (#22): it lies inside the tegmen's costa and ends just short of
     // the apex, so it shows only in the V between the apices; anal veins radiate from the root with ladder rungs between
