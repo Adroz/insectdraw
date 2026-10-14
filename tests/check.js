@@ -26,6 +26,42 @@ const HIND_FEMUR = { ratio: [3.6, 4.8], peak: [0.12, 0.4], herring: [0.1, 0.8] }
 // #23 grasshopper antennae: no plate under this scale because of the antenna alone, the antenna within this many times
 // the half width of the rest of the plate, a tetrigid antenna at least this many head widths long
 const GRASS_ANT = { scale: 1.0, width: 1.3, tetrigid: 0.5 };
+// junction-angle band of the slide-placed rungs, per order (#59, Nik 2026-10-14): every winged order keeps R-D's 100-145;
+// the mayfly's rungs meet the veins near-perpendicular, leaning either way (eph-ameletus-li2021, spec Ephemeroptera obs 9),
+// so its band is the reference's, about 88-125
+const RUNG_BAND = { mayfly: [88, 125] }, RUNG_BAND_ALL = [100, 145];
+// #59 mayfly venation, stated from eph-ameletus-li2021 (docs/wing-venation-spec.md, Ephemeroptera; obs numbers in brackets),
+// asserted on meta.mayfly (each wing's outline, lanes { id, kind, parent, pl } and rungs [a, b, u], wing-local: x along the
+// span from the root, y across it, negative toward the costa). aspect: forewing length over its greatest width (ref 2.5);
+// apex: the apex's depth from the front of the wing, a fraction of the width (the costal corner; ref 0.21); deep: where
+// the hind margin is deepest, a fraction of the length (ref 0.45); sag: the costa's furthest from its chord between
+// sagFrom of the length and the apex, a fraction of the length (nearly straight, ref 0.03) (1); ends: vein ends on the
+// margin, branches and long intercalaries (6); stems: veins leaving the base behind R1, at least stemGap of the length
+// apart at stemAt (4); forks: branches leaving a stem in the basal half, at least forks of them, before forkMax (4);
+// cost: the C-Sc rungs per length over the apical third at least cost times those over the basal half (3); marg: short
+// marginal intercalaries in the outer half, at least marg[0], each starting past margFrom of the length and at most
+// marg[1] of the length long, and margRung of them closing a cell (10, 7); cub: cubital veinlets, ending before cubEnd
+// of the length, each bowed at least cubBow of its chord (8); lean: each lean way on at least this share of the leaning
+// rungs and the mean junction angle at most meanMax (9); hind: the hindwing's length over the forewing's (12, 0.33), its
+// length over width, the veins behind Sc (R1 and the radiating veins), and the costal process: the costal edge's peak
+// between proc[0] and proc[1] of the length with a notch behind it at least notch of the length deep
+const EPH = { aspect: [2.2, 2.9], apex: 0.35, deep: [0.35, 0.55], sag: 0.05, sagFrom: 0.1, ends: [12, 16], stems: [5, 7], stemAt: 0.08, stemGap: 0.012,
+  forks: 3, forkMax: 0.55, cost: 1.5, marg: [3, 0.2], margFrom: 0.45, margRung: 0.5, cub: [4, 7], cubEnd: 0.5, cubBow: 0.03, lean: 0.2, meanMax: 110,
+  hind: { len: [0.2, 0.38], aspect: [1.3, 2.0], veins: [7, 10], proc: [0.05, 0.3], notch: 0.02 } };
+const ephSeen = { ephOutline: 0, ephFan: 0, ephCostal: 0, ephMarginal: 0, ephCubital: 0, ephLean: 0, ephHind: 0, ephLanes: 0 };   // mayfly plates each #59 check asserted on, for POST.ephSeen
+let ephSeenPlates = 0, ephHindPlates = 0;   // mayfly plates (with a hindwing) in the run, counted by the seed loop whichever checks are selected
+const EPH_MIN = 20;   // mayfly plates a run needs before a #59 check that never ran fails rather than being reported
+// geometry for the #59 checks (wing-local polylines)
+const lerp = (a, b, t) => a + (b - a) * t;
+const segX = (p, q, a, b) => {   // proper crossing of segments pq and ab
+  const o = (u, v, w) => Math.sign((v[0] - u[0]) * (w[1] - u[1]) - (v[1] - u[1]) * (w[0] - u[0]));
+  return o(p, q, a) * o(p, q, b) < 0 && o(a, b, p) * o(a, b, q) < 0;
+};
+const plCross = (A, B) => { for (let i = 0; i + 1 < A.length; i++) for (let j = 0; j + 1 < B.length; j++) if (segX(A[i], A[i + 1], B[j], B[j + 1])) return A[i]; return null; };
+const plYat = (pl, x) => { for (let i = 0; i + 1 < pl.length; i++) { const a = pl[i], b = pl[i + 1]; if ((x - a[0]) * (x - b[0]) <= 0 && a[0] !== b[0]) return a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0]); } return null; };
+const ptSegD = (p, a, b) => { const d = [b[0] - a[0], b[1] - a[1]], L2 = d[0] * d[0] + d[1] * d[1] || 1e-9, t = Math.max(0, Math.min(1, ((p[0] - a[0]) * d[0] + (p[1] - a[1]) * d[1]) / L2)); return Math.hypot(p[0] - a[0] - t * d[0], p[1] - a[1] - t * d[1]); };
+const ptPlD = (p, pl, closed) => { let m = Infinity; for (let i = 0; i + 1 < pl.length; i++) m = Math.min(m, ptSegD(p, pl[i], pl[i + 1])); if (closed) m = Math.min(m, ptSegD(p, pl[pl.length - 1], pl[0])); return m; };
+const outlineYs = (poly, x) => { const ys = []; for (let i = 0; i < poly.length; i++) { const a = poly[i], b = poly[(i + 1) % poly.length]; if ((x - a[0]) * (x - b[0]) <= 0 && a[0] !== b[0]) ys.push(a[1] + (b[1] - a[1]) * (x - a[0]) / (b[0] - a[0])); } return ys; };
 const DEV = 440;   // device plate size the device checks draw at (spec #32, ADR 0001)
 const SAMPLE = 50;   // the slow extras (parts, the 800 px device plate) run on every SAMPLE-th seed
 const SAMPLED = ['parts', 'device'];   // the checks that read ctx.sampled, for the report
@@ -1265,10 +1301,134 @@ const CHECKS = {
       if (p[1] < meta.cicada.collarY || p[1] > yS) return fail('cicada marking outside the mesonotum (collar ' + meta.cicada.collarY.toFixed(1) + ', cruciform ' + yS.toFixed(1) + '): y ' + p[1].toFixed(1));
     }
   },
+  // #59 forewing outline (1): about 2.5 times as long as wide, the apex the costal corner, the hind margin deepest near
+  // 45% of the length, the costa nearly straight from near the base to the apex
+  ephOutline(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephOutline++;
+    const f = meta.mayfly && meta.mayfly.fore;
+    if (!f) return fail('mayfly plate has no meta.mayfly.fore');
+    const P = f.outline, Lx = Math.max(...P.map(p => p[0])), yT = Math.min(...P.map(p => p[1])), yB = Math.max(...P.map(p => p[1])), W = yB - yT;
+    const apex = P.find(p => p[0] === Lx), lowest = P.find(p => p[1] === yB);
+    if (Lx / W < EPH.aspect[0] || Lx / W > EPH.aspect[1]) fail('mayfly forewing length to width ' + (Lx / W).toFixed(2) + ' outside ' + EPH.aspect.join('-'));
+    if ((apex[1] - yT) / W > EPH.apex) fail('mayfly forewing apex not at the costal corner: ' + ((apex[1] - yT) / W).toFixed(2) + ' of the width behind the front (max ' + EPH.apex + ')');
+    if (lowest[0] / Lx < EPH.deep[0] || lowest[0] / Lx > EPH.deep[1]) fail('mayfly hind margin deepest at ' + (lowest[0] / Lx).toFixed(2) + ' of the length (want ' + EPH.deep.join('-') + ')');
+    const x0 = EPH.sagFrom * Lx, y0 = Math.min(...outlineYs(P, x0));
+    let sag = 0;
+    for (let k = 1; k < 40; k++) { const x = lerp(x0, apex[0], k / 40), ys = outlineYs(P, x); if (!ys.length) continue; sag = Math.max(sag, Math.abs(Math.min(...ys) - lerp(y0, apex[1], k / 40))); }
+    if (sag / Lx > EPH.sag) fail('mayfly costa domed: ' + (sag / Lx).toFixed(3) + ' of the length off its chord (max ' + EPH.sag + ')');
+  },
+  // #59 the fan (4, 6): a few stems a strip apart at the base, branches forking off them in the basal half, 12-16 vein ends
+  // (stems, branches, long intercalaries) on the margin
+  ephFan(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephFan++;
+    const f = meta.mayfly && meta.mayfly.fore;
+    if (!f) return fail('mayfly plate has no meta.mayfly.fore');
+    const Lx = Math.max(...f.outline.map(p => p[0]));
+    const stems = f.lanes.filter(l => l.kind === 'stem'), br = f.lanes.filter(l => l.kind === 'branch'), ends = f.lanes.filter(l => ['stem', 'branch', 'inter'].includes(l.kind));
+    if (stems.length < EPH.stems[0] || stems.length > EPH.stems[1]) fail('mayfly fan stems ' + stems.length + ' (want ' + EPH.stems.join('-') + ')');
+    const ys = stems.map(l => plYat(l.pl, EPH.stemAt * Lx));
+    if (ys.some(y => y === null)) fail('mayfly fan stem does not reach back to ' + EPH.stemAt + ' of the length');
+    else { const so = ys.slice().sort((a, b) => a - b); let gap = Infinity; for (let i = 1; i < so.length; i++) gap = Math.min(gap, so[i] - so[i - 1]); if (gap / Lx < EPH.stemGap) fail('mayfly fan stems converge at the base: ' + (gap / Lx).toFixed(3) + ' of the length apart (min ' + EPH.stemGap + ')'); }
+    const basal = br.filter(l => l.parent && stems.some(st => st.id === l.parent) && l.pl[0][0] / Lx <= EPH.forkMax);
+    if (basal.length < EPH.forks) fail('mayfly fan forks ' + basal.length + ' branches off its stems in the basal half (min ' + EPH.forks + ')');
+    if (ends.length < EPH.ends[0] || ends.length > EPH.ends[1]) fail('mayfly vein ends on the margin ' + ends.length + ' (want ' + EPH.ends.join('-') + ')');
+    for (const l of ends) { const e = l.pl[l.pl.length - 1]; if (ptPlD(e, f.outline, true) > 0.01 * Lx) { fail('mayfly vein ' + l.id + ' ends off the margin'); break; } }
+  },
+  // #59 no two veins cross (a branch or veinlet leaves its parent at its first point), on both wings
+  ephLanes(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephLanes++;
+    for (const w of ['fore', 'hind']) {
+      const m = meta.mayfly && meta.mayfly[w];
+      if (!m) { if (w === 'fore') fail('mayfly plate has no meta.mayfly.fore'); continue; }
+      for (let i = 0; i < m.lanes.length; i++) for (let j = i + 1; j < m.lanes.length; j++) {
+        const a = m.lanes[i], b = m.lanes[j];   // a branch's first point lies on its parent: its first segment touches the parent there, it does not cross it
+        const hit = plCross(b.parent === a.id ? a.pl : a.pl.slice(a.parent === b.id ? 1 : 0), b.pl.slice(b.parent === a.id ? 1 : 0));
+        if (hit) return fail('mayfly ' + w + 'wing veins cross: ' + a.id + ' and ' + b.id + ' near x ' + hit[0].toFixed(1));
+      }
+    }
+  },
+  // #59 the costal field (3): C-Sc rungs sparse over the basal half, dense over the apical third
+  ephCostal(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephCostal++;
+    const f = meta.mayfly && meta.mayfly.fore;
+    if (!f) return fail('mayfly plate has no meta.mayfly.fore');
+    const c = f.joins.filter(j => (j[0] === 'C' && j[1] === 'Sc') || (j[0] === 'Sc' && j[1] === 'C')).map(j => j[2]);
+    const uSc = f.lanes.find(l => l.id === 'Sc'), uEnd = uSc.pl[uSc.pl.length - 1][0] / f.L;
+    const basal = c.filter(u => u < 0.5).length / 0.5, apical = c.filter(u => u > uEnd - 0.3 && u <= uEnd).length / 0.3;
+    if (!(apical >= EPH.cost * basal) || !apical) fail('mayfly costal rungs not crowded apically: ' + apical.toFixed(1) + ' per length over the apical third vs ' + basal.toFixed(1) + ' over the basal half (want ' + EPH.cost + 'x)');
+  },
+  // #59 marginal intercalaries (7) and polygons (10): short free veins between the vein ends along the outer half of the
+  // margin, most of them closing a small cell (a rung to them)
+  ephMarginal(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephMarginal++;
+    const f = meta.mayfly && meta.mayfly.fore;
+    if (!f) return fail('mayfly plate has no meta.mayfly.fore');
+    const m = f.lanes.filter(l => l.kind === 'marg');
+    if (m.length < EPH.marg[0]) return fail('mayfly marginal intercalaries ' + m.length + ' (min ' + EPH.marg[0] + ')');
+    for (const l of m) {
+      const len = l.pl[l.pl.length - 1][0] - l.pl[0][0];
+      if (l.pl[0][0] < EPH.margFrom * f.L || len > EPH.marg[1] * f.L) return fail('mayfly marginal intercalary ' + l.id + ' not short and in the outer half: from ' + (l.pl[0][0] / f.L).toFixed(2) + ', ' + (len / f.L).toFixed(2) + ' long');
+    }
+    const rung = m.filter(l => f.joins.some(j => j[0] === l.id || j[1] === l.id)).length;
+    if (rung < EPH.margRung * m.length) fail('mayfly marginal polygons: ' + rung + ' of ' + m.length + ' marginal intercalaries close a cell');
+  },
+  // #59 cubital veinlets (8): 4-7 curved veinlets from CuA / CuP to the hind margin in the basal half
+  ephCubital(meta, svg, fail) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephCubital++;
+    const f = meta.mayfly && meta.mayfly.fore;
+    if (!f) return fail('mayfly plate has no meta.mayfly.fore');
+    const v = f.lanes.filter(l => l.kind === 'cub');
+    if (v.length < EPH.cub[0] || v.length > EPH.cub[1]) fail('mayfly cubital veinlets ' + v.length + ' (want ' + EPH.cub.join('-') + ')');
+    for (const l of v) {
+      const a = l.pl[0], b = l.pl[l.pl.length - 1], ch = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (!['CuA', 'CuP'].includes(l.parent)) return fail('mayfly cubital veinlet ' + l.id + ' does not leave CuA or CuP');
+      if (b[0] > EPH.cubEnd * f.L) return fail('mayfly cubital veinlet ' + l.id + ' ends at ' + (b[0] / f.L).toFixed(2) + ' of the length (max ' + EPH.cubEnd + ')');
+      if (Math.max(...l.pl.map(p => ptSegD(p, a, b))) < EPH.cubBow * ch) return fail('mayfly cubital veinlet ' + l.id + ' is straight');
+      if (ptPlD(b, f.outline, true) > 0.01 * f.L) return fail('mayfly cubital veinlet ' + l.id + ' ends off the margin');
+    }
+  },
+  // #59 rung lean (9): near-perpendicular, leaning either way (no herringbone): wingStats.leans [costal end distal, costal
+  // end proximal] over the rungs leaning more than a few degrees; default and device plate
+  ephLean(meta, svg, fail, { dev }) {
+    if (meta.type !== 'mayfly') return;
+    ephSeen.ephLean++;
+    for (const [s, what] of [[meta.wingStats, ''], [dev.meta.device.wingStats, 'device plate: ']]) {
+      if (!s || !s.leans) { fail(what + 'mayfly wingStats has no leans'); continue; }
+      const [a, b] = s.leans, n = a + b;
+      if (!n || Math.min(a, b) < EPH.lean * n) fail(what + 'mayfly rungs lean one way: ' + a + ' / ' + b);
+      if (s.meanAngle > EPH.meanMax) fail(what + 'mayfly rungs not near-perpendicular: mean junction ' + s.meanAngle.toFixed(1) + ' (max ' + EPH.meanMax + ')');
+    }
+  },
+  // #59 hindwing (12): about a third of the forewing, a rounded oval with an angular costal process near the base, 7-10
+  // veins behind Sc
+  ephHind(meta, svg, fail) {
+    if (meta.type !== 'mayfly' || !(meta.mayfly && meta.mayfly.hind)) return;
+    ephSeen.ephHind++;
+    const h = meta.mayfly.hind, f = meta.mayfly.fore, E2 = EPH.hind;
+    const Lx = Math.max(...h.outline.map(p => p[0])), W = Math.max(...h.outline.map(p => p[1])) - Math.min(...h.outline.map(p => p[1]));
+    const Lf = Math.max(...f.outline.map(p => p[0]));
+    if (Lx / Lf < E2.len[0] || Lx / Lf > E2.len[1]) fail('mayfly hindwing ' + (Lx / Lf).toFixed(2) + ' of the forewing (want ' + E2.len.join('-') + ')');
+    if (Lx / W < E2.aspect[0] || Lx / W > E2.aspect[1]) fail('mayfly hindwing length to width ' + (Lx / W).toFixed(2) + ' (want ' + E2.aspect.join('-') + ')');
+    const nV = h.lanes.filter(l => l.id !== 'Sc').length;
+    if (nV < E2.veins[0] || nV > E2.veins[1]) fail('mayfly hindwing veins behind Sc ' + nV + ' (want ' + E2.veins.join('-') + ')');
+    const top = x => { const ys = outlineYs(h.outline, x); return ys.length ? Math.min(...ys) : null; };
+    let pk = null;
+    for (let k = 0; k <= 50; k++) { const x = lerp(E2.proc[0], E2.proc[1], k / 50) * Lx, y = top(x); if (y !== null && (!pk || y < pk[1])) pk = [x, y]; }
+    let notch = 0;
+    if (pk) for (let k = 1; k <= 30; k++) { const x = pk[0] + k / 30 * 0.2 * Lx, y = top(x); if (y !== null) notch = Math.max(notch, y - pk[1]); }
+    if (!pk || notch < E2.notch * Lx) fail('mayfly hindwing has no costal process: notch ' + (notch / Lx).toFixed(3) + ' of the length behind its peak (min ' + E2.notch + ')');
+  },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {
       if (!s) return fail(what + 'no wingStats on a grown wing');
-      if (s.joins > 0 && (s.minAngle < 100 || s.maxAngle > 145)) fail(what + 'junction angle outside 100-145: ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
+      const band = RUNG_BAND[meta.type] || RUNG_BAND_ALL;
+      if (s.joins > 0 && (s.minAngle < band[0] || s.maxAngle > band[1])) fail(what + 'junction angle outside ' + band.join('-') + ': ' + s.minAngle.toFixed(1) + '-' + s.maxAngle.toFixed(1));
       if (meta.type !== 'moth' && s.dropped > s.joins) fail(what + 'more crossveins dropped than placed: ' + s.dropped + ' > ' + s.joins);
       if ((meta.type === 'dragonfly' || meta.type === 'damselfly') && s.rungs < 40) fail(what + 'too few ladder rungs on an odonate: ' + s.rungs);
       if (meta.type === 'mayfly' && s.rungs < 60) fail(what + 'too few ladder rungs on a mayfly: ' + s.rungs);
@@ -1689,6 +1849,13 @@ const POST = {
     }
   },
   // the #26 checks assert only on cicada plates: once the run has CIC_MIN of them every selected one must have run
+  // the #59 checks assert only on mayfly plates: once the run has EPH_MIN of them every selected one must have run
+  ephSeen(fail) {
+    const n = ephSeenPlates, idle = Object.keys(ephSeen).filter(k => ran.has(k) && !ephSeen[k] && (k !== 'ephHind' || ephHindPlates));
+    if (idle.length && n >= EPH_MIN) fail('#59 mayfly checks that never ran in ' + n + ' mayfly plates: ' + idle.join(', '));
+    console.log('#59 mayfly checks asserted on (of ' + n + ' mayfly plates):', Object.keys(ephSeen).filter(k => ran.has(k)).map(k => k + ' ' + ephSeen[k]).join(', ') +
+      (n < EPH_MIN ? '; too few mayfly plates (' + n + ' < ' + EPH_MIN + ') to require every check' : ''));
+  },
   cicSeen(fail) {
     const n = cicSeenPlates, idle = Object.keys(cicSeen).filter(k => ran.has(k) && !cicSeen[k]);
     if (idle.length && n >= CIC_MIN) fail('#26 cicada checks that never ran in ' + n + ' cicada plates: ' + idle.join(', '));
@@ -1739,7 +1906,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'] };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
@@ -1761,6 +1928,7 @@ async function run() {
     if (meta.type === 'grasshopper') orthSeenPlates++;
     if (meta.type === 'beetle') beetlePlates++;
     if (meta.type === 'cicada') cicSeenPlates++;
+    if (meta.type === 'mayfly') { ephSeenPlates++; if (meta.mayfly && meta.mayfly.hind) ephHindPlates++; }
     if (meta.wingSig) { const m = wingSigs[key] ||= new Map(); m.set(meta.wingSig, (m.get(meta.wingSig) || 0) + 1); }
     if (meta.bodySig) { const m = bodySigs[key] ||= new Map(); m.set(meta.bodySig, (m.get(meta.bodySig) || 0) + 1); }
     elTotal += drawn(svg);

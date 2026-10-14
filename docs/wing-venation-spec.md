@@ -1,6 +1,6 @@
 # Wing venation: what the references show and how we generate it
 
-Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera), all eight grown by `growVeins` v2 since the same day, and audited at 4x against the references, except Ephemeroptera, whose audit was against a stonefly; its rules were re-derived from a real mayfly on 2026-10-13 (#20) and the implementation catches up in #59. See Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
+Status: implemented 2026-10-02 for every winged order (Hymenoptera, Odonata, Cicadidae, Diptera, Neuroptera, Ephemeroptera, Lepidoptera, Orthoptera), all eight grown by `growVeins` v2 since the same day, and audited at 4x against the references, Ephemeroptera's rules were re-derived from a real mayfly on 2026-10-13 (#20) and re-implemented against it on 2026-10-14 (#59). See Status below. Supersedes `research-hymenoptera-wings.md`. Reference images
 are in `ref/` with sources and licences in `ref/README.md`. `research-lepidoptera-wings.md`
 still covers lepidopteran *patterns* (tone, hatching); this document covers veins and cells
 for every order.
@@ -473,8 +473,8 @@ Observed (forewing unless stated):
     meet it are inferred, not measured. Families without hindwings (Baetidae in part, Caenidae) are not
     shown either. All three stay as unverified notes, not rules.
 
-Which current rules survive (the implementation is still the one written against the stonefly; the
-changes are filed as #59; outline and root items overlap #21):
+Which of the rules written against the stonefly survived (#20's verdicts; #59 implemented the changes, see the
+paragraph after the table):
 
 | current rule (2026-10-02) | verdict | against |
 |---|---|---|
@@ -485,29 +485,52 @@ changes are filed as #59; outline and root items overlap #21):
 | 7–13 fan lanes as rays from the root to targets spaced along the hind margin | changes: a few basal stems that fork across the basal half; 12–16 ends with the intercalaries | 4, 6 |
 | Fan lanes bent by a share of the costa's convexity and undulating (`und`) | survives as smooth curves; keep `und` small, no visible zigzag | 5 |
 | Intercalaries between alternate pairs from `u0i` 0.4–0.5 to the margin | survives; add short marginal intercalaries along the hind margin and the cubital veinlets | 7, 8 |
-| Rungs "tilted toward the apex" (`angle` 110–124, `lean` mostly one way) | changes: near-perpendicular (about 90–110°) leaning either way. The check.js band (100–145 on every winged order) would reject part of that range, so the band for this order is a decision for Nik, not something to relax in passing | 9 |
+| Rungs "tilted toward the apex" (`angle` 110–124, `lean` mostly one way) | changes: near-perpendicular (about 90–110°) leaning either way. Decided by Nik (2026-10-14, #59): the mayfly has its own junction band, 88–125° from this reference, asserted per order in `tests/check.js` (`RUNG_BAND`); every other order keeps 100–145° | 9 |
 | Cell size shrinking toward the tip and the trailing edge | survives | 9 |
 | First three fan lanes D, the rest F; crossveins F | survives | 11 |
 | Hindwing small and rounded, 3 fan lanes, 1.6× coarser cell, `hindL` 0.22–0.36, present with odds 0.8 | survives in size (measured 0.33); changes in shape (costal process near the base) and in vein count (7–10) | 12, 13 |
 | "1A–5A", "9–15 longitudinals" | dropped: read off the stonefly | — |
 
-Current implementation (unchanged by #20; where the table above says "changes", this paragraph describes
-what #59 replaces, not the reference): grown by `growVeins` v2, the ladder regime everywhere. The forewing is a triangle with the apex at
-the top corner (a domed outline sent Rs diving away from R1 and no rung could bridge them). Lanes: C and
-the trailing edge as `noDraw` walls; Sc and R1 as pre-built offsets under the costa (`sub` 0.035–0.055 of
-the chord each, Sc ending on the costa at 0.9, R1 at the apex, O / D); 7–13 fan lanes (`nV` − 2: Rs, M,
-Cu1, Cu2, 1A..) as rays from the root to targets spaced by arc length along the hind margin from the
-apex back to 22% span, each bent by a share of the costa's convexity that fades toward the trailing
-edge (`pow0` 0.8–1.0 × (1 − f)^1.2, measured against the ray's own chord) and undulating (`und`); the
-first three D, the rest F; intercalaries (`inter` 0.6) between alternate pairs as free lanes from `u0i`
-0.4–0.5 to the margin (F). No named crossveins: every strip is a one-row ladder of sites at the local
-spacing (`evenSites`, `k` 1.0–1.4) with an absolute cell `cells` × 0.035 span × (1 − 0.3 u)(1 − 0.25 s),
-the costal ladder on its own `costStep` (0.022–0.034); `uOpen` 1.0. Two `growVeins` knobs were added
-for this order (defaults keep every other order byte-identical): `gapNear` 0.2 (a lane shared by two
-ladders cannot keep half a spacing clear of the junctions the first one left) and `reachW` 0.7 (a rung
-across a wide apical strip must slide further than one spacing to lean into the band). Hindwing: the
-same with 3 fan lanes and a 1.6× coarser cell, present with odds 0.8. 220 rungs per plate, mean angle
-117°, 17 dropped.
+Current implementation (#59, 2026-10-14), grown by `growVeins` v2 in `wingsEphemeroptera`, the ladder regime everywhere;
+`meta.mayfly` carries each wing's outline, lanes (`kind`: costal, stem, branch, inter, marg, cub) and rungs in wing-local
+coordinates, and the `eph*` checks of `tests/check.js` assert the rules below on them (`EPH`, stated from this reference).
+
+- **Outline (1).** Forewing length : width 2.3–2.8 (gene `w`, width 0.36–0.44 of the length); the costa nearly straight
+  (sagitta under 0.05 of the length from 0.1 of the length to the apex, `ephOutline`), the apex the costal corner, the
+  outer margin sloping back to the hind margin, deepest at `deep` 0.40–0.50 of the length. #21 still owns the apex
+  hook and the hindwing masking.
+- **Costal field (2, 3).** Sc and R1 pre-built under the costa, each strip `sub` 0.05–0.07 of the wing's width (so they
+  run nearly parallel, never more than a fifth of the local chord), Sc ending on the costa at 0.9, R1 at the apex. The
+  C–Sc ladder takes `costStep` 0.020–0.026 of the length over the apical third and `costBase` 2.2–3.0 times that over
+  the basal half, the two stretches separated by `walls` at 0.5 and 0.62 (a new `growVeins` option: extra ladder stops
+  per lane pair). Measured: at least 1.5 times as many rungs per length over the apical third (`ephCostal`). The forked,
+  anastomosing cells of the stigmatic area are not drawn: the C–Sc strip is 2–4 plate px, so a fork's two feet would sit
+  under the 1.8 px floor and fill in on e-ink.
+- **Fan (4, 6, 7).** Stems Rs, MA, MP, CuA, CuP and one or two anals (`nA`) leave the base a strip apart (at least 0.012 of
+  the length at 0.08, `ephFan`), the front ones taking a share of the costa's bow, each held at least 0.6 strip under R1.
+  Rs forks once or twice (`fRs` 0.14–0.26, `fRs2` 0.36–0.5), MA (`fMA` 0.3–0.46) and MP (`fMP` 0.16–0.32) once, each branch
+  leaving its stem and easing over to its own target behind it. Long intercalaries start free in mid-wing (`u0i`
+  0.38–0.5, or halfway along a pair that ends early) in the gaps between the branches, siblings first (IR, IMA, IMP), as
+  many as bring the vein ends on the margin to `ends` (12–16). Margin targets by arc length from the apex, closer
+  together toward it; CuA's end and everything behind it share the hind margin behind `cuX` 0.38–0.46 of the length.
+- **Marginal intercalaries and polygons (7, 10).** Between neighbouring vein ends whose midpoint lies at 0.55–0.97 of
+  the length, one (sometimes two, `marg2`, where the strip is over three cells wide at the margin) short free vein of
+  1.2–2.2 cells runs to the margin; the ladders on either side of it close the small polygons of the last cell
+  (`ephMarginal`: at least three, half of them carrying a rung).
+- **Cubital veinlets (8).** `nCub` 4–7, split between CuA (feet between its end and CuP's) and CuP (between its end and
+  the anals'). Each drops steeply from its vein, its foot half its drop further out, bowed toward the apex, all of one
+  series the same shape so they nest; steeper (0.35, 0.2) where the vein runs down close in front of the foot
+  (`ephCubital`, and `ephLanes`: no two veins cross on either wing).
+- **Rungs (9).** One-row ladders everywhere (`evenSites`, `k` 1.0–1.4, cell `cells` × 0.035 of the length × (1 − 0.3 u)
+  (1 − 0.25 s)); the order's own band `angBand` [90, 123] (inside the asserted 88–125), target `angle` 94–104, `lean` 0:
+  each rung draws its own preferred lean, measured against its near lane's tangent, so the two leans come out about
+  even (`wingStats.leans`, each at least 20% of the leaning rungs, mean junction under 110°, `ephLean`, default and
+  device plate). `gapNear` 0.2 and `reachW` 0.7 as before.
+- **Hindwing (12).** Present with odds 0.8, `hindL` 0.22–0.36 of the forewing; length : width 1.6, broadest at about
+  40%, with an angular costal process at 0.12 of its length and a notch behind it (Sc and R1 run under the process, not
+  over it); R1 and `nH` 6–9 veins radiating from the base, so 7–10 behind Sc; the cell 1.6 times coarser (`ephHind`).
+- **Weights (11).** Sc O, R1 D (O on a `heavy` wing), Rs / MA / MP and their branches D, one level heavier before their
+  first fork (CuA and CuP before their first veinlet); otherwise CuA, CuP, the anals, intercalaries, veinlets and rungs F.
 
 ### Orthoptera, tegmen (ref: orth-grasshopper)
 
@@ -585,7 +608,11 @@ to its `deflect` step:
   spacing until the obtuse angle between crossvein and lane lies in [105°, 140°] at both ends
   (target `angle` gene 112–128°, `lean` gene preferring the costal end distal as in the references);
   a crossvein that cannot satisfy both, or that would land next to another junction or cross a third
-  lane, is dropped. Nothing dangles (R-E): a crossvein exists only with both ends on lanes.
+  lane, is dropped. Nothing dangles (R-E): a crossvein exists only with both ends on lanes. An order may pass its
+  own band (`angBand`; the mayfly's [90, 123], #59) and `lean` 0, under which each rung draws its own preferred lean
+  (measured against its near lane's tangent) instead of the order-wide one; `wingStats.leans` counts the rungs
+  leaning more than 3° each way. `walls` (per lane pair, span fractions) add ladder stops, so a strip changes step
+  there (the mayfly's costal field).
 - **Open apex** (R-F): joins stop at `uOpen`; a stub lane is cut `stubLen` past its last junction and
   drawn at `SW.F` from there.
 - **Weight** (R-G): stems `SW.O` (Sc+R, M+Cu to its fork), named branches `SW.D`, A and
@@ -700,7 +727,7 @@ the references, seeds listed per order) and what it changed:
   tabanids, asserted per plate by `dipRungs`.)
 - Neuroptera (neu-nothochrysa; seeds 1, 16, 22): gradates read as one oblique line; now true zigzags;
   a branch could double back to the costal side at the apex (fixed); twigs now end on the outline. Pass.
-- Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass. (Against `eph-mayfly-1956`, since found to be a stonefly, #20; superseded by the re-derived section and #59.)
+- Ephemeroptera (seeds 4, 36): quick check, unchanged. Pass. (Against `eph-mayfly-1956`, since found to be a stonefly, #20; superseded by the #59 audit below.)
 - Odonata, second audit (odo-anax-ris1921, odo-damsel-ris1921; dragonfly 18, 27, 49, damselfly 30, 41)
   after moving the secondaries onto `growVeins` v2: R1 used to end on the costa at 62% span and the
   damselfly's fan overlapped itself in the petiole (both fixed); rungs now lean 105–140° (mean
