@@ -1,0 +1,20 @@
+== backlog from 1 view plate
+type                min     p5  median  sheet9   closest pair
+cicada             6.99  11.62   21.05   10.18   13,41   below floor 10.0
+                                              34,58  7.88
+                                              38,53  7.92
+== backlog from 61 view plate
+type                min     p5  median  sheet9   closest pair
+cicada             7.12  11.61   21.02    9.73   65,81   below floor 10.0
+                                              74,77  7.46
+                                              96,102  7.47
+== backlog from 1 view body
+type                min     p5  median  sheet9   closest pair
+cicada             8.82  14.91   25.30   12.97   3,13   below floor 10.0
+                                              42,55  8.87
+                                              28,49  9.48
+== backlog from 61 view body
+type                min     p5  median  sheet9   closest pair
+cicada             9.46  14.83   25.67   12.80   65,82   below floor 10.0
+                                              61,91  9.94
+                                              82,98  10.34

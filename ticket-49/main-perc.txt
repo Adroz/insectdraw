@@ -1,0 +1,20 @@
+== main from 1 view plate
+type                min     p5  median  sheet9   closest pair
+cicada             5.95   9.94   18.80    8.82   13,41   below floor 10.0
+                                              40,42  6.32
+                                              13,56  6.87
+== main from 61 view plate
+type                min     p5  median  sheet9   closest pair
+cicada             5.76   9.98   18.14    8.36   67,118   below floor 10.0
+                                              98,110  5.85
+                                              65,87  6.79
+== main from 1 view body
+type                min     p5  median  sheet9   closest pair
+cicada             6.74  11.49   22.26   10.34   14,15   below floor 10.0
+                                              3,13  7.14
+                                              28,49  7.56
+== main from 61 view body
+type                min     p5  median  sheet9   closest pair
+cicada             5.21  11.37   21.54   10.23   65,82   below floor 10.0
+                                              67,98  5.90
+                                              82,98  6.77

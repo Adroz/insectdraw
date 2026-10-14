@@ -1,0 +1,20 @@
+== after from 1 view plate
+type                min     p5  median  sheet9   closest pair
+cicada            10.74  19.81   35.55   15.41   9,11
+                                              15,37  10.80
+                                              1,22  11.06
+== after from 61 view plate
+type                min     p5  median  sheet9   closest pair
+cicada            10.55  20.40   36.11   16.42   62,118
+                                              61,84  11.24
+                                              81,98  11.37
+== after from 1 view body
+type                min     p5  median  sheet9   closest pair
+cicada            11.73  20.35   33.77   17.62   43,50
+                                              17,22  12.08
+                                              52,58  12.68
+== after from 61 view body
+type                min     p5  median  sheet9   closest pair
+cicada            10.78  21.58   34.34   19.07   88,118
+                                              62,118  11.90
+                                              88,103  12.84
