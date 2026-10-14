@@ -216,15 +216,15 @@ Rules: grown by `growVeins` v2. Lane plan (u = span fraction, s = chord fraction
 
 | lane | from (u, s) | to | notes |
 |---|---|---|---|
-| Sc+R | (0.02, 0.3) | nodal node N0 (u `nx0` 0.46–0.6, s 0.14) | O (H with the heavy gene); bow −`bow` (0.015–0.04) |
+| Sc+R | (0.02, 0.3) | nodal node N0 (u `nx0` 0.46–0.6, s 0.14) | O on the forewing (D on the hindwing), #26; bow −`bow` (0.015–0.04) |
 | M+CuA | (0.02, 0.44) | `mcu` (u 0.1–0.2) | the common stem (`mcuFork` odds 0.7); CuA forks off it |
-| M | `mcu` (or the base) | N1 (u nx0 − slant/3, s 0.33) | O / H; bow −0.8 `bow` |
+| M | `mcu` (or the base) | N1 (u nx0 − slant/3, s 0.33) | O; bow −0.8 `bow` |
 | CuA | fork off M+CuA | N2 (s 0.53) | O; bow +`bow` |
-| CuP | (0.02, 0.62) | N3 (u nx0 − slant, s 0.72) | D |
+| CuP | (0.02, 0.62) | N3 (u nx0 − slant, s 0.72) | O (#26: the fourth trunk) |
 | apical stems | N0 / N1 / N2 | 20–45% of the way to their targets' mean | D; one stem per nodal node that carries 2+ branches, two sub-stems when M carries 3–4 |
 | RA, RP, M1–M4, CuA1, CuA2 | the stems' ends | nodes on the ambient vein's apical arc (x > 0.68) | D; lanes sharing nodes, common `apBow` ±0.03 |
 | ambient vein | pre-built: the outline inset by `inset` × 1.6, costa → apex → clavus, as two monotone lanes | – | D, `noJoin` |
-| A1–A3 | `wingGraph` chains | clavus | D / F |
+| A1–A3 | `wingGraph` chains | the claval margin at u 0.22 / 0.16 / 0.10 (short, #26) | D / F |
 
 Named crossveins, all through `place`: the **nodal line** as one `then` chain Sc+R → M → CuA → CuP so
 its four pieces keep one slant (`slant` 0.04–0.14 of the span back toward the base); 1–3 **m-cua**
@@ -232,7 +232,17 @@ rungs in the median cell; the optional Sc+R–M rung in the radial cell (`scr` 0
 (`ulnar` 0.6) across the apical lanes at 45–60% of their length. `noSites`: a cicada has no other
 crossveins, and `uOpen` is the nodal line. The hindwing is the same plan at half size with one apical
 branch per nodal node. `meta.wingStats` carries the placed joins; 14 per plate on average, under 1%
-dropped.
+dropped. The `heavy` gene weights the nodal line (D, else F); the trunks are always O on the
+forewing (#26: at D the basal half read as seven or eight thin radiating lines).
+
+Posture (#26, from set specimens): the forewing's root-to-apex line lies `sweep` 30–45° below the
+horizontal, and its length is anatomical, 1.46–1.72 root-to-abdomen-tip lengths, not stretched to put
+the apex level with the abdomen tip (that made a shallow sweep widen the plate twice over: median
+plate scale 0.81, now about 1.04). The hindwing roots on the metathorax (`wingRoots[1]` 0.8, behind
+the cruciform elevation) and the forewing's clavus runs back along the body over it (its basal hind
+margin 10° in from straight back, `CIC_CLAVUS`), so the hindwing shows only from under the forewing's
+hind margin, beside the abdomen. `tests/check.js` asserts these as `cicSweep`, `cicScale`,
+`cicTrunks` and `cicHindRoot`.
 
 ### Diptera (ref: dip-eristalis, dip-asilid-photo, dip-limonia)
 

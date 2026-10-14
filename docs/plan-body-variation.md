@@ -92,9 +92,10 @@ perceptual criterion (`tests/perceptual.js`) and eight steps, one ticket per ord
   on the costal pose because anything larger crosses the midline on a long antenna; droop is 0–15°
   and only on the forward poses. The legacy `antenna` / `antLen` fields in each entry's `proportions` roll
   are no longer read but were left in place so the rng stream of the family pick does not move.
-- **Known, outside this plan:** the cicada wing span (`abdomen length / sin(theta) × 1.0–1.12`
-  in the wing block) pushes ~0.4% of cicadas below plate scale 0.55 on the baseline engine as
-  well; which seeds hit it moves with the rng stream, so `check.js 3000` can show one to three.
+- **Known, outside this plan (fixed by #26):** the cicada wing span (`abdomen length / sin(theta) × 1.0–1.12`
+  in the wing block) pushed ~0.4% of cicadas below plate scale 0.55; since #26 the span is
+  anatomical (1.46–1.72 root-to-abdomen-tip lengths, independent of the sweep) and the cicada's
+  median plate scale is about 1.04.
 
 ## Goal
 
