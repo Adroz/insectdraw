@@ -309,7 +309,7 @@ x bucket (× 20).
   ahead and shortened until it fits at scale 1.0: on the plate it reaches the top margin, about 0.3–0.7 (median 0.4) of its rolled
   length. A true swept-back katydid antenna (out past the forelegs and back beside the body) is a follow-up.
   `grasshopperAntenna` in `tests/check.js` asserts all three numbers.
-- Beetle head and antennae (#25). Weevil: the socket is on the side of the rostrum (`rostrumSide`, the head gene
+- Beetle head and antennae (#25). Weevil: the socket is on the side of the rostrum (`rostrumPoint`, the head gene
   `antOn` 0.2–0.55 of the rostrum's length ahead of the capsule; `head-col-weevil.jpg` puts it about a quarter of the way
   along a long *Curculio* rostrum), and the family's `wide` pose leaves it sideways (−25 … 0°) so the scape stands out
   from the rostrum and the funicle turns forward at the elbow, as on the photo. Longhorn (`ant-longhorn-dorcadion.jpg`):

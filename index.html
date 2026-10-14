@@ -2696,7 +2696,7 @@ function rollBodyGenes(type, P) {
   // checked and re-rolled in the antennae block, which also pushes the antenna genes onto B.sig) ----
   B.ant = rollAntGenes(type, P);
   if (B.head.rostrum) {   // a weevil's antenna inserts on the side of the rostrum, antOn of its length ahead of the capsule (#25); no rng
-    const p = rostrumSide(B.head.rostrum, P.headW, P.headH, 0, B.head.rostrum.antOn);
+    const p = rostrumPoint(B.head.rostrum, P.headW, P.headH, 0, B.head.rostrum.antOn);
     B.ant.socket = [p[0] / P.headW, p[1] / P.headH];
   }
   // ---- legs ----
@@ -3184,15 +3184,16 @@ function drawThorax(C) {
 }
 
 // ---------- head ----------
-// The weevil's rostrum seen from above (G = B.head.rostrum, head width W, depth H): with `at` omitted, the right side as one
-// cubic Bezier from its root inside the capsule to the tip (the tube is drawn straight: its curvature is lateral); with
-// `at`, the point on that side `at` of the rostrum's length ahead of the capsule front (headTop), where the antenna
-// inserts (#25). No rng: rollBodyGenes places the socket with it and drawHead draws the tube from it.
-function rostrumSide(G, W, H, headTop, at) {
+// The weevil's rostrum seen from above (G = B.head.rostrum, head width W, depth H): its right side as one cubic Bezier
+// from its root inside the capsule to the tip (the tube is drawn straight: its curvature is lateral). No rng: drawHead
+// draws the tube from it and rostrumPoint finds the antennal insertion on it.
+function rostrumSide(G, W, H, headTop) {
   const len = G.len * W, w = G.w * W / 2, tip = headTop - len;
-  const c = [[w, headTop + H * 0.3], [w * 0.9, headTop - len * 0.45], [w * 0.8, tip + len * 0.3], [w * 0.7, tip]];
-  if (at === undefined) return c;
-  const y = headTop - at * len;   // y falls monotonically along the side: bisect for it
+  return [[w, headTop + H * 0.3], [w * 0.9, headTop - len * 0.45], [w * 0.8, tip + len * 0.3], [w * 0.7, tip]];
+}
+// the point on the rostrum's right side `at` of its length ahead of the capsule front (headTop), where the antenna inserts (#25)
+function rostrumPoint(G, W, H, headTop, at) {
+  const c = rostrumSide(G, W, H, headTop), y = headTop - at * G.len * W;   // y falls monotonically along the side: bisect for it
   let lo = 0, hi = 1;
   for (let k = 0; k < 40; k++) { const m = (lo + hi) / 2; if (bez3(c, m)[1] > y) lo = m; else hi = m; }
   return bez3(c, (lo + hi) / 2);
