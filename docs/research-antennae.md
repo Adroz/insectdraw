@@ -320,6 +320,11 @@ x bucket (× 20).
   (`poses.swept` on the family's `ant` entry: root 40–55° back from straight out, a further 35–50° turn weighted toward
   the root, `back`) leaves the head already turned back, crossing the pronotum's front corner as on the photo, so the
   forelegs ahead of the thorax are never in its way; a leg hit turns its root further back (and its run less, keeping
-  its heading), a wing hit turns it less, and it is never straightened forward. `longhornAntenna` asserts the length,
+  its heading), a wing hit turns it less, and it is never straightened forward. Where the forelegs (raised or reaching
+  forward) and the elytral shoulders leave the sweep no room (about 1 % of longhorns at 3000 seeds), the re-rolls switch
+  after half the attempts to the pose's `alt`: a steep root over the pronotum (55–90° back) that turns outward past
+  the elytral shoulders (curve −60 … −10) with a tip droop (10–80°) bringing it back beside the elytra, searched on a
+  fixed grid (no rng) for the clear pose whose tip stays nearest the body. Every back sweep's tip stays within 1.8× the
+  covers' half width (`ANT_BACK_OUT`, antOk 'wide': a wide one turns back sooner). `longhornAntenna` asserts the length,
   that the shaft is never narrower than the detail stroke on the plate (and at least 0.1 head widths at its base),
   the swept pose, nothing ahead of the head, and the tip beside the elytra.
