@@ -30,7 +30,7 @@ lacewing's beaded antenna and broad wings, the osmylid's spotted wings.
   leaves it small), the antlion's abdomen ×1.45 long and ×0.75 wide, the owlfly's head ×1.3 broad, the mantidfly's
   abdomen stout.
 - **Abdomen against the wing** (`wingSet.abdWing`, the abdomen's length over the forewing's): chrysopid 0.38–0.68 (0.37–
-  0.67 before #51, when the wing was sized off the abdomen tip), hemerobiid 0.28–0.52, antlion 1.3–1.6 (#51's range; the
+  0.67 before #51, when the wing was sized off the abdomen tip), hemerobiid 0.3–0.52, antlion 1.3–1.6 (#51's range; the
   reference measures about 1.25 on one set specimen, and males run longer), owlfly 0.5–0.72, mantidfly
   0.45–0.8. The antlion's tip always reaches past every wing point (`neuAbdomen`).
 - **Wing set** (`wingSet.sets`, a body gene): spread (the setting-board pose), forward (forewings pushed forward, the

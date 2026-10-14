@@ -431,8 +431,8 @@ rules for all of them:
    abdomen at 1.3–1.6 forewings (the reference measures ~1.25); rules and references in
    `docs/research-neuroptera-families.md`, checks `neuFamily`, `neuAntenna`, `neuAbdomen`, `neuPronotum`,
    `neuRaptorial`, `neuEyes`, `neuSpots`, `neuFamilies`. `tests/perceptual.js 60 --type lacewing`, before (backlog
-   f1abafd, after #19) → after: seeds 1–60 min 8.30 (13,24) → 10.20 (37,57), sheet9 11.77 → 17.42; seeds 61–120
-   7.18 → 9.45, sheet9 11.99 → 17.50; `--view body` 8.18 → 11.18 and 10.27 → 10.49.
+   f1abafd, after #19) → after: seeds 1–60 min 8.30 (13,24) → 10.39 (37,57), sheet9 11.77 → 16.89; seeds 61–120
+   7.18 → 9.45, sheet9 11.99 → 17.36; `--view body` 8.18 → 11.18 and 10.27 → 10.44.
 5. **Lepidoptera: abdomen families, leg pose and wing set, #52** (moth 9.17, butterfly 8.75). The audit: same abdomen,
    same hairy thorax, same raised-foreleg V, same hind-leg stubs. Genes by `P.fam`: sphingid (long fusiform abdomen
    tapering to a point, lateral spot row), saturniid (short, stout, hairy), geometrid (slender, long), arctiid
