@@ -5242,23 +5242,29 @@ function pronotalRegions(kind, thorax) {
 function pronotalPattern(meta, kind, regions, outline, Pf) {
   const els = [], hatch = [];
   if (regions.length) {
-    const step = floorPitch(Math.max(3, Pf)), d = norm([1, -1.3]), nn = [-d[1], d[0]];
-    for (const R of regions) {
-      els.push(polylineStr(R, SW.F));
-      const pr = R.map(p => p[0] * nn[0] + p[1] * nn[1]);
-      for (let o = Math.ceil(Math.min(...pr) / step) * step; o <= Math.max(...pr); o += step) {
-        const base = mul(nn, o);
-        for (const [a0, a1] of lineIntervals(base, d, R)) for (const [b0, b1] of lineIntervals(base, d, outline)) {
-          const t0 = Math.max(a0, b0), t1 = Math.min(a1, b1);
-          if (t1 - t0 < 0.6) continue;
-          const A = add(base, mul(d, t0)), Bp = add(base, mul(d, t1));
-          els.push(polylineStr([A, Bp], SW.F)); hatch.push([A, Bp]);
-        }
-      }
-    }
+    for (const R of regions) els.push(polylineStr(R, SW.F));
+    hatch.push(...hatchRegions(regions, outline, floorPitch(Math.max(3, Pf))));
+    for (const h of hatch) els.push(polylineStr(h, SW.F));
   }
   meta.thorax.pattern = { kind, regions, hatch };
   return els;
+}
+// #53 an engraver's tone over shapes: parallel lines `step` apart (one direction, rising to the right) across each region,
+// cut to the region (less any holes, even-odd) and to the outline; the segments as [a, b] pairs, the slivers dropped
+const HATCH_DIR = norm([1, -1.3]);
+function hatchRegions(regions, outline, step, holes) {
+  const d = HATCH_DIR, nn = [-d[1], d[0]], out = [];
+  for (const R of regions) {
+    const pr = R.map(p => p[0] * nn[0] + p[1] * nn[1]);
+    for (let o = Math.ceil(Math.min(...pr) / step) * step; o <= Math.max(...pr); o += step) {
+      const base = mul(nn, o);
+      for (const [a0, a1] of lineIntervals(base, d, R, holes)) for (const [b0, b1] of lineIntervals(base, d, outline)) {
+        const t0 = Math.max(a0, b0), t1 = Math.min(a1, b1);
+        if (t1 - t0 >= 0.6) out.push([add(base, mul(d, t0)), add(base, mul(d, t1))]);
+      }
+    }
+  }
+  return out;
 }
 // The elytron's striae at plate scale (#15): each stria keeps its longest run (through its widest point, where the
 // striae are furthest apart) that stays Pf (body units) from every other stria and the outline, measured against the
@@ -5342,19 +5348,8 @@ function elytralStriae(meta, striae, G, outline, Pf, pattern) {
   const pat = { kind: pattern ? pattern.kind : 'none', regions: pattern ? pattern.regions : [], holes: pattern ? pattern.holes : [], hatch: [] };
   if (pattern && pattern.kind !== 'none') {
     for (const e of pattern.edges) els.push(polylineStr(e, SW.F));
-    const step = floorPitch(Math.max(pattern.pitch, Pf)), d = norm([1, -1.3]), nn = [-d[1], d[0]];
-    for (const R of pattern.regions) {
-      const pr = R.map(p => p[0] * nn[0] + p[1] * nn[1]);
-      for (let o = Math.ceil(Math.min(...pr) / step) * step; o <= Math.max(...pr); o += step) {
-        const base = mul(nn, o);
-        for (const [a0, a1] of lineIntervals(base, d, R, pattern.holes)) for (const [b0, b1] of lineIntervals(base, d, outline)) {
-          const t0 = Math.max(a0, b0), t1 = Math.min(a1, b1);
-          if (t1 - t0 < 0.6) continue;
-          const A = add(base, mul(d, t0)), Bp = add(base, mul(d, t1));
-          els.push(polylineStr([A, Bp], SW.F)); pat.hatch.push([A, Bp]);
-        }
-      }
-    }
+    pat.hatch = hatchRegions(pattern.regions, outline, floorPitch(Math.max(pattern.pitch, Pf)), pattern.holes);
+    for (const h of pat.hatch) els.push(polylineStr(h, SW.F));
   }
   meta.elytra = { style, striae: drawn, dots, dotStria, dotR, dashes, pattern: pat, lines: style === 'smooth' || style === 'costate' || style === 'glabrous', weight: style === 'costate' ? 'D' : 'F', outline };
   return els;

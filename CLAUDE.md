@@ -89,7 +89,11 @@ contract for changes.
   a row of punctures (punctate) or dashes, the marks a floor apart; there are no puncture rows between the striae.
   `meta.elytra` records what it drew; `elytraPitch` and `elytraTexture` in `tests/check.js` measure it on the default
   and the device plate. The beetle's pronotum is held to the research proportions by the entry's `pronotum` bands
-  (`beetleProportions`) and the rove family draws short truncate elytra over a tapering, hatched abdomen (`roveBody`).
+  (`beetleProportions`) and the rove family draws short truncate elytra over a tapering, hatched abdomen (`roveBody`). The
+  within-family genes (#53: elytral outline, sculpture, pattern; pronotal pattern and width class; horns, spines, the
+  fossorial tibia, stag jaws) live in the entry's `elytra`, `pronotum`, `armature` and `legs` tables; a tone over a
+  shape (an elytral or pronotal pattern) goes through `hatchRegions` at the plate pitch inside a deferred element,
+  never as a fill (`elytraPattern`, `pronotumPattern`).
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px

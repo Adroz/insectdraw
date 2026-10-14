@@ -285,7 +285,7 @@ const tally = (g, v) => { const T = colTally[g] ||= {}; T[v] = (T[v] || 0) + 1; 
 const COL_SHARE = 0.05, COL_GENE_MIN = 20;   // ... and a gene is held to it once COL_GENE_MIN plates rolled it (a family's own gene: its plates)   // a gene value drawn on fewer of the plates that roll the gene is one the sheet never shows
 const COL_VALUES = { outline: ELY_OUTLINES, shoulder: ['square', 'rounded'], pattern: ELY_PATTERNS, pronPattern: Object.keys(PRON_PATTERNS), pronClass: Object.keys(PRON_CLASS), horn: ['none', 'cephalic', 'pronotal'], spines: ['0', '1'], stag: ['minor', 'major'], foretibia: ['slender', 'toothed'] };
 const COL_GENE_CHECKS = ['colFamily', 'elytraOutline', 'elytraPattern', 'pronotumPattern', 'pronotumRatio', 'beetleArmature', 'stagMandibles', 'foretibia'];   // the #53 checks POST.colGenes audits
-const COL_MIN = 40;   // beetle plates a run needs before a #25 check that never ran fails rather than being reported (a family is 1/6 of beetles: no weevil in 40 has odds 0.0007)
+const COL_MIN = 40;   // beetle plates a run needs before a #25 check that never ran fails rather than being reported (a family is 1/9 of beetles since #53: no weevil in 40 has odds 0.009)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -297,6 +297,16 @@ const pcaAspect = poly => {
 };
 
 // ---- geometry helpers shared by the checks ----
+// #53 a hatch's line spacing (body units): the segments [a, b] must share one direction (null if not), and the spacing is
+// the smallest step between their distinct offsets along its normal (Infinity for fewer than two lines)
+const hatchGap = H => {
+  if (H.length < 2) return Infinity;
+  const [a0, b0] = H[0], L0 = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]), d = [(b0[0] - a0[0]) / L0, (b0[1] - a0[1]) / L0];
+  if (H.some(([a, b]) => Math.abs((b[0] - a[0]) * d[1] - (b[1] - a[1]) * d[0]) > 1e-3 * Math.hypot(b[0] - a[0], b[1] - a[1]) + 1e-6)) return null;
+  const off = [...new Set(H.map(([a]) => Math.round((a[0] * d[1] - a[1] * d[0]) * 1e4) / 1e4))].sort((x, y) => x - y);
+  let gap = Infinity; for (let i = 1; i < off.length; i++) gap = Math.min(gap, off[i] - off[i - 1]);
+  return gap;
+};
 const inPoly = (p, poly) => { let inside = false; for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) { const a = poly[i], b = poly[j]; if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside; } return inside; };
 // half-width of a sampled body profile ([y, hw] every 2 px, rounded to 0.1) at y: 0 outside it, where "outside" past
 // the last sample tolerates tol (the thorax sites pass 0.11 for the last sample's rounding, the abdomen sites 0)
@@ -430,7 +440,8 @@ const PRE = {
         for (const k of P_FIELDS) if (!(typeof P[k] === 'number' && P[k] > 0)) f('proportions leaves P.' + k + ' unset: ' + P[k]);
         for (const k of ['thoraxAnchors', 'abdAnchors']) if (!Array.isArray(P[k]) || P[k].length < 3 || P[k].some(a => !Array.isArray(a) || a.length !== 2)) f('proportions leaves P.' + k + ' unset or malformed');
       }
-      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}]])
+      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}],
+        ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
   },
@@ -1268,13 +1279,9 @@ const CHECKS = {
       if (Pt.hatch.some(([a, b]) => !Pt.regions.some(r => inside([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], r)))) fail(what + kind + ' hatch outside its shapes');
       if (kind === 'dark' && (!Array.isArray(Pt.holes) || !Pt.holes.length)) fail(what + 'a dark elytron without pale spots');
       if (Pt.hatch.some(([a, b]) => (Pt.holes || []).some(h => inPoly([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], h)))) fail(what + 'hatch inside a pale spot');
-      if (Pt.hatch.length > 1) {   // across the lines: their offsets along the normal of their (shared) direction
-        const [a0, b0] = Pt.hatch[0], L0 = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]), d = [(b0[0] - a0[0]) / L0, (b0[1] - a0[1]) / L0];
-        if (Pt.hatch.some(([a, b]) => Math.abs((b[0] - a[0]) * d[1] - (b[1] - a[1]) * d[0]) > 1e-3 * Math.hypot(b[0] - a[0], b[1] - a[1]) + 1e-6)) fail(what + 'hatch lines not parallel');
-        const off = [...new Set(Pt.hatch.map(([a]) => Math.round((a[0] * d[1] - a[1] * d[0]) * 1e4) / 1e4))].sort((x, y) => x - y);
-        let gap = Infinity; for (let i = 1; i < off.length; i++) gap = Math.min(gap, off[i] - off[i - 1]);
-        if (gap * m.scale < ELY_PITCH - 1e-3) fail(what + 'pattern hatch ' + (gap * m.scale).toFixed(2) + ' px apart (want >= ' + ELY_PITCH + ')');
-      }
+      const g = hatchGap(Pt.hatch);
+      if (g === null) fail(what + 'hatch lines not parallel');
+      else if (g * m.scale < ELY_PITCH - 1e-3) fail(what + 'pattern hatch ' + (g * m.scale).toFixed(2) + ' px apart (want >= ' + ELY_PITCH + ')');
     }
   },
   // #53: the pronotal pattern (PRON_PATTERNS) as hatched shapes inside the pronotum
@@ -1291,12 +1298,9 @@ const CHECKS = {
       if (kind !== 'none' && !Pt.hatch.length) fail(what + kind + ' pronotum without hatch');
       const inPron = p => p[1] >= th.yTop - ELY_IN && p[1] <= th.yBot + ELY_IN && Math.abs(p[0]) <= profHw(th.profile, Math.min(Math.max(p[1], th.yTop), th.yBot - 0.01), 0.11) + ELY_IN;
       if (Pt.regions.some(r => r.some(p => !inPron(p))) || Pt.hatch.some(h => !h.every(inPron))) fail(what + kind + ' pronotal pattern outside the pronotum');
-      if (Pt.hatch.length > 1) {
-        const [a0, b0] = Pt.hatch[0], L0 = Math.hypot(b0[0] - a0[0], b0[1] - a0[1]), d = [(b0[0] - a0[0]) / L0, (b0[1] - a0[1]) / L0];
-        const off = [...new Set(Pt.hatch.map(([a]) => Math.round((a[0] * d[1] - a[1] * d[0]) * 1e4) / 1e4))].sort((x, y) => x - y);
-        let gap = Infinity; for (let i = 1; i < off.length; i++) gap = Math.min(gap, off[i] - off[i - 1]);
-        if (gap * m.scale < ELY_PITCH - 1e-3) fail(what + 'pronotal hatch ' + (gap * m.scale).toFixed(2) + ' px apart (want >= ' + ELY_PITCH + ')');
-      }
+      const g = hatchGap(Pt.hatch);
+      if (g === null) fail(what + 'pronotal hatch lines not parallel');
+      else if (g * m.scale < ELY_PITCH - 1e-3) fail(what + 'pronotal hatch ' + (g * m.scale).toFixed(2) + ' px apart (want >= ' + ELY_PITCH + ')');
     }
   },
   // #53: the pronotum : elytra width class as drawn (PRON_CLASS)
