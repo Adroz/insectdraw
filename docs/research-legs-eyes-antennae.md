@@ -15,6 +15,8 @@ Sources consulted (2026-10-01):
 - Fly eyes: holoptic males (eyes touching), dichoptic females; Musca ~4000 ommatidia: https://en.wikipedia.org/wiki/Holoptic_arrangement , https://www.k-state.edu/parasitology/classes/625arth44.html
 - Bee eye: large kidney-shaped, 5–6k ommatidia: https://www.bumblebee.org/bodyEyehtm.htm ; Tipulidae: 13-segmented antennae, very long slender legs: https://en.wikipedia.org/wiki/Crane_fly
 - Cicada fore femora "armed beneath by two strong spines and frequently a third smaller distal spine": https://groups.csail.mit.edu/mac/projects/psyche/69/69-042.html
+  Drawn (#26) as a swollen femur 2.3–2.9× as long as deep (the drumstick profile of `femurGeom`) with 2–3 closed
+  triangular teeth on one edge; the foreleg has its own angles per pose (reaching forward, tibia out, tibia folded back).
 - Beetle eyes often notched (emarginate) at the antennal insertion; 11 antennomeres typical: https://www.zoology.ubc.ca/bcbeetles/Text%20files/family%20descriptions.htm
 - Engraving tone: stipple/line engraving; shade the far side of cylinders with short parallel lines: https://www.britannica.com/art/stipple-engraving , https://en.wikipedia.org/wiki/Line_engraving
 

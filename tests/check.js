@@ -78,6 +78,23 @@ const ORTH = { fanOut: 0.5, overlap: 1, apexX: 2, tip: 0.04, oblique: 0.2, obliq
 const orthSeen = { orthFan: 0, orthTegmina: 0, orthCells: 0, orthIntercalary: 0, orthPronotum: 0 };   // grasshopper plates each #22 check asserted on, for POST.orthSeen
 let orthSeenPlates = 0;   // grasshopper plates in the run, counted by the seed loop whichever checks are selected
 const ORTH_MIN = 20;   // grasshopper plates a run needs before a #22 check that never ran fails rather than being reported (~8% of plates)
+// #26 cicada (Cicadidae), from the references (cic-cicada: Sc+R, M, CuA and CuP four heavy trunks from the base, the anal
+// veins short, in the clavus; a set specimen holds the forewings swept back 30-45 degrees, the hindwing root behind the
+// forewing's and under its clavus, so the hindwing shows only from under the forewing's hind margin; Cicadidae fore femora
+// stout, armed beneath with 2-3 strong teeth). sweep: the forewing's root-to-apex line, degrees below the horizontal, within
+// tol; scale: the median plate scale of the run's cicadas at least this; trunks: the trunk lanes (MCu, the M+CuA stem, when
+// drawn) every piece at the outline weight, heavy times the crossvein weight or more; femur: the fore femur at most this
+// many times as long as its widest; teeth: at least this many drawn; tibia: the fore tibia's drawn direction classes
+// (degrees, 0 straight out, negative toward the head): forward of the first bound, back of the second, out between; at
+// least two classes each on poseShare of the cicada plates; midline: no forewing point nearer the midline than this
+const CIC = { sweep: [30, 45], tol: 1, scale: 0.95, trunks: ['ScR', 'M', 'CuA', 'CuP'], stem: 'MCu', heavy: 2.5, femur: 3, teeth: 2, tibia: [-60, 0], poseShare: 0.15, midline: 2 };
+const cicSeen = { cicSweep: 0, cicScale: 0, cicTrunks: 0, cicForeleg: 0, cicHindRoot: 0 };   // cicada plates each #26 check asserted on, for POST.cicSeen
+let cicSeenPlates = 0;   // cicada plates in the run, counted by the seed loop whichever checks are selected
+const CIC_MIN = 20;   // cicada plates a run needs before a #26 check that never ran fails, and before the run medians are asserted (~8% of plates)
+const cicRun = { scales: [], tibia: { forward: 0, out: 0, back: 0 } };   // over the run, for POST.cicScale / POST.cicForeleg
+// a cicada's wings by their roots (meta.wingOutlines, right side, body coordinates; each closed outline starts at its root):
+// the forewing is the one rooted further forward
+const cicWings = meta => { const w = meta.wingOutlines.slice().sort((a, b) => a[0][1] - b[0][1]); return { fore: w[0], hind: w[1] }; };
 // the x where a horizontal line at y leaves a closed polygon on the right (its outer edge), or null when it misses it
 const rightmostAt = (poly, y) => {
   let best = null;
@@ -876,6 +893,65 @@ const CHECKS = {
     if (!ORTH.carinae.includes(kind)) fail('grasshopper pronotum has no lateral carinae of a known kind: ' + kind);
     else if (!meta.bodySig.split(',').includes('lc' + kind[0])) fail('grasshopper lateral carina kind ' + kind + ' not in the bodySig');
   },
+  // #26 the forewing's sweep: the line from its root to the outline point furthest from it (the apex) lies CIC.sweep
+  // degrees below the horizontal (set specimens; the audited plates held them at 15-25 and the plates came out at 0.81)
+  cicSweep(meta, svg, fail) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicSweep++;
+    const { fore } = cicWings(meta), root = fore[0];
+    let apex = root; for (const p of fore) if (dist(p, root) > dist(apex, root)) apex = p;
+    const a = Math.atan2(apex[1] - root[1], apex[0] - root[0]) * 180 / Math.PI;
+    if (a < CIC.sweep[0] - CIC.tol || a > CIC.sweep[1] + CIC.tol) fail('cicada forewing sweep outside ' + CIC.sweep.join('-') + ' degrees below the horizontal: ' + a.toFixed(1));
+  },
+  // #26 the plate scale, collected for POST.cicScale (the run's median)
+  cicScale(meta) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicScale++;
+    cicRun.scales.push(meta.scale);
+  },
+  // #26 the four basal trunks (Sc+R, M, CuA, CuP, and the M+CuA stem where it is drawn) at the outline weight on every
+  // drawn piece of the forewing (meta.wingLanes, the forewing's entry last: the hindwing is grown first), and that weight
+  // CIC.heavy times the crossvein (fine) weight or more, so they read heavier than the crossveins at plate scale
+  cicTrunks(meta, svg, fail) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicTrunks++;
+    const W = meta.weights, fw = meta.wingLanes[meta.wingLanes.length - 1];
+    if (!(W.O >= CIC.heavy * W.F)) fail('cicada outline weight under ' + CIC.heavy + 'x the fine weight: ' + W.O + ' vs ' + W.F);
+    for (const id of CIC.trunks.concat(CIC.stem)) {
+      const ln = fw && fw.lanes.find(l => l.id === id);
+      if (!ln) { if (id !== CIC.stem) fail('cicada forewing has a trunk missing: ' + id); continue; }
+      const w = Math.min(...ln.pieces.flatMap(pc => pc.w));
+      if (!(w >= W.O - 1e-9)) fail('cicada forewing trunk under the outline weight: ' + id + ' at ' + w + ' (want ' + W.O + ')');
+    }
+  },
+  // #26 the foreleg (meta.legs[0], as drawn): a stout femur (trochanter to knee per widest width at most CIC.femur) armed
+  // with CIC.teeth or more teeth (fem.teeth); the fore tibia's direction (pts[3] -> pts[4], on the right legs) is counted
+  // into its class for POST.cicForeleg
+  cicForeleg(meta, svg, fail) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicForeleg++;
+    const fr = meta.legs.find(l => l.pair === 'front'), f = fr && fr.fem;
+    if (!f) return fail('cicada plate has no drawn front femur');
+    const r = f.L / Math.max(...f.widths);
+    if (r > CIC.femur) fail('cicada fore femur not stout (at most ' + CIC.femur + 'x as long as wide): ' + r.toFixed(2));
+    if (!(f.teeth >= CIC.teeth)) fail('cicada fore femur under ' + CIC.teeth + ' teeth: ' + (f.teeth || 0));
+    const p = fr.pts, a = Math.atan2(p[4][1] - p[3][1], p[4][0] - p[3][0]) * 180 / Math.PI;
+    cicRun.tibia[a < CIC.tibia[0] ? 'forward' : a > CIC.tibia[1] ? 'back' : 'out']++;
+  },
+  // #26 the hindwing root behind the forewing's and under it (inside the forewing outline), no point of the hindwing
+  // outline that the forewing does not cover lying ahead of the hindwing root (its costal edge never peeks out in front
+  // of the forewing base), and the forewing's clavus off the midline (CIC.midline)
+  cicHindRoot(meta, svg, fail) {
+    if (meta.type !== 'cicada') return;
+    cicSeen.cicHindRoot++;
+    const { fore, hind } = cicWings(meta), fr = fore[0], hr = hind[0];
+    if (!(hr[1] > fr[1])) fail('cicada hindwing root not behind the forewing root: y ' + hr[1].toFixed(1) + ' vs ' + fr[1].toFixed(1));
+    if (!inPoly(hr, fore)) fail('cicada hindwing root not under the forewing');
+    const ahead = hind.filter(p => p[1] < hr[1] && !inPoly(p, fore));
+    if (ahead.length) fail('cicada hindwing edge ahead of its root outside the forewing: ' + ahead.length + ' points, up to ' + Math.max(...ahead.map(p => hr[1] - p[1])).toFixed(1) + ' ahead');
+    const mx = Math.min(...fore.map(p => p[0]));
+    if (mx < CIC.midline) fail('cicada forewing within ' + CIC.midline + ' of the midline: x ' + mx.toFixed(1));
+  },
   wings(meta, svg, fail, { dev }) {
     const checkWingStats = (s, what) => {
       if (!s) return fail(what + 'no wingStats on a grown wing');
@@ -1171,6 +1247,25 @@ const POST = {
     console.log('#22 grasshopper checks asserted on (of ' + n + ' grasshopper plates):', Object.keys(orthSeen).filter(k => ran.has(k)).map(k => k + ' ' + orthSeen[k]).join(', ') +
       (n < ORTH_MIN ? '; too few grasshopper plates (' + n + ' < ' + ORTH_MIN + ') to require every check' : ''));
   },
+  // #26 the run's cicadas: the median plate scale at least CIC.scale (0.81 before #26), once the run has CIC_MIN of them
+  cicScale(fail) {
+    const n = cicRun.scales.length, m = median(cicRun.scales);
+    if (n >= CIC_MIN && !(m >= CIC.scale)) fail('cicada median plate scale ' + m.toFixed(3) + ' under ' + CIC.scale + ' (' + n + ' plates)', 'cicada');
+    console.log('#26 cicada median scale:', n ? m.toFixed(3) : '-', '(n ' + n + (n < CIC_MIN ? '; too few to assert, < ' + CIC_MIN : '') + ')');
+  },
+  // #26 the foreleg pose varies: at least two of the fore tibia's direction classes each on CIC.poseShare of the cicada plates
+  cicForeleg(fail) {
+    const t = cicRun.tibia, n = t.forward + t.out + t.back, held = Object.keys(t).filter(k => t[k] >= CIC.poseShare * n);
+    if (n >= CIC_MIN && held.length < 2) fail('cicada fore tibia held one way: ' + JSON.stringify(t) + ' (want two classes on ' + CIC.poseShare + ' of the plates)', 'cicada');
+    console.log('#26 cicada fore tibia classes:', JSON.stringify(t));
+  },
+  // the #26 checks assert only on cicada plates: once the run has CIC_MIN of them every selected one must have run
+  cicSeen(fail) {
+    const n = cicSeenPlates, idle = Object.keys(cicSeen).filter(k => ran.has(k) && !cicSeen[k]);
+    if (idle.length && n >= CIC_MIN) fail('#26 cicada checks that never ran in ' + n + ' cicada plates: ' + idle.join(', '));
+    console.log('#26 cicada checks asserted on (of ' + n + ' cicada plates):', Object.keys(cicSeen).filter(k => ran.has(k)).map(k => k + ' ' + cicSeen[k]).join(', ') +
+      (n < CIC_MIN ? '; too few cicada plates (' + n + ' < ' + CIC_MIN + ') to require every check' : ''));
+  },
   signatures(fail) {
     sigRule(wingSigs, 'wing', 0.5, fail);
     sigRule(bodySigs, 'body', 0.98, fail);
@@ -1215,7 +1310,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen) };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen) };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
@@ -1236,6 +1331,7 @@ async function run() {
     if (meta.type === 'lacewing') neuSeenPlates++;
     if (meta.type === 'grasshopper') orthSeenPlates++;
     if (meta.type === 'beetle') beetlePlates++;
+    if (meta.type === 'cicada') cicSeenPlates++;
     if (meta.wingSig) { const m = wingSigs[key] ||= new Map(); m.set(meta.wingSig, (m.get(meta.wingSig) || 0) + 1); }
     if (meta.bodySig) { const m = bodySigs[key] ||= new Map(); m.set(meta.bodySig, (m.get(meta.bodySig) || 0) + 1); }
     elTotal += drawn(svg);
