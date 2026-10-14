@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // Page tests: serves the repo over HTTP, loads each page in headless Chromium and asserts on the
 // rendered DOM. Covers what the engine gates cannot: the main page's single pane and chrome, the
-// #a|b redirect to compare.html, the compare page's two panes and hash, parts.html's grid, and that
-// index.html still renders from file:// (it is self-contained; compare.html and parts.html fetch
+// #a|b redirect to compare.html, the compare page's two panes and hash, parts.html's grid, that
+// tests/sheet.js writes a whole contact sheet (#58), and that index.html still renders from file:// (it is self-contained; compare.html and parts.html fetch
 // the engine from it, so they need HTTP). Set CHROMIUM to point at a Chrome/Chromium binary.
 //   node tests/pages.js
 'use strict';

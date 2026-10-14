@@ -61,12 +61,13 @@ const rawPng = outPng.replace(/\.png$/i, '') + '.raw.png';
 execFileSync(bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--window-size=' + width + ',' + (height + SLACK), '--screenshot=' + rawPng, 'file://' + path.resolve(htmlPath)], { stdio: 'ignore' });
 const sharp = require('sharp');
 (async () => {
-  const { data, info } = await sharp(rawPng).extract({ left: 0, top: 0, width, height }).greyscale().raw().toBuffer({ resolveWithObject: true });
+  const sheet = sharp(rawPng).extract({ left: 0, top: 0, width, height });
+  const { data, info } = await sheet.clone().greyscale().raw().toBuffer({ resolveWithObject: true });
   // the first cell's bottom border must be on the cropped image's last pixel row; if it is white the viewport fell
   // short of the sheet even with the slack, and the sheet would silently lose its last row again
   const row = (height - 1) * info.width * info.channels;
   if (data[row + 300 * info.channels] > 0xf0) throw new Error('sheet cut short: the last row is not fully in the screenshot ' + rawPng + ' (raise SLACK in tests/sheet.js)');
-  await sharp(rawPng).extract({ left: 0, top: 0, width, height }).toFile(outPng);
+  await sheet.toFile(outPng);
   fs.unlinkSync(rawPng);
   console.log(outPng + '  seeds: ' + seeds.join(','));
 })().catch(e => { console.error(e.message); process.exit(1); });
