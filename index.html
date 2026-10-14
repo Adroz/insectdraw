@@ -107,10 +107,11 @@ const SW_PX = { H: 2.2, O: 1.5, D: 0.8, F: 0.5 };             // the weights in 
 // binomial is floored at captionMinPx device px so it reads at arm's length on the panel (ticket #38).
 const DEVICE = { strokePx: 1.0, pitchPx: 2.5, subtitleMinPx: 10, captionMinPx: 24 };
 const CAPTION_H = 45;                 // band reserved at the foot of the plate for the caption (plate px)
+const PLATE_MARGIN = 24;              // assemblePlate's fit margin around the drawing (plate px); drawTails fits the tails to the same box
 const CAPTION_BASELINE_K = 0.75;      // how far the binomial's baseline drops per px of size over 16, keeping it in the band
 // Strokes are clamped at the token substitution; pitches at draw time through floorPitch(v) (body units; the floor is
 // pitchFloor, 0 on a default plate), which also records the smallest pitch drawn for meta.minPitch. Every repeated
-// mark at a spacing (hatch bands, lattice, mesh cell, pile, fringe, limb shading / spines / comb rows, antenna rami
+// mark at a spacing (hatch bands, lattice, mesh cell, pile, fringe, limb shading / spines / teeth / comb rows, antenna rami
 // and annuli, crossvein ladders, the stigma's lines) must go through floorPitch, never a literal step. A step given
 // as a fraction of a length (a limb mark's step in s, a ladder's step in u) goes through floorFrac, marks at every
 // k-th sample of a polyline through floorSamples; both are bit-identical on a default plate.
@@ -327,9 +328,24 @@ function limbSpines(g, side, spacing, len, s0, s1, sw) {
   return els;
 }
 // n strong teeth on one edge of a segment (the cicada's fore femur beneath, #26): closed triangles leaning distad, spread
-// over the middle of the swollen part, each about a third of the segment's greatest depth; returns one element per tooth
+// over the middle of the swollen part, each about a third of the segment's greatest depth; returns one element per tooth.
+// The teeth are marks at a spacing, so their pitch goes through floorPitch: a device plate whose floor raises it widens the
+// span within TEETH_SPAN (centred where it can be) and, only if that cannot hold them, draws fewer. A tooth's base is never wider
+// than the pitch, so neighbouring teeth touch at most (a mantidfly's 5-7 on a short femur overlapped before).
+const TEETH_SPAN = [0.05, 0.95];
 function limbTeeth(g, side, n, span, hK, tips) {   // span: [s0, s1] along the segment (default the femur's 0.32-0.62); hK: height / width; tips collects the tooth tips
-  const els = [], edge = side > 0 ? g.e1 : g.e2, h = (hK || 0.4) * g.wAt(0.25), base = Math.max(2.5, g.L * 0.09), [s0, s1] = span || [0.32, 0.62];
+  const els = [], edge = side > 0 ? g.e1 : g.e2, h = (hK || 0.4) * g.wAt(0.25);
+  let [s0, s1] = span || [0.32, 0.62];
+  if (n > 1) {
+    const v = (s1 - s0) / (n - 1) * g.L, fp = floorPitch(v);   // compared in body units: dividing back by g.L can round a default plate's step up
+    if (fp > v) {   // the floor raised the pitch: widen it within TEETH_SPAN, then drop teeth that still do not fit
+      const fl = fp / g.L, [lo, hi] = TEETH_SPAN;
+      n = Math.max(1, Math.min(n, Math.floor((hi - lo) / fl + 1e-9) + 1));
+      const w = fl * (n - 1);
+      s0 = Math.min(Math.max((s0 + s1 - w) / 2, lo), hi - w); s1 = s0 + w;   // centred where it can be, slid along the segment where it cannot
+    }
+  }
+  const pitch = n > 1 ? (s1 - s0) / (n - 1) * g.L : Infinity, base = Math.min(Math.max(2.5, g.L * 0.09), pitch);
   for (let j = 0; j < n; j++) {
     const s = lerp(s0, s1, n > 1 ? j / (n - 1) : 0.5), b = bez3(edge, s);
     const r = sub(b, mul(g.d, base * 0.5)), f = add(b, mul(g.d, base * 0.5)), tip = add(add(b, mul(g.n, side * h)), mul(g.d, base * 0.6));
@@ -545,6 +561,7 @@ const ANT_POSES = {
 // legs block holds it on the legs around the socket (legsOk 'socket'), with ANT_LEAN more for the lean of a near-straight
 // shaft; tests/check.js asserts the result. antBaseW is the shaft width at the socket, the one width both blocks share.
 const ANT_CLEAR = 3, ANT_LEAN = 2;
+const ANT_ALT_FROM = 11;   // a back sweep with an alt (#25) searches it on a grid from this attempt on (about half of the 24)
 const ANT_BACK_OUT = 1.8;   // a back sweep's tip (#25) at most this many times the covers' half width from the midline (antOk 'wide', the alt search)
 const antBaseW = (hw, wK) => Math.max(1.3, hw * 0.05) * wK;
 // After a leg or wing hit the antenna pose is straightened (R-D): per reason, the known-good fallback pose and the bound
@@ -2028,16 +2045,18 @@ const EPITHETS = Object.freeze([...EPITHET, ...EPITHET_TAIL.map(([t, cls]) => ['
 }));
 // The common name is [qualifier] <adjective> <noun> [base] (#28). The adjective is a gene word whenever the plate has one
 // to give: its abdominal marking (B.abd.mark; plain gives none) or an antenna kind its family draws on under half its
-// plates, so a banded abdomen is "Banded" or "Ringed" and a bipectinate moth "Feathered". Otherwise it comes from the
+// plates, so a banded abdomen is "Banded" or "Belted", a ringed one "Ringed", and a bipectinate moth "Feathered". Otherwise it comes from the
 // order's `adj` list (else COMMON_ADJ), from which every marking and antenna word is kept out: a plate is never named for
 // a marking it does not draw. The qualifier (size, range, rarity) widens the pool so plates seldom share a name.
 // tests/names.js MARK_CLAIMS / ANT_CLAIMS hold the claim vocabulary these must stay inside.
 const GENE_MARK_ADJ = {
-  banded: ['Banded', 'Ringed', 'Girdled', 'Belted'],
+  banded: ['Banded', 'Girdled', 'Belted'],
+  rings: ['Ringed', 'Golden-ringed', 'Annulated'],   // #48: a dark ring over the base of every segment
   spotted: ['Spotted', 'Four-spotted', 'Six-spotted', 'Twin-spot', 'Dotted'],
   striped: ['Striped', 'Lined', 'Streaked'],
   tipdark: ['Black-tailed', 'Dark-tipped', 'Black-tipped'],
   hairy: ['Hairy', 'Downy', 'Velvet', 'Woolly', 'Shaggy'],
+  triangles: ['Chevroned', 'Arrow-marked', 'Dagger-marked'],   // #50: the ephemerid's dark dorsal triangles
 };
 const GENE_ANT_ADJ = { moniliform: ['Bead-horned'], lamellate: ['Fan-horned'], serrate: ['Saw-horned'], pectinate: ['Comb-horned'], bipectinate: ['Feathered'], plumose: ['Plumed'], clubbed: ['Club-horned'] };
 const COMMON_ADJ = ['Marsh', 'Heath', 'Dusky', 'Golden', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Brindled', 'Clouded', 'Bronze',
@@ -2435,7 +2454,7 @@ const ORDERS = {
         famNouns: { muscid: ['House', 'Flesh', 'Dung', 'Blow', 'Stable', 'Cluster', 'Face', 'Root-maggot'], nemato: ['Dance', 'Fungus', 'March', 'Window', 'Moth', 'Gall', 'Black'],
           syrphid: ['Hover', 'Drone', 'Flower', 'Marmalade', 'Narcissus', 'Bulb'], tabanid: ['Horse', 'Deer', 'Cleg', 'Greenhead', 'Band-eyed'],
           asilid: ['Robber', 'Assassin', 'Bee-killer', 'Hornet Robber', 'Hanging'],
-          tachinid: ['Tachinid', 'Hedgehog', 'Bristle', 'Parasite', 'Caterpillar'], bombyliid: ['Bee', 'Woolly', 'Downy', 'Greater Bee', 'Dotted Bee'],
+          tachinid: ['Tachinid', 'Hedgehog', 'Bristle', 'Parasite', 'Caterpillar'], bombyliid: ['Bee', 'Hovering Bee', 'Long-tongued Bee', 'Greater Bee', 'Dark-edged Bee'],
           conopid: ['Thick-headed', 'Wasp-waisted', 'Big-headed', 'Bee-grabber'] } },   // #54
     },
   },
@@ -2509,7 +2528,7 @@ const ORDERS = {
         ['agrion', 'n'], ['cordia', 'f'], ['libellula', 'f'], ['cnemis', 'f'], ['anax', 'm']],   // -agrion is neuter: see the damselfly's names
       common: { nouns: ['Hawker', 'Darter', 'Skimmer', 'Emperor', 'Chaser', 'Clubtail', 'Emerald', 'Goldenring'], base: '',
         famNouns: { aeshnid: ['Hawker', 'Emperor', 'Darner'], libellulid: ['Darter', 'Skimmer', 'Chaser'], gomphid: ['Clubtail'], corduliid: ['Emerald'] },   // the noun follows the drawn family (#48)
-        adj: ['Migrant', 'Brown', 'Ruddy', 'Black', 'Keeled', 'Broad-bodied', 'Vagrant', 'Emerald', 'Moorland', 'Golden-ringed', 'Yellow-winged', 'Red-veined', 'White-faced', 'Blue-eyed', 'Amber-winged'] },
+        adj: ['Migrant', 'Brown', 'Ruddy', 'Black', 'Keeled', 'Broad-bodied', 'Vagrant', 'Emerald', 'Moorland', 'Yellow-winged', 'Red-veined', 'White-faced', 'Blue-eyed', 'Amber-winged'] },
     },
   },
   grasshopper: {
@@ -3138,7 +3157,7 @@ function rollBodyGenes(type, P) {
         dent: HF.dent && HF.dent[1] > 0 ? [HF.dentAt || 180, rr(HF.dent), randRange(0.7, 0.95)] : null,
         hl: [(HF.hl ? HF.hl[0] : -0.42) + randRange(-0.08, 0.08), (HF.hl ? HF.hl[1] : -0.42) + randRange(-0.08, 0.08)], hlR: HF.hlR ? rr(HF.hlR) : randRange(0.3, 0.42),
         style: w01(HF.styles), pitch: randRange(1.8, 3.0), full: !!HF.latticeFull };
-      G.turbinate = HF.turbinate && P.sex !== 'female' && rng() < HF.turbinate;   // #50: a male character (no draw on a female)                          // male mayfly: a second pair of dorsal lobes
+      G.turbinate = HF.turbinate && P.sex !== 'female' && rng() < HF.turbinate;   // #50: the male mayfly's second pair of dorsal eye lobes (no draw on a female)
       if (G.turbinate) { G.eye.cx = randRange(0.36, 0.4); G.eye.rx = randRange(0.1, 0.12); G.eye.ry = randRange(0.3, 0.36); G.turban = { cx: randRange(0.16, 0.19), rx: randRange(0.16, 0.19), ry: randRange(0.34, 0.4), cy: randRange(-0.1, -0.02) }; G.turban.cx = G.turban.rx; }
     }
     G.bump = HF.bump ? { w: rr(HF.bump[0]), h: rr(HF.bump[1]), pointed: HF.pointed ? rng() < HF.pointed : false, striae: HF.striae ? randInt(HF.striae[0], HF.striae[1]) : 0 } : null;   // frons (odonate) / postclypeus (cicada)
@@ -3232,7 +3251,7 @@ function rollBodyGenes(type, P) {
     if (rng() < F.fringe) g.fringe = { spacing: randRange(2.6, 4.5), len: randRange(3, 7), tibia: true, femur: rng() < 0.5 };
     // order specifics
     if (saltatorial && i === 2) {   // saltatorial: huge femur with chevron muscles, serrated tibia, two pairs of apical spurs
-      g.herringbone = true; g.bowSign = -1; g.femFrac = 1 / randRange(3.8, 4.6);   // acridid hind femur: 3.8-4.6x as long as its deepest point (#23; measured 3.6-4.4 on ref leg-orth-femur / leg-orth-psm1891, docs/research-legs-eyes-antennae.md) g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);   // acridid femur a quarter to a third as wide as long (ref orth-grasshopper)
+      g.herringbone = true; g.bowSign = -1; g.femFrac = 1 / randRange(3.8, 4.6);   // acridid hind femur: 3.8-4.6x as long as its deepest point (#23; measured 3.6-4.4 on ref leg-orth-femur / leg-orth-psm1891, docs/research-legs-eyes-antennae.md)
       g.spines = { tibia: true, femur: false, side: 'outer', double: true, spacing: randRange(4, 6.5), len: randRange(0.6, 0.9) };
       g.ang = B.pose === 'tucked' ? { F: [40, 62], fold: [24, 40], T: [5, 18] } : { F: [40, 65], fold: [30, 52], T: [5, 20] };
     }
@@ -3445,7 +3464,7 @@ function layoutBody(C) {
   meta.bodyGenes = B;
   if (B.wing && B.wing.shape) meta.cicada = { set: B.wing.set, shape: B.wing.shape, fam: P.fam, abdShape: P.abdShape, marks: null, collarY: null, tymbals: null };   // #49, filled in by the thorax and abdomen sections
   if (type === 'fly') meta.fly = { set: B.wing.set, fam: P.fam, chaetae: null };
-  if (order.hindwing) meta.mayfly = { fam: P.fam, sex: P.sex, set: B.wing.set, hindClass: B.hindClass, tails: null, tergites: null, fore: null, hind: null };   // #50, the tails and tergites filled in by the abdomen section, the wings by the wing block   // #54, the macrochaetae filled in by the abdomen section
+  if (order.hindwing) meta.mayfly = { fam: P.fam, sex: P.sex, set: B.wing.set, hindClass: B.hindClass, tails: null, tergites: null, fore: null, hind: null };   // #50, the tails and tergites filled in by the abdomen section, the wings by the wing block
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   if (B.habitus && B.habitus.abdCap) P.abdW = Math.min(P.abdW, B.habitus.abdCap * P.thoraxW);   // a slender family (#49): the abdomen held under this share of the thorax's width
   P.thoraxAnchors = B.thorax.anchors;
@@ -3661,7 +3680,7 @@ const TAIL_SCALE_MIN = 0.7, TAIL_LEN_MIN = 0.8;
 function drawTails(C) {
   const { L, P, B, abdomen, meta, outerBox } = C, F = B.abd.filaments;
   if (!F) return;
-  const tipY = abdomen.yBot, x0 = Math.min(3, abdomen.hwAt(tipY - 2) * 0.6), M = 24;
+  const tipY = abdomen.yBot, x0 = Math.min(3, abdomen.hwAt(tipY - 2) * 0.6), M = PLATE_MARGIN;
   const maxY = outerBox.minY + (600 - CAPTION_H - 2 * M) / TAIL_SCALE_MIN, maxX = (600 - 2 * M) / 2 / TAIL_SCALE_MIN;
   const curve = Math.max(F.curve, -2 * (F.splay - 3));   // an outward bow never turns the root in across the midline (it leaves at least 3 degrees out)
   const shaft = len => shaftPoints([x0, tipY - 2], 90 - F.splay - curve / 2, len, curve, 10);
@@ -4254,7 +4273,7 @@ function drawAntennae(C) {
         // From half the attempts on, the pose's alt (R.alt): a steep root (clear of the forelegs) that turns outward (curve < 0)
         // past the elytral shoulders, the droop bringing the tip back beside the elytra. Searched on a fixed grid (no rng) for
         // the clear pose whose tip stays nearest the body, within ANT_BACK_OUT of the covers' half width; none, the fallback
-        if (R.alt && attempt >= 11) {
+        if (R.alt && attempt >= ANT_ALT_FROM) {
           let best = null;
           for (let ang = R.alt.ang[0]; ang <= R.alt.ang[1] + 1e-9; ang += 5) for (let curve = R.alt.curve[0]; curve <= R.alt.curve[1] + 1e-9; curve += 5)
             for (let droop = R.alt.droop[0]; droop <= R.alt.droop[1] + 1e-9; droop += 10) {
@@ -4281,16 +4300,29 @@ function drawAntennae(C) {
       // the midline, for a plume) until it clears; antOk draws no rng
       // An order with antFit whose antenna still does not fit (a katydid's, longer than the body, #23) is laid forward
       // (ANT_FIT_FB) from full length and shortened until it fits, never curled into a stub.
+      const fallback = (fb, fitFb, lenK) => {
+        const q = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: fb.droop || 0, lenK: fitFb ? 1 : Math.min(lenK, 0.8) };
+        let g = antennaGeom(A, base, P.headW, q), r = antOk(g);
+        for (let k = 0; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && (r === 'legs' || r === 'cross' || (r === 'fit' && fit) || ((r === 'wing' || r === 'wide') && R.back)); k++) {
+          if (r === 'wing') q.curve -= 6;   // a back sweep into the elytra turns further out after its root
+          else if (r === 'wide') q.droop += 6;   // ... and one ending out past the covers turns its tip back
+          else if (r === 'legs') { q.ang = R.back ? Math.min(80, q.ang + 4) : Math.max(-90, q.ang - 4); q.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') q.lenK *= ANT_SHRINK.fbStep; else { q.ang = Math.min(-45, q.ang + 8); if (g.rami) q.lenK *= ANT_SHRINK.fbStep; }
+          g = antennaGeom(A, base, P.headW, q); r = antOk(g);
+        }
+        return { pose: q, G: g, r };
+      };
       const fitFb = why === 'fit' && !!fit;
       const fb = R.back ? { ang: 75, curve: -45, droop: 30 } : fitFb ? ANT_FIT_FB : ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
-      pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: fb.droop || 0, lenK: fitFb ? 1 : Math.min(pose.lenK, 0.8) };
-      A.hookSide = 1; G = antennaGeom(A, base, P.headW, pose);
-      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && fit) || ((r === 'wing' || r === 'wide') && R.back)); k++) {
-        if (r === 'wing') pose.curve -= 6;   // a back sweep into the elytra turns further out after its root
-        else if (r === 'wide') pose.droop += 6;   // ... and one ending out past the covers turns its tip back
-        else if (r === 'legs') { pose.ang = R.back ? Math.min(80, pose.ang + 4) : Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') pose.lenK *= ANT_SHRINK.fbStep; else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
-        G = antennaGeom(A, base, P.headW, pose);
+      A.hookSide = 1;
+      let res = fallback(fb, fitFb, pose.lenK);
+      // the reason-picked fallback can still end on a leg (a katydid whose last re-roll crossed the midline while its
+      // forelegs walk ahead of the head, seed 1960): then an antFit order's forward lay from full length, then the leg
+      // fallback, the first that clears (no rng; a plate the first fallback clears is unchanged)
+      if (res.r && !R.back) for (const [f2, ff2] of [...(fit && !fitFb ? [[ANT_FIT_FB, true]] : []), ...(fb !== ANT_HIT.legs ? [[ANT_HIT.legs, false]] : [])]) {
+        const alt = fallback(f2, ff2, pose.lenK);
+        if (!alt.r) { res = alt; break; }
       }
+      pose = res.pose; G = res.G;
     }
     L.antennae.push(...antennaEls(A, G, P.headW));
     G.pts.forEach(bb);
@@ -6169,7 +6201,7 @@ function assemblePlate(C) {
   const box = replay ? dev.bbox : bbox;
   const halfW = Math.max(Math.abs(box.minX), Math.abs(box.maxX));
   const bw = halfW * 2, bh = box.maxY - box.minY;
-  const margin = 24;
+  const margin = PLATE_MARGIN;
   const plateH = 600 - CAPTION_H;             // drawing is centred within the top 555px
   const s = Math.min((600 - 2 * margin) / bw, (plateH - 2 * margin) / bh, 1.3);
   const tx = 300, ty = plateH / 2 - (box.minY + box.maxY) / 2 * s;

@@ -107,7 +107,7 @@ contract for changes.
   that its thresholded letters do not fragment). Strokes are floored at the token substitution; pitches at
   draw time through `floorPitch(v)` (body units), which also records `meta.minPitch`. Every
   repeated mark at a spacing goes through `floorPitch`, never a literal step: hatch bands,
-  lattice, mesh cells, pile, fringe, and the limb and antenna marks too (shading, spines, comb
+  lattice, mesh cells, pile, fringe, and the limb and antenna marks too (shading, spines, teeth, comb
   rows, herringbone, arista rami, club annuli), crossvein ladders and the stigma's lines
   (`floorFrac` for a step given as a fraction of a length, `floorSamples` for marks at every
   k-th sample). A site the floor misses leaves the `device` check of `tests/check.js` blind to

@@ -97,11 +97,13 @@ function repeatedStem(common) {
 // draws that marking, so a plain abdomen is never "Banded" and a banded one never "Spotted". Written from English
 // usage, not copied from the engine: the engine's gene words must be a subset of these (tests/check.js nameGenes).
 const MARK_CLAIMS = {
-  banded: ['Banded', 'Ringed', 'Girdled', 'Belted'],
+  banded: ['Banded', 'Girdled', 'Belted'],
+  rings: ['Ringed', 'Golden-ringed', 'Annulated', 'Ring-bodied'],
   spotted: ['Spotted', 'Four-spotted', 'Six-spotted', 'Twin-spot', 'Dotted'],
   striped: ['Striped', 'Lined', 'Streaked'],
   tipdark: ['Black-tailed', 'Dark-tipped', 'Black-tipped'],
   hairy: ['Hairy', 'Downy', 'Velvet', 'Woolly', 'Shaggy'],
+  triangles: ['Chevroned', 'Arrow-marked', 'Dagger-marked', 'Triangle-marked'],
 };
 // Words that claim an antenna kind (meta.antenna): the same rule (a "Feathered" moth has feathered antennae).
 const ANT_CLAIMS = {
@@ -115,7 +117,6 @@ const FAM_NOUN_SPEC = {
   bee: { apid: ['Bumble', 'Mining'] },
   butterfly: { papilionid: ['Swallowtail'], satyrine: ['Brown', 'Ringlet'] },
   damselfly: { coenagrionid: ['Bluet', 'Damsel'], calopterygid: ['Demoiselle', 'Jewelwing'] },
-  lacewing: { chrysopid: ['Green'], hemerobiid: ['Brown'], myrmeleontid: ['Pit'] },   // #51
   lacewing: { chrysopid: ['Green'], hemerobiid: ['Brown'], myrmeleontid: ['Pit'] },   // #51
   fly: { tachinid: ['Tachinid'], bombyliid: ['Bee'], conopid: ['Thick-headed'] },   // #54
 };
