@@ -5561,7 +5561,10 @@ function hatchRegions(regions, outline, step, holes) {
       const base = mul(nn, o);
       for (const [a0, a1] of lineIntervals(base, d, R, holes)) for (const [b0, b1] of lineIntervals(base, d, outline)) {
         const t0 = Math.max(a0, b0), t1 = Math.min(a1, b1);
-        if (t1 - t0 >= 0.6) out.push([add(base, mul(d, t0)), add(base, mul(d, t1))]);
+        if (t1 - t0 < 0.6) continue;
+        const A = add(base, mul(d, t0)), Bp = add(base, mul(d, t1));
+        if (holes && holes.some(h => pointInPoly(lerpP(A, Bp, 0.5), h))) continue;   // a hole crossing the outline flips the even-odd parity there: drop the sliver
+        out.push([A, Bp]);
       }
     }
   }
