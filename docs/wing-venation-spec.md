@@ -495,7 +495,7 @@ Current implementation (#59, 2026-10-14), grown by `growVeins` v2 in `wingsEphem
 `meta.mayfly` carries each wing's outline, lanes (`kind`: costal, stem, branch, inter, marg, cub) and rungs in wing-local
 coordinates, and the `eph*` checks of `tests/check.js` assert the rules below on them (`EPH`, stated from this reference).
 
-- **Outline (1).** Forewing length : width 2.3–2.8 (gene `w`, width 0.36–0.44 of the length); the costa nearly straight
+- **Outline (1).** Forewing length : width 2.3–2.7 (gene `w`, width 0.37–0.44 of the length); the costa nearly straight
   (sagitta under 0.05 of the length from 0.1 of the length to the apex, `ephOutline`), the apex the costal corner, the
   outer margin sloping back to the hind margin, deepest at `deep` 0.40–0.50 of the length. #21 still owns the apex
   hook and the hindwing masking.
@@ -506,8 +506,8 @@ coordinates, and the `eph*` checks of `tests/check.js` assert the rules below on
   per lane pair). Measured: at least 1.5 times as many rungs per length over the apical third (`ephCostal`). The forked,
   anastomosing cells of the stigmatic area are not drawn: the C–Sc strip is 2–4 plate px, so a fork's two feet would sit
   under the 1.8 px floor and fill in on e-ink.
-- **Fan (4, 6, 7).** Stems Rs, MA, MP, CuA, CuP and one or two anals (`nA`) leave the base a strip apart (at least 0.012 of
-  the length at 0.08, `ephFan`), the front ones taking a share of the costa's bow, each held at least 0.6 strip under R1.
+- **Fan (4, 6, 7).** Stems Rs, MA, MP, CuA, CuP and one or two anals (`nA`) leave the base at 0.05 of the length, spread
+  over its chord, a strip apart (at least 0.012 of the length at 0.08, `ephFan`), the front ones taking a share of the costa's bow, each held at least 0.6 strip under R1.
   Rs forks once or twice (`fRs` 0.14–0.26, `fRs2` 0.36–0.5), MA (`fMA` 0.3–0.46) and MP (`fMP` 0.16–0.32) once, each branch
   leaving its stem and easing over to its own target behind it. Long intercalaries start free in mid-wing (`u0i`
   0.38–0.5, or halfway along a pair that ends early) in the gaps between the branches, siblings first (IR, IMA, IMP), as
@@ -518,8 +518,11 @@ coordinates, and the `eph*` checks of `tests/check.js` assert the rules below on
   1.2–2.2 cells runs to the margin; the ladders on either side of it close the small polygons of the last cell
   (`ephMarginal`: at least three, half of them carrying a rung).
 - **Cubital veinlets (8).** `nCub` 4–7, split between CuA (feet between its end and CuP's) and CuP (between its end and
-  the anals'). Each drops steeply from its vein, its foot half its drop further out, bowed toward the apex, all of one
-  series the same shape so they nest; steeper (0.35, 0.2) where the vein runs down close in front of the foot
+  the anals'; the first behind each vein sits 2.4 margin gaps clear of the vein's end, so the two never run under
+  the lane floor). Each drops steeply from its vein, its foot half its drop further out, bowed toward the base (the reference's
+  sigmoid veinlets; bowed the other way they left a steep CuA almost alongside it, under the lane floor on the device
+  plate), all of one series the same shape so they nest; built basal first, a veinlet that would leave its vein at
+  under 18°, or cross it, a neighbour, CuA, CuP or an anal, roots steeper (foot 0.35, then 0.25 of its drop out)
   (`ephCubital`, and `ephLanes`: no two veins cross on either wing).
 - **Rungs (9).** One-row ladders everywhere (`evenSites`, `k` 1.0–1.4, cell `cells` × 0.035 of the length × (1 − 0.3 u)
   (1 − 0.25 s)); the order's own band `angBand` [90, 123] (inside the asserted 88–125), target `angle` 94–104, `lean` 0:
@@ -760,6 +763,14 @@ type; bee / wasp / fly / cranefly / dragonfly / damselfly byte-identical to befo
   and a dropped upper piece silently ended the chain; the leans are now measured against the chord with
   the middle piece parallel to it, and the pieces are placed independently. The patterns (bands, ocelli,
   stigmata, fringe) render unchanged on butterfly and moth sheets. Pass.
+
+Audit of 2026-10-14 (#59), Ephemeroptera against `eph-ameletus-li2021` (4× zooms of seeds 2067877377 and
+4141179746 beside the reference, sheets of nine random seeds before and after, on `evidence/ticket-59`): the outline,
+the stems a strip apart at the base, the forks in the basal half, the intercalaries, the costal ladder crowding
+apically, the marginal intercalaries and the cubital veinlets read as on the reference, and the rungs stand near
+square, leaning both ways. Weaker than the reference: the cubital and anal field carries fewer rungs (its strips are
+wide and the ladder stays one row); Sc can still merge into the costa in short stretches where the lane floor holds
+them apart (#14); the forked costal cells are not drawn (see above). #21 owns the apex hook and the hindwing masking.
 
 ## Sequencing
 
