@@ -268,6 +268,17 @@ function limbGeom(A, B, w1, w2, bow) {
   };
   return { A, B, d, n, L, w1, w2, bow, e1: edge(1), e2: edge(-1), wAt: s => lerp(w1, w2, s) };
 }
+// Saltatorial hind femur (#23, docs/ref/leg-orth-femur.jpg): a drumstick, not a carrot. Deepest at about a fifth of the
+// length (wMax), 0.75 of that at the trochanter, down to 0.3 before the knee. One cubic per edge, fitted to the depths
+// measured on the reference (FEMUR_PROFILE: control x as fractions of the length, control half-widths as fractions of
+// wMax / 2), so bez3 on the edges, wAt and the herringbone's s all run on the same parameter as limbGeom's.
+const FEMUR_PROFILE = { x: [0, 0.26, 0.898, 1], h: [0.75, 1.625, -0.13, 0.3] };
+function femurGeom(A, B, wMax, bow) {
+  const d = norm(sub(B, A)), n = perp(d), L = vlen(sub(B, A)), F = FEMUR_PROFILE, bv = mul(n, bow);
+  const edge = side => F.x.map((x, i) => add(add(A, mul(d, x * L)), add(mul(n, side * F.h[i] * wMax / 2), i === 1 || i === 2 ? bv : [0, 0])));
+  const wAt = s => { const u = 1 - s; return wMax * (u * u * u * F.h[0] + 3 * u * u * s * F.h[1] + 3 * u * s * s * F.h[2] + s * s * s * F.h[3]); };
+  return { A, B, d, n, L, w1: wMax * F.h[0], w2: wMax * F.h[3], bow, e1: edge(1), e2: edge(-1), wAt };
+}
 function bez3(c, s) {
   const u = 1 - s;
   return [u * u * u * c[0][0] + 3 * u * u * s * c[1][0] + 3 * u * s * s * c[2][0] + s * s * s * c[3][0],
@@ -317,11 +328,13 @@ function limbSpines(g, side, spacing, len, s0, s1, sw) {
 }
 // chevron (herringbone) muscle pattern on a saltatorial femur
 function femurHerringbone(g, side) {
-  const els = [], step = floorPitch(Math.max(3.2, g.L / 22));
+  const els = [], step = floorPitch(Math.max(3.2, g.L / 18));   // about 15 chevrons, as on the reference
   const mid = s => lerpP(bez3(g.e1, s), bez3(g.e2, s), 0.5 - side * 0.08);
-  const sm = 0.1, sM = 0.9;
+  const sm = 0.03, sM = 0.86;   // over the whole outer face, from the base to where it narrows before the knee (#23)
   els.push(pathEl(cubicBezierPath([mid(sm), mid(0.35), mid(0.65), mid(sM)], false), SW.D));
+  g.herring = [Infinity, -Infinity];   // the span of s the chevrons cover, for tests/check.js
   for (let s = sm + 0.05; s < sM; s += step / g.L) {
+    g.herring = [Math.min(g.herring[0], s), Math.max(g.herring[1], s)];
     const m = mid(s), w = g.wAt(s), ds = (step * 1.1) / g.L;
     const a1 = bez3(g.e1, s - ds), a2 = bez3(g.e2, s - ds);
     els.push(lineEl(m, lerpP(m, a1, 0.82), SW.F));
@@ -511,6 +524,7 @@ const antBaseW = (hw, wK) => Math.max(1.3, hw * 0.05) * wK;
 // from the ANT_SHRINK.from-th attempt overall, once straightened, by `step` per attempt, never under `floor`; the
 // fallback shortens by `fbStep` per step for at most `fbSteps` steps until it clears.
 const ANT_HIT = { legs: { ang: -86, curve: 6, minAng: -100 }, wing: { ang: -70, curve: 15, minAng: -95 } };
+const ANT_FIT_FB = { ang: -78, curve: 12 };   // an antFit order's fallback after a fit failure: forward, spread enough that the pair never reads as one line (#23)
 const ANT_SHRINK = { from: 4, step: 0.94, floor: 0.5, fbStep: 0.9, fbSteps: 12 };
 function rollAntGenes(type, P) {
   const T = ORDERS[type].ant, F = Object.assign({}, T.base, T[P.fam] || {});
@@ -744,7 +758,7 @@ function legEls(attach, spec, meta) {
   for (let k = 1; k < 3; k++) {                       // femur, tibia
     const q = add(p, mul(dirv(dirs[k]), lens[k]));
     const bow = lens[k] * 0.07 * (spec.bowSign || 1);
-    const g = limbGeom(p, q, ws[k][0], ws[k][1], bow);
+    const g = k === 1 && spec.herringbone ? femurGeom(p, q, ws[k][0], bow) : limbGeom(p, q, ws[k][0], ws[k][1], bow);
     geoms.push(g);
     els.push(pathEl(limbPath(g), SW.O, '#fff'));
     const outer = shadeSide(g);
@@ -795,7 +809,10 @@ function legEls(attach, spec, meta) {
   }
   const tr_ = tarsusEls(p, dirs[3], lens[3], ws[3][0], spec.tarsomeres || 5, spec.curl, { pulvilli: spec.pulvilli, basitarsus: spec.basitarsus, clawK: spec.clawK, padK: spec.padK });
   els.push(...tr_.els);
-  if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip });
+  // the drawn femur, for tests/check.js: its length and its outline's width every twentieth of the way (s = 0 at the trochanter)
+  const fg = geoms[0], fem = { L: fg.L, widths: [], herring: fg.herring || null };
+  for (let i = 0; i <= 20; i++) fem.widths.push(vlen(sub(bez3(fg.e1, i / 20), bez3(fg.e2, i / 20))));
+  if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip, fem });
   return els;
 }
 // The joint polyline legEls would draw, without drawing it: attach, coxa, trochanter, femur tip (index 3), tibia tip,
@@ -2212,7 +2229,8 @@ const ORDERS = {
       acridid: { hindK: [1.75, 2.1] }, tettigoniid: { lenK: [1.15, 1.4], wk: [0.8, 0.9], hindK: [1.6, 1.9] }, tetrigid: { lenK: [0.8, 0.95], wk: [1.0, 1.1], hindK: [1.6, 1.9] } },
     ant: { base: { ref: 'bl', len: [0.35, 0.55], seg: [20, 26], socket: [0.13, 0.24], kinds: { filiform: 5, clubbed: 1 }, club: 'gradual' },
       tettigoniid: { kinds: { filiform: 1 }, len: [1.0, 1.8], seg: [30, 45] },
-      tetrigid: { kinds: { filiform: 1 }, ref: 'hw', len: [0.5, 0.8], seg: [11, 16] } },
+      tetrigid: { kinds: { filiform: 1 }, ref: 'hw', len: [0.9, 1.4], seg: [11, 16] } },   // #23: short, but a head width or more, never two hairs
+    antFit: { scale: 1.0, width: 1.3 },   // #23: the antenna alone never takes the plate under scale 1.0, nor past 1.3x the body box's half width
     headScaleP5: 1.18,
     wingRoots: [0.45, 0.78],   // held for width by tests/check.js; the tegmen itself roots under the pronotum's hind margin (thorax.yBot - 6)
     legThick: 0.95,
@@ -2652,7 +2670,7 @@ function rollBodyGenes(type, P) {
     if (rng() < F.fringe) g.fringe = { spacing: randRange(2.6, 4.5), len: randRange(3, 7), tibia: true, femur: rng() < 0.5 };
     // order specifics
     if (saltatorial && i === 2) {   // saltatorial: huge femur with chevron muscles, serrated tibia, two pairs of apical spurs
-      g.herringbone = true; g.bowSign = -1; g.femFrac = randRange(0.24, 0.33);   // acridid hind femur: working estimate of 3-4x as long as deep (no leg reference in docs/ref yet; measure when one is added) g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);   // acridid femur a quarter to a third as wide as long (ref orth-grasshopper)
+      g.herringbone = true; g.bowSign = -1; g.femFrac = 1 / randRange(3.8, 4.6);   // acridid hind femur: 3.8-4.6x as long as its deepest point (#23; measured 3.6-4.4 on ref leg-orth-femur / leg-orth-psm1891, docs/research-legs-eyes-antennae.md) g.spursOuter = true; g.spurs = 2; g.spurLen = randRange(1.2, 1.6);   // acridid femur a quarter to a third as wide as long (ref orth-grasshopper)
       g.spines = { tibia: true, femur: false, side: 'outer', double: true, spacing: randRange(4, 6.5), len: randRange(0.6, 0.9) };
       g.ang = B.pose === 'tucked' ? { F: [40, 62], fold: [24, 40], T: [5, 18] } : { F: [40, 65], fold: [30, 52], T: [5, 20] };
     }
@@ -3239,9 +3257,9 @@ function drawLegs(C) {
         fringe: g.fringe, pulvilli: g.pulvilli, padK: g.padK, clawK: g.clawK, herringbone: g.herringbone, femurTeeth: g.femurTeeth, shade: g.shade, corbicula: g.corbicula,
       };
       if (g.femW) spec.widths[1] = [g.femW * wk, 6 * wk];
-      if (g.femFrac) {   // saltatorial femur: width as a fraction of its own final length, and never under 1.9x the mid femur's width (the jumping leg must read as the big one)
+      if (g.femFrac) {   // saltatorial femur: deepest width as a fraction of its own final length, and never under 1.9x the mid femur's width (the jumping leg must read as the big one), nor stouter than 3.7x
         const midW = 7 * B.legs[1].swell * wk0 * B.legs[1].wk;
-        spec.widths[1] = [Math.min(spec.lens[1] / 3, Math.max(spec.lens[1] * g.femFrac, 1.9 * midW)), 6 * wk];
+        spec.widths[1] = [Math.min(spec.lens[1] / 3.7, Math.max(spec.lens[1] * g.femFrac, 1.9 * midW)), 6 * wk];
       }
       if (g.herringbone) spec.widths[2] = [5.5 * wk, 3.2 * g.flare * wk];
       if (g.corbicula) { spec.widths[2] = [4.5 * wk, 9.5 * wk]; spec.basitarsus = [7 * wk, 6 * wk]; }
@@ -3324,7 +3342,7 @@ function drawLegs(C) {
       L.legPairs.push({ els, pivot: at.p, skew: skews[i] });
       const lm = legMeta[legMeta.length - 1];
       lm.hw = at.hw; lm.pair = ['front', 'mid', 'hind'][i]; lm.pts = joints[i]; lm.femurTip = joints[i][3]; lm.skew = skews[i]; lm.pivot = at.p;
-      lm.femW = specs[i].widths[1][0]; lm.femLen = specs[i].lens[1];
+      lm.femW = Math.max(...lm.fem.widths); lm.femLen = lm.fem.L;   // as drawn: the outline's widest point and the trochanter-to-knee length
       lm.segHw = joints[i].slice(0, -1).map((_, k) => halfW(specs[i], k));   // half width of segment k -> k+1, for the antenna clearance rule (#7) and tests/check.js
     }
     legMeta.reverse();   // front, mid, hind
@@ -3345,9 +3363,10 @@ function drawLegs(C) {
 // docs/research-antennae.md R-A, R-C, R-D. Drawn after the legs and the wings so their geometry is known; the layer
 // order in the assembly is unchanged (antennae on top).
 function drawAntennae(C) {
-  const { L, meta, outerBox, P, B, thorax, abdomen, headTop } = C;
+  const { L, meta, outerBox, P, B, thorax, abdomen, headTop, order } = C;
   {
     const A = B.ant, R = ANT_POSES[A.pose];
+    const fit = order.antFit;   // the order's own antenna fit, if any (#23: a grasshopper's never shrinks the plate under 1.0, nor reaches past 1.3x the body box)
     const base = [P.headW * A.socket[0], headTop + P.headH * A.socket[1]];
     const ob = outerBox;   // everything drawn so far: body, legs and wings
     const wings = meta.wingOutlines = wingPolys;   // every outline makeWing (and the elytron) pushed for this plate, right side, body coordinates
@@ -3367,11 +3386,20 @@ function drawAntennae(C) {
       let maxX = 0, minY = Infinity, maxY = -Infinity;
       for (const p of G.pts) { if (p[0] < m) return 'cross'; maxX = Math.max(maxX, p[0]); minY = Math.min(minY, p[1]); maxY = Math.max(maxY, p[1]); }
       // fit: the antenna alone must not push the plate scale under 0.6. The box already holds the wings, which on a
-      // broad-winged plate set a scale under 0.6 by themselves, so the antenna is blamed only where it extends that box
-      const W = 2 * Math.max(Math.abs(ob.minX), ob.maxX, maxX) + 48, H = Math.max(ob.maxY, maxY) - Math.min(ob.minY, minY) + 48;
-      const W0 = 2 * Math.max(Math.abs(ob.minX), ob.maxX) + 48, H0 = ob.maxY - ob.minY + 48;
+      // broad-winged plate set a scale under 0.6 by themselves, so the antenna is blamed only where it extends that box.
+      // An order with antFit holds its antenna to antFit.scale the same way, and within antFit.width times the box's
+      // half width (the arc pose's hoop, #23)
+      const hw0 = Math.max(Math.abs(ob.minX), ob.maxX);
+      const W = 2 * Math.max(hw0, maxX) + 48, H = Math.max(ob.maxY, maxY) - Math.min(ob.minY, minY) + 48;
+      const W0 = 2 * hw0 + 48, H0 = ob.maxY - ob.minY + 48;
       const sc = Math.min(552 / W, 507 / H), sc0 = Math.min(552 / W0, 507 / H0);
       if (sc < 0.6 && sc < sc0 - 1e-9) return 'fit';
+      if (order.antFit) {   // the order's own bound, at assemblePlate's scale (the 0.6 rule above counts the margins twice)
+        const ps = (hw, h) => Math.min(552 / (2 * hw), 507 / h, 1.3);
+        const scA = ps(Math.max(hw0, maxX), H - 48), scA0 = ps(hw0, H0 - 48);
+        if (scA < fit.scale && scA < scA0 - 1e-9) return 'fit';
+        if (maxX > fit.width * hw0) return 'fit';
+      }
       for (const poly of wings) for (const p of G.pts) if (pointInPoly(p, poly)) return 'wing';   // the left side is the mirror image
       if (legSegs.length) for (const ln of G.lines) for (let i = 0; i + 1 < ln.pl.length; i++) {
         const a = ln.pl[i], b = ln.pl[i + 1];
@@ -3400,23 +3428,28 @@ function drawAntennae(C) {
       if (ANT_HIT[why]) straight = true;
       if (straight) {   // back off a little from the midline after a cross, else on toward straight ahead (a fit or cross hit while straightened keeps the wing's bound)
         pose.ang = why === 'cross' ? Math.min(-45, prev.ang + randRange(5, 15)) : Math.max((ANT_HIT[why] || ANT_HIT.wing).minAng, Math.min(prev.ang, -45) - randRange(5, 20));
+        if (why === 'fit' && order.antFit) pose.ang = Math.min(prev.ang, ANT_FIT_FB.ang);   // #23: a fit hit only shortens; walking it toward the midline would lay the pair side by side
         pose.curve = randRange(5, 30); pose.droop = 0;
       }
     }
     if (why) {   // known-good fallback: ANT_HIT's pose after a leg or wing hit, else forward at 40 deg from the midline with a little
       // outward curve (the face pose keeps its angle); shortened, then after a leg hit shortened again (and angled back out of
       // the midline, for a plume) until it clears; antOk draws no rng
-      const fb = ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
-      pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: 0, lenK: Math.min(pose.lenK, 0.8) };
+      // An order with antFit whose antenna still does not fit (a katydid's, longer than the body, #23) is laid forward
+      // (ANT_FIT_FB) from full length and shortened until it fits, never curled into a stub.
+      const fitFb = why === 'fit' && !!order.antFit;
+      const fb = fitFb ? ANT_FIT_FB : ANT_HIT[why] || { ang: -50, curve: A.pose === 'swept' ? 120 : A.pose === 'arc' ? 40 : 12 };
+      pose = { ang: A.pose === 'face' ? -86 : fb.ang, curve: fb.curve, droop: 0, lenK: fitFb ? 1 : Math.min(pose.lenK, 0.8) };
       A.hookSide = 1; G = antennaGeom(A, base, P.headW, pose);
-      for (let k = 0, r; k < ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross'); k++) {
-        if (r === 'legs') { pose.ang = Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
+      for (let k = 0, r; k < (fitFb ? 3 : 1) * ANT_SHRINK.fbSteps && ((r = antOk(G)) === 'legs' || r === 'cross' || (r === 'fit' && order.antFit)); k++) {
+        if (r === 'legs') { pose.ang = Math.max(-90, pose.ang - 4); pose.lenK *= ANT_SHRINK.fbStep; } else if (r === 'fit') pose.lenK *= ANT_SHRINK.fbStep; else { pose.ang = Math.min(-45, pose.ang + 8); if (G.rami) pose.lenK *= ANT_SHRINK.fbStep; }
         G = antennaGeom(A, base, P.headW, pose);
       }
     }
     L.antennae.push(...antennaEls(A, G, P.headW));
     G.pts.forEach(bb);
-    meta.antennae = { kind: A.kind, pose: A.pose, club: A.club, pts: G.pts, lines: G.lines, tip: G.tip, base, attempts: attempt + 1, why, reasons, lenK: pose.lenK };
+    meta.antennae = { kind: A.kind, pose: A.pose, club: A.club, pts: G.pts, lines: G.lines, tip: G.tip, base, attempts: attempt + 1, why, reasons, lenK: pose.lenK,
+      box0: { minX: ob.minX, maxX: ob.maxX, minY: ob.minY, maxY: ob.maxY }, fam: P.fam, headW: P.headW };   // box0: the plate box before the antennae, for the fit checks
     B.sig.push(A.kind, A.club || '-', A.pose, Math.round(A.nSeg / 4), A.kind === 'lamellate' ? A.lamellae.n : (A.kind === 'pectinate' || A.kind === 'bipectinate') ? Math.round(A.rami.n / 6) : 0,
       Math.round(pose.ang / 10), Math.round(pose.curve / 15), Math.round(G.len / P.headW * 2), Math.round(A.socket[0] * 20));
     if (B.abd.filaments) L.antennae.push(pathEl(smoothPath(shaftPoints([3, abdomen.yBot - 2], 90 - B.abd.filaments.splay, P.abdLen * B.abd.filaments.len, 14, 8), false), SW.D));   // outer tail filaments (mirrored)

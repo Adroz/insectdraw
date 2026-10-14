@@ -138,7 +138,8 @@ contract for changes.
   `rollAntGenes` (the entry's `ant` table, poses from `ANT_POSES`) rolls the genes, `antennaGeom` builds the
   geometry without rng, and the antennae block (after the legs and the wings) validates the pose: no point of
   the right antenna reaches the mirror line (the left is its mirror image, so that is the
-  no-crossing rule), the antenna alone does not push the plate scale under 0.6, no centre-line of the
+  no-crossing rule), the antenna alone does not push the plate scale under 0.6 (an entry's `antFit` raises that floor and caps how far out
+  the antenna reaches: the grasshopper's is scale 1.0 and 1.3× the half width of the rest of the plate, #23), no centre-line of the
   antenna (`meta.antennae.lines`: shaft, club, rami, lamellae, arista) comes within 3 px + both half widths of a
   leg segment ahead of the thorax in any leg pose (#7: every leg from the femur on, right side and the skewed
   left set, each segment's half width on `meta.legs[i].segHw`; beside the body the antenna lies over the legs),
