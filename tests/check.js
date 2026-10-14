@@ -144,7 +144,9 @@ const commons = [];
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 // #17, from the references (odo-damsel-ris1921: a coenagrionid, two antenodals and the quadrilateral from the arculus;
 // Calopterygidae carry an antenodal ladder) and the common names of each family, stated here rather than read from the engine
-const ODO_NOUNS = { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'] };
+const ODO_NOUNS = { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'],
+  lestid: ['Spreadwing', 'Reedling'], platycnemidid: ['Featherleg', 'Threadtail'] };   // #48: Lestidae and Platycnemididae carry two antenodals too
+const ODO_TWO_AX = ['coenagrionid', 'lestid', 'platycnemidid'];   // the families with exactly two antenodals (Ax1, Ax2)
 const ODO_LADDER_MIN = 5;   // antenodals on a ladder wing (the ticket's 5-9 on the damselflies it calls a ladder)
 const ODO_Q_GAP = 0.02;   // the quadrilateral's proximal side within this of the arculus (span fractions)
 const odoSeen = {};   // damselfly family -> plates odoAntenodal saw, for POST.odoAntenodal
@@ -155,6 +157,21 @@ const odoSeen = {};   // damselfly family -> plates odoAntenodal saw, for POST.o
 // ODO_ROOT of the hindwing's span from its root; it ran to 35-40%); the pterostigma is 4-8% of the span (it reached 11-12%)
 const ODO_CELL_PX = 3, ODO_LOBE = 0.9, ODO_LOBE_AT = 0.1, ODO_ROOT = 0.15, ODO_STIGMA = 0.08;
 const odoRun = { cell: Infinity, cellSeed: 0, overlap: 0, overlapSeed: 0 };   // over the run, for the report (POST.odoMesh)
+// #48, from the references (docs/research-odonata-habitus.md; odo-hab-* in docs/ref) and the ticket, stated here rather than
+// read from the engine: every odonate plate draws one of its suborder's families; each dragonfly family draws its abdomen
+// silhouette, measured on meta.abdomen.profile (half widths along the abdomen, t = 0 at its base): libellulid broad (at
+// most ODO_HAB.broad times as long as its widest width, against about 11 for the rod; widest in the basal half, tapering
+// to under ODO_HAB.taper of it by t 0.85), gomphid clubbed at S7-S9 (the widest over t 0.6-0.92 at least ODO_HAB.club x the narrowest over
+// 0.25-0.55), corduliid waisted at S3 (the narrowest over t 0.12-0.3 at most ODO_HAB.waist x the widest over the first 0.12),
+// a rod (aeshnid, every damselfly) no wider anywhere over t 0.15-0.8 than ODO_HAB.rod x its narrowest there. A lestid holds
+// its wings half open, the forewing axis (root to its farthest point) swept back at least ODO_HAB.lestid degrees; a
+// platycnemidid's mid and hind tibiae are at least ODO_HAB.tibia x as wide as its fore tibia. The wing set gene stays in
+// the ticket's ranges (forewing sweep -10..+15, the lestid's 20..35, the hindwing a further 0..12 degrees).
+const ODO_FAMS = { dragonfly: ['aeshnid', 'libellulid', 'gomphid', 'corduliid'], damselfly: ['coenagrionid', 'lestid', 'calopterygid', 'platycnemidid'] };
+const ODO_PROFILE = { aeshnid: ['rod', 'waisted'], libellulid: ['broad'], gomphid: ['club'], corduliid: ['waisted'], coenagrionid: ['rod'], lestid: ['rod'], calopterygid: ['rod'], platycnemidid: ['rod'] };
+const ODO_HAB = { broad: 6, taper: 0.7, club: 1.3, waist: 0.75, rod: 1.4, lestid: 15, tibia: 1.8, fw: [-10, 15], fwLestid: [20, 35], hw: [0, 12], poseShare: 0.15 };
+const ODO_PATTERNS = ['plain', 'banded', 'spotted', 'rings', 'tipdark'];   // the dorsal pattern families every odonate run must show
+const odoHab = { fam: {}, pose: {}, mark: {}, plates: 0 };   // over the run, for POST.odoHabitus
 const ODO_MIN = 40;   // damselfly plates a run needs before a family with no plate fails rather than being reported
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
@@ -365,6 +382,11 @@ const PRE = {
       if (o.elytra !== undefined && (!o.elytra || !o.elytra.styles || !range2(o.elytra.pitch) || !range2(o.elytra.dash) || Object.values(o.elytra.fams || {}).some(e => !range2(e.len)))) f('elytra is not { styles, pitch: [min, max], dash: [min, max], fams?: { fam: { len: [min, max], truncate? } } }');
       if (o.pronotum !== undefined && (!o.pronotum || !range2(o.pronotum.wl) || !range2(o.pronotum.ely))) f('pronotum is not { wl: [min, max], ely: [min, max] }: ' + JSON.stringify(o.pronotum));
       if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
+      // #51: or named sets { name: { w, fw, hw } } with abdWing, the family's sets replacing the order's
+      const setsBad = w => !w.sets || !range2(w.abdWing) || Object.values(w.sets).some(v => !(v.w > 0) || !range2(v.fw) || !range2(v.hw));
+      if (o.wingSet !== undefined && (!o.wingSet || (o.wingSet.sets ? setsBad(o.wingSet) || Object.values(o.wingSet.fams || {}).some(w => (w.sets || w.abdWing) && setsBad(Object.assign({}, o.wingSet, w)))
+        : !range2(o.wingSet.fw) || !range2(o.wingSet.hw) || Object.values(o.wingSet.fams || {}).some(w => (w.fw && !range2(w.fw)) || (w.hw && !range2(w.hw))))))
+        f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } } nor { abdWing, sets: { set: { w, fw, hw } }, fams? }: ' + JSON.stringify(o.wingSet));
       if (o.antFit !== undefined && !(o.antFit && o.antFit.scale > 0 && o.antFit.width > 0)) f('antFit is not { scale, width } (both > 0): ' + JSON.stringify(o.antFit));
       if (typeof o.wings !== 'function') f('wings is not a function');
       const nb = namesBad(o.names); if (nb) f('names: ' + nb);
@@ -379,7 +401,7 @@ const PRE = {
         for (const k of P_FIELDS) if (!(typeof P[k] === 'number' && P[k] > 0)) f('proportions leaves P.' + k + ' unset: ' + P[k]);
         for (const k of ['thoraxAnchors', 'abdAnchors']) if (!Array.isArray(P[k]) || P[k].length < 3 || P[k].some(a => !Array.isArray(a) || a.length !== 2)) f('proportions leaves P.' + k + ' unset or malformed');
       }
-      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['habitus', o.habitus || {}], ['wingSet', o.wingSet || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}]])
+      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['habitus', o.habitus || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
   },
@@ -840,12 +862,47 @@ const CHECKS = {
     }
     const one = (s, what) => {
       if (!s || typeof s.antMin !== 'number') return fail(what + 'odonate wingStats has no antenodal count');
-      if (fam === 'coenagrionid' && (s.antMin !== 2 || s.antMax !== 2)) fail(what + 'coenagrionid antenodals not exactly 2: ' + s.antMin + '-' + s.antMax);
-      if (fam !== 'coenagrionid' && s.antMin < ODO_LADDER_MIN) fail(what + fam + ' antenodal ladder too short: ' + s.antMin + ' (min ' + ODO_LADDER_MIN + ')');
+      if (ODO_TWO_AX.includes(fam) && (s.antMin !== 2 || s.antMax !== 2)) fail(what + fam + ' antenodals not exactly 2: ' + s.antMin + '-' + s.antMax);
+      if (!ODO_TWO_AX.includes(fam) && s.antMin < ODO_LADDER_MIN) fail(what + fam + ' antenodal ladder too short: ' + s.antMin + ' (min ' + ODO_LADDER_MIN + ')');
       if (meta.type === 'damselfly' && !(s.qGap <= ODO_Q_GAP)) fail(what + 'damselfly quadrilateral floats off the arculus: ' + (s.qGap === undefined ? 'no qGap' : s.qGap.toFixed(3)) + ' of the span (max ' + ODO_Q_GAP + ')');
     };
     one(meta.wingStats, '');
     one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
+  },
+  // Odonata habitus (#48): the family, its abdomen silhouette, the wing set, the leg pose and the platycnemidid tibiae (ODO_HAB above)
+  odoHabitus(meta, svg, fail) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const fam = meta.fam, B = meta.bodyGenes || {}, A = B.abd || {};
+    if (!ODO_FAMS[meta.type].includes(fam)) return fail(meta.type + ' plate draws no family of its suborder (meta.fam ' + fam + ')');
+    odoHab.plates++; odoHab.fam[fam] = (odoHab.fam[fam] || 0) + 1;
+    const pose = meta.legRoll && meta.legRoll.pose; odoHab.pose[pose] = (odoHab.pose[pose] || 0) + 1;
+    odoHab.mark[A.mark] = (odoHab.mark[A.mark] || 0) + 1;
+    if (!ODO_PROFILE[fam].includes(A.profile)) fail(fam + ' abdomen profile ' + A.profile + ', not ' + ODO_PROFILE[fam].join(' / '));
+    const ab = meta.abdomen, hw = t => profHw(ab.profile, ab.yTop + t * (ab.yBot - ab.yTop));
+    const over = (t0, t1, f) => { let v = f === 'max' ? 0 : Infinity; for (let t = t0; t <= t1 + 1e-9; t += 0.01) v = f === 'max' ? Math.max(v, hw(t)) : Math.min(v, hw(t)); return v; };
+    const abW = maxHw(ab.profile), lw = (ab.yBot - ab.yTop) / (2 * abW);
+    if (A.profile === 'broad') {
+      if (lw > ODO_HAB.broad) fail('libellulid abdomen not broad: ' + lw.toFixed(1) + ' times as long as wide (max ' + ODO_HAB.broad + ')');
+      if (over(0, 0.5, 'max') < abW * 0.99) fail('libellulid abdomen not widest in its basal half');
+      if (hw(0.85) > ODO_HAB.taper * abW) fail('libellulid abdomen does not taper: ' + (hw(0.85) / abW).toFixed(2) + ' of its width at t 0.85');
+    }
+    if (A.profile === 'club' && over(0.6, 0.92, 'max') < ODO_HAB.club * over(0.25, 0.55, 'min')) fail('gomphid abdomen not clubbed: S7-S9 ' + (over(0.6, 0.92, 'max') / over(0.25, 0.55, 'min')).toFixed(2) + 'x the mid abdomen (min ' + ODO_HAB.club + ')');
+    if (A.profile === 'waisted' && over(0.12, 0.3, 'min') > ODO_HAB.waist * over(0, 0.12, 'max')) fail('abdomen not waisted at S3: ' + (over(0.12, 0.3, 'min') / over(0, 0.12, 'max')).toFixed(2) + ' of S1-S2 (max ' + ODO_HAB.waist + ')');
+    if (A.profile === 'rod' && over(0.15, 0.8, 'max') > ODO_HAB.rod * over(0.15, 0.8, 'min')) fail('rod abdomen not a rod: ' + (over(0.15, 0.8, 'max') / over(0.15, 0.8, 'min')).toFixed(2) + 'x its narrowest (max ' + ODO_HAB.rod + ')');
+    const ws = B.wingSet, fwR = fam === 'lestid' ? ODO_HAB.fwLestid : ODO_HAB.fw;
+    if (!ws || !(ws.fw >= fwR[0] && ws.fw <= fwR[1]) || !(ws.hw >= ODO_HAB.hw[0] && ws.hw <= ODO_HAB.hw[1])) fail('odonate wing set ' + JSON.stringify(ws) + ' outside forewing ' + fwR.join('..') + ', hindwing +' + ODO_HAB.hw.join('..'));
+    if (fam === 'lestid') {
+      const fw = meta.wingOutlines && meta.wingOutlines[0];
+      if (!fw) return fail('lestid plate has no forewing outline');
+      const xMin = Math.min(...fw.map(p => p[0])), near = fw.filter(p => p[0] < xMin + 1), root = [near.reduce((a, p) => a + p[0], 0) / near.length, near.reduce((a, p) => a + p[1], 0) / near.length];
+      const tip = fw.reduce((b, p) => dist(p, root) > dist(b, root) ? p : b, fw[0]), ang = Math.atan2(tip[1] - root[1], tip[0] - root[0]) * 180 / Math.PI;
+      if (ang < ODO_HAB.lestid) fail('lestid forewing not held half open: swept back ' + ang.toFixed(1) + ' degrees (min ' + ODO_HAB.lestid + ')');
+    }
+    if (fam === 'platycnemidid') {
+      const tw = meta.legs.map(l => l.tib && l.tib.wMax);
+      if (!tw.every(w => w > 0)) return fail('platycnemidid legs have no tibia widths on meta.legs[i].tib');
+      if (Math.min(tw[1], tw[2]) < ODO_HAB.tibia * tw[0]) fail('platycnemidid mid / hind tibiae not broad: ' + (Math.min(tw[1], tw[2]) / tw[0]).toFixed(2) + 'x the fore tibia (min ' + ODO_HAB.tibia + ')');
+    }
   },
   // #19 lacewing (neu-nothochrysa): the strip under R1 (R1-Rs) carries a few rungs, 2-5 on the reference, never none (Sc,
   // R1 and Rs would read as three ruled parallels) and never the costal ladder's density; the engine reports the
@@ -1415,6 +1472,16 @@ const POST = {
     if (missing.length && total >= ODO_MIN) fail('no damselfly plate of family ' + missing.join(', ') + ' in ' + total + ' damselfly plates: its antenodal assertions never ran');
     console.log('damselfly antenodal families asserted on:', Object.keys(ODO_NOUNS).map(f => f + ' ' + (odoSeen[f] || 0)).join(', ') +
       (missing.length && total < ODO_MIN ? '; too few damselfly plates (' + total + ' < ' + ODO_MIN + ') to require ' + missing.join(', ') : ''));
+  },
+  // odoHabitus over the run: once it has ODO_MIN odonate plates, every family, both leg poses (each on ODO_HAB.poseShare of
+  // the plates) and every dorsal pattern family must have been drawn, so a family that never rolls cannot pass by silence
+  odoHabitus(fail) {
+    const n = odoHab.plates, fams = [...ODO_FAMS.dragonfly, ...ODO_FAMS.damselfly];
+    console.log('odonate habitus over ' + n + ' plates: ' + fams.map(f => f + ' ' + (odoHab.fam[f] || 0)).join(', ') + '; poses ' + JSON.stringify(odoHab.pose) + '; patterns ' + JSON.stringify(odoHab.mark));
+    if (n < ODO_MIN) return console.log('  too few odonate plates (' + n + ' < ' + ODO_MIN + ') to require every family, pose and pattern');
+    const missing = fams.filter(f => !odoHab.fam[f]).concat(ODO_PATTERNS.filter(m => !odoHab.mark[m]));
+    if (missing.length) fail('odonate families / patterns never drawn in ' + n + ' plates: ' + missing.join(', '));
+    for (const p of ['basket', 'tucked']) if ((odoHab.pose[p] || 0) < ODO_HAB.poseShare * n) fail('odonate leg pose ' + p + ' on ' + (odoHab.pose[p] || 0) + ' of ' + n + ' plates (min ' + ODO_HAB.poseShare * 100 + '%)');
   },
   // the report for CHECKS.lepInk: plates rasterised per variant, the largest tone share of a solid window, and the plates
   // with a solid window from the line art alone; a run long enough to hold both variants fails without one (never by silence)

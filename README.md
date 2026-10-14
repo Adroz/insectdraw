@@ -185,9 +185,12 @@ margin-terminating vein ends on an outline sample.
   `cells` gene; after
   [Hoffmann et al. 2018, PNAS](https://www.pnas.org/doi/10.1073/pnas.1721248115).
   The discoidal triangle (dragonfly) or quadrilateral (damselfly, square under
-  the arculus) and the subnodus are on every wing; a damselfly is a
-  coenagrionid with exactly two antenodals or a calopterygid with a ladder,
-  and its common name follows (#17). The dragonfly hindwing is widest at its
+  the arculus) and the subnodus are on every wing; a damselfly's family
+  (`P.fam`, #48) sets its antenodals: two on a coenagrionid, lestid or
+  platycnemidid, a ladder on a calopterygid, and its common name follows (#17).
+  Both suborders roll a family habitus with the body (#48,
+  `docs/research-odonata-habitus.md`): abdomen width profile, dorsal pattern,
+  wing set, leg pose. The dragonfly hindwing is widest at its
   base with an anal lobe against the body, the two wings meet only at their
   roots (swept apart until they do), the arculus is a short step from the
   sectors' stem to the triangle, the pterostigma is 4–8% of the span, and no
