@@ -2306,7 +2306,7 @@ const ORDERS = {
       tabanid: { abdW: [1.35, 1.5], abdLen: [0.95, 1.08], abdAnchors: [[0, 0.88], [0.3, 1], [0.6, 0.94], [0.86, 0.66], [1, 0]] },
       asilid: { abdW: [0.66, 0.74], abdLen: [1.32, 1.45], foldReach: 0.7, abdAnchors: [[0, 0.9], [0.12, 1], [0.45, 0.76], [0.7, 0.56], [1, 0]] },
       tachinid: { abdW: [1.15, 1.28], abdLen: [0.6, 0.68], abdAnchors: [[0, 0.72], [0.4, 1], [0.66, 0.94], [0.88, 0.62], [1, 0]] },
-      bombyliid: { abdW: [1.2, 1.32], abdLen: [0.62, 0.72], abdAnchors: [[0, 0.8], [0.42, 1], [0.7, 0.9], [0.9, 0.55], [1, 0]] },
+      bombyliid: { abdW: [1.2, 1.32], abdLen: [0.58, 0.66], abdAnchors: [[0, 0.8], [0.42, 1], [0.7, 0.9], [0.9, 0.55], [1, 0]] },
       conopid: { abdW: [0.9, 1.0], abdLen: [1.25, 1.4], foldReach: 0.7, abdAnchors: [[0, 0.3], [0.22, 0.36], [0.5, 0.85], [0.7, 1], [0.86, 0.85], [1, 0]] },
     },
     // #54 abdominal macrochaetae (B.abd.chaetae; refs dip-hab-tachina, dip-hab-bombylius): bristle, stout setae along the hind
@@ -4518,7 +4518,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
     const shows = th => {
       const w = sampleSmooth(o, true, 0.9, 8).map(p => add([bx, by], rot(p, th * D2R)));
       for (let y = thorax.yBot + 2; y < abdomen.yBot; y += 2) {
-        const hw = abdomen.hwAt(y); if (hw < 3) continue;
+        const hw = abdomen.hwAt(y); if (hw < 4) continue;   // a sliver of tip (under 4 wide) is not a side that shows
         let x = null; for (let i = 0, j = w.length - 1; i < w.length; j = i++) { const a = w[i], b = w[j]; if ((a[1] > y) !== (b[1] > y)) { const xi = a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]); if (x === null || xi > x) x = xi; } }
         if (x === null || x < hw - DIP_FOLD_SIDE) return true;
       }
