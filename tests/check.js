@@ -229,20 +229,19 @@ const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family wi
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
 // antialiased ink averaged over every 9 x 9 px window: a window at LEP_INK_MAX or more reads as a black blotch on the 1-bit
 // panel. Measured this way on the full plate at 147bbee, the ticket's evidence seeds gave 1067-1570 px of such windows per
-// moth and 6617 on butterfly 66 (the audit's 1444-1575 and 7038, on Chromium's raster). A solid window fails when the tone
-// layers (hatch, stipple, fringe) put at least LEP_TONE_SHARE of its ink there, i.e. its ink less the line art's alone
-// (meta.lepArtSvg: outline, costa, veins, band edges, cross-lines, spot rings). A solid window the line art makes on its own
-// (the costa beside Sc and R1, a vein fork) is converging line art, not tone (#67; #14 for the other orders): the
-// report counts those plates, the gate does not fail them.
-const LEP_INK_MAX = 0.55, LEP_TONE_SHARE = 0.25, LEP_WIN = 9;
-const lepInk = {};   // variant -> { n, share, seed, art } over the run, for the report (POST.lepInk)
+// moth and 6617 on butterfly 66 (the audit's 1444-1575 and 7038, on Chromium's raster). Any solid window fails, whatever
+// made it (#67): the message splits its ink into the line art's alone (meta.lepArtSvg: outline, costa, veins, band edges,
+// cross-lines, spot rings; #67's costa beside Sc and R1, a vein fork, a zigzag cross-line) and the tone layers' (hatch,
+// stipple, fringe; #13's stacked hatch families), so it says which of the two to look at.
+const LEP_INK_MAX = 0.55, LEP_WIN = 9;
+const lepInk = {};   // variant -> { n, max, seed, art } over the run: the darkest window and its line-art ink, for the report (POST.lepInk)
 let lepRun = 0;      // plates lepInk saw (any type), so POST.lepInk can tell a lost variant from a short run
 const LEP_MIN = 40;  // lepidopteran plates a run needs before a variant with no plate fails (~0.6^40: no butterfly by chance)
 // #14: no two lane centre-lines of a growVeins wing (meta.wingLanes: the drawn lanes and the wall lanes the outline draws, body
 // coordinates, one entry per wing) closer than LANE_FLOOR plate px, except within LANE_JOIN px of a junction of the lane, a
 // point where it touches another lane (a fork, an end on a neighbour, a node three lanes share), so a Y passes and a bar
 // does not; the numbers are stated here rather than read from the engine. Which orders it covers is the registry's
-// (ORDERS[type].laneFloor === false opts one out: the moth's wings are #67's, lepInk; the beetle has no lanes).
+// (ORDERS[type].laneFloor === false opts one out: the beetle has no lanes; the moth's veins go through it too since #67).
 const LANE_FLOOR = 1.8, LANE_JOIN = 6, LANE_TOUCH = 0.3, LANE_STEP = 0.5;
 const laneRun = {};   // type -> { n, worst, seed } over the run: the closest non-junction approach, for the report
 // #15: the marks inside an abdominal segment (the segment line and its doubled membrane line, the plain curves, the banded
@@ -1393,9 +1392,9 @@ const CHECKS = {
     dangling(dev.meta.layers, 'device plate: ');
   },
   // #14: lanes keep LANE_FLOOR px apart at plate scale away from their junctions (laneGap), on the default plate and on the
-  // device plate (heavier strokes, the same centre-lines' floor); every order the registry does not opt out (ORDERS[type].laneFloor === false: the beetle, the moth, #67)
+  // device plate (heavier strokes, the same centre-lines' floor); every order the registry does not opt out (ORDERS[type].laneFloor === false: the beetle)
   laneSep(meta, svg, fail, { seed, dev }) {
-    if (E.ORDERS[meta.type].laneFloor === false) {   // the registry opts the order out (the beetle, the moth: #67); it must then draw no floored lanes
+    if (E.ORDERS[meta.type].laneFloor === false) {   // the registry opts the order out (the beetle); it must then draw no floored lanes
       if (meta.wingLanes && meta.wingLanes.length) fail('lanes on meta.wingLanes for an order the registry opts out of the lane floor');
       return;
     }
@@ -1568,25 +1567,22 @@ const CHECKS = {
       if (worst < ELY_PITCH - 1e-6) fail(what + 'elytral marks closer than ' + ELY_PITCH + ' px: ' + worst.toFixed(2) + ' px (' + at + ')');
     }
   },
-  // #13: no lepidopteran wing window reaches LEP_INK_MAX ink at 600 px with the tone layers putting LEP_TONE_SHARE or more
-  // of it there (darks keep their tone by hatch pitch, not by stacking a second full family; the hatch keeps off the line
-  // art and the other wing; the fringe keeps off the other wing, the costa and the tail). Every lep plate is rasterised
-  // twice (sharp, ~60 ms), not a sample, so a blotch on any seed fails the gate.
+  // #13, #67: no lepidopteran wing window reaches LEP_INK_MAX ink at 600 px, whatever made it (darks keep their tone by hatch
+  // pitch, not by stacking a second full family; the hatch keeps off the line art and the other wing; the fringe keeps off
+  // the other wing, the costa and the tail; the veins go through the lane floor with the costa as a wall; cross-line teeth
+  // keep out of narrow cells; band edges and cross-lines stop short of the costa and the veins; spot rings keep apart).
+  // Every lep plate is rasterised twice (sharp, ~60 ms), not a sample, so a blotch on any seed fails the gate.
   async lepInk(meta, svg, fail, { seed }) {
     lepRun++;
     if (meta.type !== 'moth') return;
     if (!meta.lepInkSvg || !meta.lepArtSvg) return fail('no wing rasters (meta.lepInkSvg / lepArtSvg) on a lepidopteran plate');
     const ink = await inkWindows(meta.lepInkSvg), art = (await inkWindows(meta.lepArtSvg)).win;
-    let share = 0, at = -1, artSolid = false;
-    ink.win.forEach((v, i) => {
-      if (v < LEP_INK_MAX) return;
-      if (art[i] >= LEP_INK_MAX) artSolid = true;
-      if (v - art[i] > share) { share = v - art[i]; at = i; }
-    });
-    const o = lepInk[meta.variant] ||= { n: 0, share: 0, seed: 0, art: 0 };
-    o.n++; if (artSolid) o.art++; if (share > o.share) { o.share = share; o.seed = seed; }
-    const c = LEP_WIN >> 1, xy = at < 0 ? '' : (at % ink.w + c) + ',' + (Math.floor(at / ink.w) + c);
-    if (share >= LEP_TONE_SHARE) fail('lep wing solid at 1 bit from its tone layers: a ' + LEP_WIN + 'x' + LEP_WIN + ' window at ' + ink.win[at].toFixed(3) + ' ink (max ' + LEP_INK_MAX + '), ' + share.toFixed(3) + ' of it tone (max ' + LEP_TONE_SHARE + '), centred at ' + xy + ' px');
+    let at = 0;
+    ink.win.forEach((v, i) => { if (v > ink.win[at]) at = i; });
+    const v = ink.win[at], o = lepInk[meta.variant] ||= { n: 0, max: 0, seed: 0, art: 0 };
+    o.n++; if (v > o.max) { o.max = v; o.seed = seed; o.art = art[at]; }
+    const c = LEP_WIN >> 1;
+    if (v >= LEP_INK_MAX) fail('lep wing solid at 1 bit: a ' + LEP_WIN + 'x' + LEP_WIN + ' window at ' + v.toFixed(3) + ' ink (max ' + LEP_INK_MAX + '), ' + art[at].toFixed(3) + ' of it line art and ' + (v - art[at]).toFixed(3) + ' tone, centred at ' + (at % ink.w + c) + ',' + (Math.floor(at / ink.w) + c) + ' px');
   },
   // the common name never repeats a stem (#29): no two of its words equal ignoring case, nor one the start of another
   // when the shorter has 4+ letters ("Dark Darkling", "Blue-tailed Bluet"); tests/names.js repeatedStem
@@ -1694,14 +1690,14 @@ const POST = {
     if (missing.length) fail('odonate families / patterns never drawn in ' + n + ' plates: ' + missing.join(', '));
     for (const p of ['basket', 'tucked']) if ((odoHab.pose[p] || 0) < ODO_HAB.poseShare * n) fail('odonate leg pose ' + p + ' on ' + (odoHab.pose[p] || 0) + ' of ' + n + ' plates (min ' + ODO_HAB.poseShare * 100 + '%)');
   },
-  // the report for CHECKS.lepInk: plates rasterised per variant, the largest tone share of a solid window, and the plates
-  // with a solid window from the line art alone; a run long enough to hold both variants fails without one (never by silence)
+  // the report for CHECKS.lepInk: plates rasterised per variant and the darkest window seen (with its line-art share); a run
+  // long enough to hold both variants fails without one (never by silence)
   lepInk(fail) {
     const total = Object.values(lepInk).reduce((a, o) => a + o.n, 0), missing = ['moth', 'butterfly'].filter(v => !lepInk[v]);
     if (missing.length && total >= LEP_MIN) fail('no ' + missing.join(' / ') + ' plate in ' + total + ' lepidopteran plates: the lepInk gate never ran on it');
     if (!total && lepRun >= 1000) fail('no lepidopteran plate in ' + lepRun + ' plates: the lepInk gate never ran');
-    console.log('lep wing ink (largest tone share of a solid ' + LEP_WIN + 'x' + LEP_WIN + ' window, max ' + LEP_TONE_SHARE + '; plates solid from line art alone):',
-      ['moth', 'butterfly'].map(v => lepInk[v] ? v + ' ' + lepInk[v].share.toFixed(3) + ' (seed ' + lepInk[v].seed + ', n ' + lepInk[v].n + ', line art ' + lepInk[v].art + ')' : v + ' none').join('; ') +
+    console.log('lep wing ink (darkest ' + LEP_WIN + 'x' + LEP_WIN + ' window, max ' + LEP_INK_MAX + '):',
+      ['moth', 'butterfly'].map(v => lepInk[v] ? v + ' ' + lepInk[v].max.toFixed(3) + ' (seed ' + lepInk[v].seed + ', line art ' + lepInk[v].art.toFixed(3) + ', n ' + lepInk[v].n + ')' : v + ' none').join('; ') +
       (missing.length && total < LEP_MIN ? '; too few lepidopteran plates (' + total + ' < ' + LEP_MIN + ') to require ' + missing.join(', ') : ''));
   },
   // the report for CHECKS.abdPitch: plates per type and the closest pair of abdominal marks seen

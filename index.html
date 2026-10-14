@@ -1084,6 +1084,8 @@ function lepHatch(wing, lines, tone, cls, step, clip) {
 const LEP_HAIR = 2.5, LEP_HAIR_DARK = 3.2;
 const LEP_CLEAR = LEP_HAIR_DARK + 0.8;   // body units: the band beside another wing's edge kept clear, its longest hair plus a gap
 const LEP_HUG = 1.0;     // body units: the hatch's gap either side of a vein, band edge or cross-line (the engraver's hatch stops short of the line)
+const LEP_LINE_CLEAR = 1.6;   // body units: a band edge or cross-line stops this short of the costa and the veins (#67)
+const LEP_TOOTH = 3;     // hatch pitches: the narrowest cross-line tooth (half wave) a cell takes (#67)
 const LEP_HUG_X = 2.0;   // body units: the cross set's gap either side of a vein (where veins converge, a lattice between them fuses)
 const LEP_ALONG = 0.9;   // a hatch stroke within ~25 degrees of a line's heading (|cos| >= this) runs alongside it
 // near(q, d): true within r of one of the polylines (closed: each closes back on its first point; any side). With
@@ -2144,7 +2146,7 @@ function insectName(seed, type, variant, fam, genes) {
 //     lacewing's hw, sharp, spots).
 //   legThick (optional, default 1): leg thickness factor on top of body size (slender-legged orders < 1).
 //   laneFloor (optional, default true): false opts the order's wings out of growVeins' lane floor (#14) and
-//     tests/check.js laneSep: the beetle (no lanes) and the moth (its own vein drawing; #67).
+//     tests/check.js laneSep: the beetle (no lanes). The moth draws its own veins through laneFloor (lepVeinFloor, #67).
 //   wings: the wing section function (hoisted declarations below; the elytra and the orthopteran tegmen draw into
 //     `covers`).
 //   names: tails: genus tails with grammatical gender (m/f/n) so epithets can agree; common: the common-name nouns
@@ -2263,7 +2265,6 @@ const ORDERS = {
     wingRootX: 0.5,
     tegula: { rx: [5, 7], hairs: [3, 5] },
     legThick: 0.85,
-    laneFloor: false,
     wings: wingsLepidoptera,
     names: {
       tails: [['ptera', 'f'], ['phora', 'f'], ['noctua', 'f'], ['phila', 'f'], ['mera', 'f'], ['chroa', 'f'], ['stigma', 'n'], ['psyche', 'f'],
@@ -4185,7 +4186,7 @@ function wingsLepidoptera(C) {   // (type === 'moth')
       { a: 'M1', ua: dc1[0] / W + 0.001, b: 'M2', ub: dc2[0] / W + r * 0.5, reach: r, sw: wBr, bow: 0, ang: [90, 152] },
       { a: 'M2', ua: dc2[0] / W + 0.001, b: 'CB', ub: D[0] / W - 0.006, reach: 0.012, sw: wBr, bow: 0 },
     ];
-    const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 0.55, angle: randRange(116, 130), lean: -1, stubProb: 0, bowAmt: 0, noSites: true, laneFloor: order.laneFloor });   // the lep wing draws its own veins from the lanes (the registry opts it out of the lane floor: #67's there)
+    const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 0.55, angle: randRange(116, 130), lean: -1, stubProb: 0, bowAmt: 0, noSites: true, laneFloor: false });   // the lep wing draws its own veins from the lanes, through the lane floor in drawLepWing (lepVeinFloor, #67)
     const laneOf = {}; for (const l of grown.lanes) laneOf[l.id] = l;
     // the dcv as one polyline from its placed pieces, each re-rooted where the previous one landed (a piece the angle
     // rule could not place falls back to a straight segment between its nodes, so the cell always closes); M1 / M2
@@ -4199,12 +4200,12 @@ function wingsLepidoptera(C) {   // (type === 'moth')
       if (lb === 'M1' || lb === 'M2') { const l = laneOf[lb]; l.pl = [prev].concat(l.pl.filter(p => p[0] > prev[0] + 0.01)); }
       dcv = dcv.length ? dcv.concat(seg.slice(1)) : seg.slice();
     }
-    dcv.sw = wBr;
-    const pl = (id, sw) => { const p = laneOf[id].pl.slice(); p.sw = sw; return p; };
+    dcv.sw = wBr; dcv.id = 'dcv';
+    const pl = (id, sw) => { const p = laneOf[id].pl.slice(); p.sw = sw; p.id = id; return p; };
     vs.push(pl('CT', wStem), pl('CB', wStem), dcv, pl('Sc', wStem));
     if (hindW) {   // humeral vein: a short hooked vein from the root of Sc+R1 forward to the costal margin (refs lep-agrotis, lep-papilio)
       const root = plAt(laneOf.Sc.pl, 0.1), hx = root[0] + scX * G.hum;
-      vs.push(bowed(root, [hx, topAt(wing, hx, 0.5)], -W * G.hum * 0.25, SW.F));
+      const hum = bowed(root, [hx, topAt(wing, hx, 0.5)], -W * G.hum * 0.25, SW.F); hum.id = 'h'; vs.push(hum);
     }
     if (stem) vs.push(pl('St', wStem));
     vs.pre = vs.length;
@@ -4297,13 +4298,25 @@ function wingsLepidoptera(C) {   // (type === 'moth')
     };
     const basal = (opt, edge) => { o.elems.push(lepEl.basal(S, opt)); if (edge) { const d = opt.dis || S.zero, wv = opt.wave || 0; o[edge].push(...curve((c, t) => opt.u + d[c] + wv * Math.sin(Math.PI * t))); } };
     const margin = (opt, edge) => { o.elems.push(lepEl.margin(S, opt)); if (edge) { const d = opt.dis || S.zero; o[edge].push(...curve(c => opt.u + d[c])); } };
-    const wavy = (u, amp, teeth, d) => (c, t) => u + d[c] + amp * Math.sin(Math.PI * teeth * t);
+    // a cross-line's teeth (#67): a tooth (half wave) is at least LEP_TOOTH hatch pitches wide and no deeper than it is wide,
+    // so a cell too narrow for one tooth takes the line straight and a narrow costal cell takes fewer, shallower teeth
+    // than the line rolled, instead of a zigzag that fills in at 1 bit
+    const wavy = (u, amp, teeth, d) => (c, t) => {
+      const w = S.cellW(c, u), k = Math.min(teeth, Math.floor(w / (LEP_TOOTH * Q.hatch.spacing)));
+      return k < 1 ? u + d[c] : u + d[c] + Math.min(amp, w / k / S.R(S.mid(c))) * Math.sin(Math.PI * k * t);
+    };
+    // a spot's outline and pupil rings are drawn only LEP_LINE_CLEAR clear of every ring already drawn (#67): a pupil too
+    // close inside its own outline, or a spot overlapping a neighbour's rings (a loose hindwing spot in an ocellus' cell),
+    // keeps its tone and loses the ring that would fuse with the other into a blot
+    const ringsDrawn = [];
+    const ringOk = (P, R) => ringsDrawn.every(([Q, Rq]) => { const d = vlen(sub(P, Q)); return d > R + Rq + LEP_LINE_CLEAR || d + Math.min(R, Rq) < Math.max(R, Rq) - LEP_LINE_CLEAR; });   // apart, or one inside the other
+    const ring = (P, rx, ry, deg) => { const R = Math.max(rx, ry); if (!ringOk(P, R)) return; ringsDrawn.push([P, R]); o.after.push(pathEl(ellipsePath(wing.T(P), rx, ry, deg), SW.D)); };
     const spot = (P, r, rings, opt) => {
       opt = opt || {};
       o.spots.push(lepSpot({ P, r, ry: opt.ry, rot: opt.rot, rings }));
       const deg = (opt.rot || 0) / D2R, ry = opt.ry || r;
-      if (opt.outline) o.after.push(pathEl(ellipsePath(wing.T(P), r, ry, deg), SW.D));
-      if (opt.pupil) o.after.push(pathEl(ellipsePath(wing.T(P), r * opt.pupil, ry * opt.pupil, deg), SW.D));
+      if (opt.outline) ring(P, r, ry, deg);
+      if (opt.pupil) ring(P, r * opt.pupil, ry * opt.pupil, deg);
     };
     const cellSpot = (c, u, rWant, rings, opt) => {
       if (c < 0 || c > last) return;
@@ -4405,6 +4418,24 @@ function wingsLepidoptera(C) {   // (type === 'moth')
   // draw order: white outline -> hatching (fan with the veins, cross set parallel to the margin for the darks)
   // -> band edges -> costa + veins -> cross-lines/stigmata outlines -> fringe
   const nearHind = lepNear([hind.localPoly], LEP_CLEAR, true), overHind = q => hind.inside(q) || nearHind(q);   // hindwing local
+  // #67: a wing's veins as one deferred element through growVeins' lane floor (laneFloor), resolved at plate scale: the
+  // leading edge is a wall lane (the forewing's heavy costa; the hindwing's edge, which the forewing covers, and on the
+  // hindwing the forewing's outline over it, which its R and M veins pass under), so Sc and the
+  // R branches that run under the costa merge into it (as Sc does on many real Lepidoptera) instead of fusing with it into
+  // a bar, and two veins running side by side (the R branches leaving a short stalk, Sc beside R1) merge into one where
+  // they close under the floor. It draws no rng; the hatch and the pattern space keep the veins as rolled. The drawn lanes
+  // go on meta.wingLanes, where tests/check.js laneSep asserts the floor as on every growVeins order.
+  function lepVeinFloor(wing, veins, mask) {
+    const lanes = [{ id: mask ? 'edge' : 'C', noDraw: true, pl: leadingEdge(wing, 0, Infinity) }], items = [];   // to the apex: past the heavy costa the outline still draws the edge
+    if (mask) lanes.push({ id: 'fore', noDraw: true, pl: mask.concat([mask[0]]) });   // the forewing's edge over the hindwing
+    for (const v of veins) {
+      const l = { id: v.id, sw: v.sw || SW.D };
+      lanes.push(l); items.push({ pl: v, sw: l.sw, lane: l });
+      for (const p of v) bb(wing.T(p));   // a deferred element draws only inside the bbox the fit already holds
+    }
+    let memo = null;   // one resolution per plate scale, however many layers (L.wings, meta.lepInk, meta.lepArt) ask
+    return (s, Wt) => (memo && memo.s === s && memo.W === Wt ? memo : (memo = { s, W: Wt, els: laneFloor(wing, lanes, items, s, Wt).els })).els;
+  }
   function drawLepWing(wing, S, veins, o, hindW) {
     const toneAt = lepTone(S, o.ground, o.elems, o.spots), mask = hindW ? fore.localPoly.map(p => hind.inv(fore.T(p))) : null;   // forewing outline in hindwing-local coordinates
     // the wings as the 1-bit ink gate (lepInk) in tests/check.js measures them (#13): meta.lepInk, every element in draw order, and
@@ -4437,10 +4468,22 @@ function wingsLepidoptera(C) {   // (type === 'moth')
     tone(lepHatch(wing, lepFan(wing, [hindW ? Q.hatch.focusH : Q.hatch.focusF, H * 0.05], Q.hatch.spacing), toneAt, clsFan, 1.2, { mask, clear, along }));
     tone(lepHatch(wing, lepParallel(wing, hindW ? Q.hatch.crossH : Q.hatch.crossF, Q.hatch.xSpacing), toneAt, clsX, 1.2, { mask, clear: p => clear(p) || nearCosta(p) || hugX(p), along }));
     rngSync();   // the stipple hatch draws one jitter per dot and a device plate has fewer rows
-    art(o.fine.map(pl => pathEl(smoothPath(pl.map(wing.T), false, 1), SW.F)));
+    // the band edges and cross-lines stop LEP_LINE_CLEAR short of the costa and the veins (#67): one that runs into the costa
+    // or alongside a vein at a shallow angle adds a third line where two already crowd; a curve that never comes that
+    // close is drawn as rolled
+    const lineOff = lepNear([...costa, ...veins], LEP_LINE_CLEAR, false);
+    const offLines = pls => pls.flatMap(pl => {
+      // tested along the drawn curve; a kept run keeps the curve's own knots (every 8th sample) and its two cut ends
+      const q = sampleSmooth(pl, false, 1, 8), runs = []; let run = [];   // run: indices into q
+      const flush = () => { if (run.length > 1) runs.push(run.filter((i, k) => k === 0 || k === run.length - 1 || i % 8 === 0).map(i => q[i])); run = []; };
+      q.forEach((p, i) => { if (lineOff(p)) flush(); else run.push(i); });
+      const whole = run.length === q.length; flush();
+      return whole ? [pl] : runs;
+    });
+    art(offLines(o.fine).map(pl => pathEl(smoothPath(pl.map(wing.T), false, 1), SW.F)));
     if (!hindW) art(costaEls(wing, 0, W * 0.9));
-    art(veins.map(v => emitLocalPolyline(wing, v, v.sw || SW.D)));
-    art(o.det.map(pl => pathEl(smoothPath(pl.map(wing.T), false, 1), SW.D)));
+    art([lepVeinFloor(wing, veins, mask)]);
+    art(offLines(o.det).map(pl => pathEl(smoothPath(pl.map(wing.T), false, 1), SW.D)));
     art(o.after);
     const a0 = S.bounds[0] + 0.3 * (S.bounds[1] - S.bounds[0]);
     // no hindwing fringe on a tail (its two outlines are already a dark stroke at 600 px) nor beside the forewing's
@@ -5646,7 +5689,10 @@ function assemblePlate(C) {
   const svg = tokens(head + order.join('') + '</g>' + caption + '</svg>');
   // a lepidopteran plate's wings alone (meta.lepInk) and their line art alone (meta.lepArt), placed, weighted and
   // mirrored exactly as on the plate, for the 1-bit ink gate (lepInk) in tests/check.js (#13)
-  if (meta.lepInk) { meta.lepInkSvg = tokens(head + mirrorEls(meta.lepInk) + '</g></svg>'); meta.lepArtSvg = tokens(head + mirrorEls(meta.lepArt) + '</g></svg>'); }
+  if (meta.lepInk) {   // the lep veins are a deferred element (#67), the one L.wings resolved above (memoised per scale)
+    const resolve = els => els.flatMap(e => typeof e === 'function' ? e(s, meta.weights) : [e]);
+    meta.lepInkSvg = tokens(head + mirrorEls(resolve(meta.lepInk)) + '</g></svg>'); meta.lepArtSvg = tokens(head + mirrorEls(resolve(meta.lepArt)) + '</g></svg>');
+  }
   return { svg, meta };
 }
 
