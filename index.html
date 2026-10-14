@@ -2024,12 +2024,16 @@ function insectName(seed, type, variant, fam) {   // fam: the drawn family (meta
 //   proportions(P): the size table and the family pick (P.fam, shared by the body genes and the wing block), rolled
 //     first after the type pick; P arrives with variant / fam / abdOverlap defaults (rollProportions).
 //   abd: tips / marks weighted enums; peak: widest point t; wK: width factor; start: first segment line; seg: segment
-//     count range; ticks: side-tick odds; petiole: a rolled waist (the wasp-waisted orders).
+//     count range; ticks: side-tick odds; petiole: a rolled waist (the wasp-waisted orders); bandEvery / bandPart: the
+//     banded hatch on every segment / over its basal fraction only. abdFams (optional): family overrides of the same keys.
 //   thorax: front: pronotum width / head width; peak: widest t; hump: shoulder dip; waist: narrowing at t = 1;
 //     lenK: length factor (docs/research-thorax.md).
 //   head: outline, W/H ratio, eye cx / rx / ry / cy (off centre), ocelli count and arrangement, mouthparts, eye
 //     styles and face markings (docs/research-head-eyes.md); headFams: family / variant overrides of the same keys.
 //   legs: leg family ranges over the LD defaults in rollBodyGenes (base, then the wing / body family).
+//   pronotum (optional): bands the pronotum's width / length (wl) and width / the elytra's (ely) are soft-clipped into in
+//     rollBodyGenes, fams: per-family bands (the beetle, #24). elytra (optional): the puncture style gene's table and the
+//     families' own elytra (B.elytra; wingsElytra).
 //   ant: kind weights, lengths, segment counts and socket per family (docs/research-antennae.md R-B, R-E); len is
 //     [min, max] in the unit `ref`: 'hw' head widths, 'bl' body lengths (head + thorax + abdomen), 'fw' forewing
 //     lengths (Lepidoptera); socket is [x / headW, y / headH from the head top].
@@ -2051,14 +2055,18 @@ const LEGS_ODONATA = { spines: 1, spineSeg: 'both', spineSide: 'inner', spineLen
 const ORDERS = {
   beetle: {
     proportions: P => {
-      Object.assign(P, { headW: 44 * jitter(0.15), headH: 34 * jitter(0.15), thoraxW: 92 * jitter(0.12), thoraxLen: 58 * jitter(0.15),
+      Object.assign(P, { headW: 44 * jitter(0.15), headH: 34 * jitter(0.15), thoraxW: 82 * jitter(0.12), thoraxLen: 62 * jitter(0.15),
         abdW: 100 * jitter(0.12), abdLen: 175 * jitter(0.15), legScale: 1.0 * jitter(0.1),
         thoraxAnchors: [[0, 0.55], [0.35, 0.95], [0.75, 1], [1, 0.88]],
         abdAnchors: [[0, 0.8], [0.3, 1], [0.7, 0.9], [0.92, 0.5], [1, 0]],
         antenna: pick(['moniliform', 'moniliform', 'serrate', 'lamellate', 'filiform', 'clubbed']), antLen: 62 * jitter(0.2) });
       P.fam = pick(['ground', 'ground', 'rove', 'scarab', 'longhorn', 'weevil']);
+      if (P.fam === 'rove') { P.abdAnchors = [[0, 0.85], [0.3, 1], [0.6, 0.94], [0.85, 0.6], [1, 0]]; P.abdLen *= 1.15; }   // #24: a long, nearly parallel-sided abdomen that tapers to the tip (no rng)
     },
     abd: { tips: { rounded: 3, truncate: 2, pointed: 1 }, marks: { plain: 1 }, peak: [0.25, 0.5], wK: [0.85, 1.15], start: [0.05, 0.12], seg: [4, 8], ticks: 0.6 },
+    // #24: the rove's exposed abdomen tapers to a point and every tergite is hatched
+    // (bandEvery: the banded hatch on every segment; bandPart: over its basal 0.55 only, so a tergite reads as shaded, not solid)
+    abdFams: { rove: { tips: { pointed: 1 }, marks: { banded: 1 }, seg: [6, 8], peak: [0.2, 0.35], bandEvery: true, bandPart: 0.55 } },
     thorax: { front: [1.0, 1.5], peak: [0.3, 0.55], hump: [0, 0], waist: [0, 0], lenK: [0.85, 1.15] },
     head: { outline: 'round', ratio: [1.1, 1.35], flat: 0.5, cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.2, 0.28], cy: [-0.06, 0.02], dent: [0.3, 0.45], dentAt: -125, ocelli: 0, mand: [0.1, 0.2], labrum: [1, 1], styles: { stipple: 2, plain: 2, lattice: 1 }, stripe: 0.4 },
     headFams: {
@@ -2068,7 +2076,7 @@ const ORDERS = {
       longhorn: { ratio: [1.0, 1.2], flat: 0.3, dent: [0.35, 0.5], dentAt: -105, mand: [0.12, 0.22] },
       weevil: { outline: 'elongate', ratio: [0.9, 1.1], flat: 0, frontK: [0.6, 0.75], rostrum: [0.6, 1.8], rostW: [0.15, 0.25], cx: [0.35, 0.38], rx: [0.1, 0.13], ry: [0.18, 0.26], cy: [-0.02, 0.1], dent: [0, 0], mand: [0.04, 0.06], labrum: [0, 0], stripe: 0 },
     },
-    legs: { base: { tarsomeres: [4, 5], spines: 0.4, spurs: [1, 2] },
+    legs: { base: { tarsomeres: [4, 5], spines: 0.4, spurs: [1, 2], hindSafe: [18, 26, 58, 72] },   // hindSafe: [coxa, femur, tibia, tarsus] dirs of the last-resort hind leg (#24)
       ground: { lenK: [1.0, 1.2], wk: [1.0, 1.15], poses: { spread: 3, walking: 3, tucked: 0.5 } },
       rove: { lenK: [0.75, 0.9], poses: { walking: 3, spread: 2, tucked: 1 } },
       scarab: { lenK: [0.8, 1.0], wk: [1.2, 1.4], flare: [1.3, 1.6], spines: 0.85, spineLen: [0.7, 1.1], spineSp: [7, 11], poses: { tucked: 2, spread: 2, walking: 1 } },
@@ -2081,6 +2089,15 @@ const ORDERS = {
       longhorn: { kinds: { filiform: 1 }, ref: 'bl', len: [0.8, 1.6], socket: [0.28, 0.34] },            // 1-2x body, swept back beside the body
       weevil: { kinds: { geniculate: 1 }, club: 'abrupt', len: [0.8, 1.2], socket: [0.08, 0.1] } },   // elbowed, clubbed, on the rostrum
     headScaleP5: 1.3,
+    // #24 (optional): the pronotum held to docs/research-thorax.md (1.1-1.5x wider than long, 0.55-0.9 of the elytral width):
+    // rollBodyGenes soft-clips the drawn ratios into these slightly narrower bands (no rng); tests/check.js asserts the research ones
+    pronotum: { wl: [1.16, 1.45], ely: [0.58, 0.86], fams: { rove: { wl: [1.16, 1.3], ely: [0.78, 0.86] } } },   // fams: a family's own bands (the rove's quadrate pronotum, nearly the elytra's width)
+    // #24 (optional): the elytral striae's puncture style (thorax-col-engraving: dots or dashes IN the striae), rolled into
+    // B.elytra: style weights (smooth lines / punctate rows of punctures / dashed), the punctures' pitch along a stria (body
+    // units, floored at the plate pitch) and a dash's share of its period
+    // fams: a family's elytra: len, the elytron's length over the pronotum's instead of the abdomen's; truncate, a straight
+    // hind margin instead of the apex (the rove's short elytra, which hide the folded hindwings entirely)
+    elytra: { styles: { smooth: 2, punctate: 3, dashed: 2 }, pitch: [2.6, 3.8], dash: [0.5, 0.7], fams: { rove: { len: [0.95, 1.15], truncate: true } } },
     wingRoots: [],
     legThick: 1.15,
     laneFloor: false,
@@ -2426,7 +2443,7 @@ function rollBodyGenes(type, P) {
   // (pointed / rounded / truncate / clubbed), a rolled petiole on the wasp-waisted orders and a width factor.
   // Then segmentation, a markings family (plain / banded / spotted / striped / tip-dark / hairy) and the terminalia.
   const weighted = w => { const ks = Object.keys(w), tot = ks.reduce((a, k) => a + w[k], 0); let x = rng() * tot; for (const k of ks) { x -= w[k]; if (x < 0) return k; } return ks[ks.length - 1]; };
-  const order = ORDERS[type], abdRanges = order.abd;
+  const order = ORDERS[type], abdRanges = Object.assign({}, order.abd, (order.abdFams && order.abdFams[fam]) || {});   // the family's overrides (abdFams) on the order's table
   const A = B.abd;
   A.tip = weighted(abdRanges.tips); A.mark = weighted(abdRanges.marks); A.peak = rr(abdRanges.peak); A.wK = rr(abdRanges.wK) * (P.variant === 'butterfly' ? 0.9 : 1);
   A.seg = randInt(abdRanges.seg[0], abdRanges.seg[1]); A.startT = rr(abdRanges.start); A.bow = randRange(0.08, 0.3); A.sw = rng() < 0.25 ? SW.F : SW.D; A.double = rng() < 0.25;
@@ -2451,6 +2468,8 @@ function rollBodyGenes(type, P) {
   }
   // markings parameters
   A.band = { period: rng() < 0.7 ? 2 : 3, phase: randInt(0, 1), spacing: randRange(2.4, 3.2) };
+  A.band.part = abdRanges.bandPart || 0;   // > 0: the hatch covers only that basal fraction of a hatched segment (#24)
+  if (abdRanges.bandEvery) { A.band.period = 1; A.band.phase = 0; }   // every segment hatched (the rove's tergites, #24); the draws above are kept
   A.spot = { pos: randRange(0.3, 0.6), rx: randRange(0.14, 0.26), every: rng() < 0.7 ? 1 : 2 };
   A.stripe = { n: randInt(1, 3), k: randRange(0.3, 0.65), hatch: rng() < 0.5 };
   A.tipDark = randInt(1, 3);
@@ -2505,6 +2524,22 @@ function rollBodyGenes(type, P) {
         T.margin === 'angulate' ? [[back, 0.94], [1, 0]] : T.margin === 'obtuse' ? [[back, 0.96], [0.97, 0.45], [1, 0.25]] : [[back, 0.95], [0.95, 0.68], [1, 0.4]]);
     } else anchors.push([1, fEnd]);
     T.anchors = anchors;
+  }
+  // #24: the pronotum held to the entry's bands (order.pronotum: width / length, width / the elytra's) before the legs
+  // are rolled, since their lengths scale with the pronotum's length. No rng. A soft clip (tanh about the band's middle)
+  // leaves a ratio near the middle almost as rolled, keeps the plates' order and bends the tails into the band; the
+  // rolled means (beetle proportions) sit near the research means, so few plates reach the tails. The width is the
+  // outline's as the spline draws it (its bulge past the widest anchor) on the unwobbled anchors; the bands keep the
+  // wobble's 3 % inside the research ranges. The width ratio is corrected on the pronotum alone (the abdomen, and so the
+  // reach the legs need past it, stays as rolled), then the length.
+  if (order.pronotum) {
+    const clip = (r, [lo, hi]) => (lo + hi) / 2 + (hi - lo) / 2 * Math.tanh((r - (lo + hi) / 2) / ((hi - lo) / 2));
+    const drawnW = () => 2 * Math.max(...bodyPart(0, P.thoraxLen, P.thoraxW / 2, T.anchors).samples.map(p => p[0]));
+    const band = Object.assign({}, order.pronotum, (order.pronotum.fams || {})[fam]);
+    const q = drawnW() / (P.abdW * A.wK * ELY_W);
+    P.thoraxW *= clip(q, band.ely) / q;
+    const r = drawnW() / P.thoraxLen;
+    for (let i = 0; i < 2; i++) P.thoraxLen = drawnW() / clip(r, band.wl);
   }
   T.lines = [];   // transverse lines { t, bow (fraction of hw, + toward the tail), sw, gap (interrupted: half-width fraction left open) }
   T.median = null; T.notauli = null; T.para = null; T.paramedian = null; T.vee = null; T.humeral = null; T.carina = null; T.latCar = null;
@@ -2699,6 +2734,7 @@ function rollBodyGenes(type, P) {
     }
     if (saltatorial && i === 1 && B.pose === 'tucked') g.ang = { F: [-20, 5], tib: [35, 70], T: [10, 25] };   // the mid leg keeps clear of the big hind femur
     if (corbicula && i === 2) { g.corbicula = true; g.basitarsus = true; g.spurs = 0; g.ang = F.corbAng; g.safe = F.corbSafe; }   // corbicula + flat basitarsus, posed from the family entry
+    if (i === 2 && F.hindSafe) g.safe = F.hindSafe;   // the order's own hind-leg fallback (beetle: splayed wide of a broad abdomen, #24)
     if (i === 0 && F.foreAng) { g.poseAng = F.foreAng; g.safe = F.foreSafe; }   // the order's own foreleg angles for every pose it rolls, and its fallback (lacewing, #19)
     if (type === 'mayfly' && i === 0 && B.pose === 'raised') g.ang = { F: [-88, -68], tib: [-100, -70], T: [-10, 10] };   // forelegs held straight out ahead
     if (type === 'cicada' && i === 0 && rng() < 0.9) { g.femurTeeth = randInt(2, 3); g.femW = randRange(8.5, 10.5); }   // fore femora armed beneath with strong teeth
@@ -2717,6 +2753,13 @@ function rollBodyGenes(type, P) {
     ...(F.habitus ? ['p' + Math.round(P.headW / P.thoraxW * 10) + '/' + Math.round(P.abdW / P.thoraxW * 10)] : []),   // #12 (bee): head and abdomen to thorax width, tenths
     ...(F.legCap ? ['k' + (B.legCapped ? 1 : 0)] : []),   // whether the leg cap scaled this insect's legs down
     ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4), Math.round(g.skew)].join('')));
+  // ---- elytra (#24): the puncture style of the striae, rolled last so every gene above keeps its draws ----
+  B.elytra = null;
+  if (order.elytra) {
+    const ET = order.elytra;
+    B.elytra = { style: weighted(ET.styles), pitch: rr(ET.pitch), dash: rr(ET.dash) };
+    B.sig.push('ely' + B.elytra.style[0], Math.round(B.elytra.pitch * 2));
+  }
   return B;
 }
 
@@ -2904,6 +2947,7 @@ function drawAbdomen(C) {
           for (;;) {
             const c = step(prev, y, 2, 1);
             if (!(c.y < y1 - Math.max(2, Pf)) || (sEnd && !far(c, sEnd))) break;
+            if (banded && A.band.part && prev !== sStart && c.y > y0 + segH * A.band.part) break;   // the basal part of a tergite only (#24), never less than one line
             if (c.hw > 2) prev = push(c, ABD_MARK.HATCH);
             y = c.y + sp;
           }
@@ -4689,59 +4733,60 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
 
 function wingsElytra(C) {   // (type === 'beetle')
   const { L, P, thorax, abdomen, abdHW } = C;
+  const F = ((C.order.elytra && C.order.elytra.fams) || {})[P.fam] || null;   // the family's elytra (#24: the rove's short, truncate ones)
   const top = thorax.yBot - 4;
-  const elen = P.abdLen * randRange(0.86, 1.0) + 4;
+  const u = rng();
+  const elen = F ? P.thoraxLen * lerp(F.len[0], F.len[1], u) : P.abdLen * lerp(0.86, 1.0, u) + 4;
   const eBot = top + elen;
-  const ew = abdHW * 1.03;
+  const ew = abdHW * ELY_W;
   L.thoraxHead.push(lineEl([0, thorax.yBot + 10], [0, eBot - 3], SW.D));   // suture, drawn once above the elytra
-  if (eBot < abdomen.yBot - 8) {   // hindwing tips peeking out from under the elytra
+  if (!(F && F.truncate) && eBot < abdomen.yBot - 8) {   // hindwing tips peeking out from under the elytra (folded away under truncate ones)
     const hwT = abdomen.hwAt(eBot + 4) * 0.9;
     const t = [[hwT * 0.1, eBot - 12], [hwT * 0.95, eBot - 8], [hwT * 0.8, eBot + 5], [hwT * 0.15, eBot + 7]];
     L.covers.push(pathEl(smoothPath(t, true, 1), SW.D, '#fff'));
     for (let k = 1; k <= 2; k++) L.covers.push(pathEl(cubicBezierPath([[hwT * 0.2, eBot - 10 + k * 5], [hwT * 0.5, eBot - 9 + k * 5], [hwT * 0.75, eBot - 7 + k * 5], [hwT * 0.85, eBot - 3 + k * 5]], false), SW.F));
   }
-  const outer = [[0, top], [ew * 0.5, top + 1], [ew * 0.98, top + elen * 0.1], [ew, top + elen * 0.45], [ew * 0.74, top + elen * 0.84], [ew * 0.28, top + elen * 0.985], [0, eBot]];
+  // the outline from the scutellum round the shoulder to the apex, closed along the suture; a truncate elytron keeps its
+  // width to a straight hind margin. Each stria below follows the outline's side points scaled toward the suture.
+  const outer = F && F.truncate
+    ? [[0, top], [ew * 0.5, top + 1], [ew * 0.97, top + elen * 0.12], [ew, top + elen * 0.5], [ew * 0.98, top + elen * 0.86], [ew * 0.9, eBot - 0.5], [ew * 0.45, eBot], [0, eBot]]
+    : [[0, top], [ew * 0.5, top + 1], [ew * 0.98, top + elen * 0.1], [ew, top + elen * 0.45], [ew * 0.74, top + elen * 0.84], [ew * 0.28, top + elen * 0.985], [0, eBot]];
   L.covers.push(pathEl(halfShield(outer), SW.O, '#fff'));
   wingPolys.push(sampleSmooth(outer, false, 1, 8));   // the elytron counts as a wing for the antenna clearance rule (closes along the midline)
-  // Striae (ridges) converging toward the apex, and on half the beetles a puncture row between each pair. They converge
-  // to a fraction of a plate px apart at the apex (and fan out of a narrow base), so they are drawn at plate scale (#15):
-  // the rolls stay here, in their old order, and the fit takes the full striae and every puncture, as before; one
-  // deferred element, resolved by assemblePlate, draws each stria only along its run ELY_PITCH_PX clear of every other
-  // line of the elytron (the other striae, the outline, the suture), and only the punctures that clear every line and
-  // the last puncture kept in their row by as much. It draws no rng. meta.elytra records what was drawn for
-  // tests/check.js (elytraPitch).
-  const nR = randInt(3, 5);
+  // Striae (ridges) converging toward the apex, drawn as lines, rows of punctures or dashes by the body gene B.elytra.style
+  // (#24; thorax-col-engraving builds the elytral tone from striae converging at the apex with the punctures IN them, so
+  // there are no puncture rows between the striae). They converge to a fraction of a plate px apart at the apex (and fan
+  // out of a narrow base), so they are drawn at plate scale (#15): the rolls stay here and the fit takes the full striae;
+  // one deferred element, resolved by assemblePlate, keeps each stria only along its run ELY_PITCH_PX clear of every other
+  // line of the elytron (the other striae, the outline, the suture) and lays the style's marks along that run. It draws
+  // no rng. meta.elytra records what was drawn for tests/check.js (elytraPitch, elytraTexture).
+  const nR = randInt(4, 6);
   const striae = [];
   for (let k = 1; k <= nR; k++) {
     const f = 1 - k / (nR + 1);
-    const pts = [[ew * 0.5 * f, top + 5], [ew * 0.98 * f, top + elen * 0.1], [ew * f, top + elen * 0.45], [ew * 0.74 * f, top + elen * 0.84], [ew * 0.28 * f, top + elen * 0.975]];
+    const pts = F && F.truncate
+      ? [[ew * 0.5 * f, top + 5], [ew * 0.97 * f, top + elen * 0.12], [ew * f, top + elen * 0.5], [ew * 0.98 * f, top + elen * 0.86], [ew * 0.9 * f, eBot - 1]]
+      : [[ew * 0.5 * f, top + 5], [ew * 0.98 * f, top + elen * 0.1], [ew * f, top + elen * 0.45], [ew * 0.74 * f, top + elen * 0.84], [ew * 0.28 * f, top + elen * 0.975]];
     const bz = catmullRomToBezier(pts, false, 1);
     bz.forEach(bb);
     striae.push(bz);
   }
-  const rows = [];
-  if (rng() < 0.5) {   // puncture rows between striae
-    const nPts = randInt(14, 22);
-    for (let k = 0; k <= nR; k++) {
-      const f = 1 - (k + 0.5) / (nR + 1);
-      const pts = [[ew * 0.5 * f, top + 8], [ew * 0.98 * f, top + elen * 0.1], [ew * f, top + elen * 0.45], [ew * 0.74 * f, top + elen * 0.84], [ew * 0.28 * f, top + elen * 0.95]];
-      const pl = sampleSmooth(pts, false, 1, 6), row = [];
-      for (let i = 0; i < nPts; i++) { const c = plAt(pl, (i + 0.5) / nPts); bb([c[0] - ELY_DOT_R, c[1] - ELY_DOT_R]); bb([c[0] + ELY_DOT_R, c[1] + ELY_DOT_R]); row.push(c); }
-      rows.push(row);
-    }
-  }
   const outline = sampleSmooth(outer, false, 1, 16).concat([[0, top]]);   // the elytron's outline, closed along the suture
   C.meta.elytra = null;
-  L.covers.push(s => elytralStriae(C.meta, striae, rows, outline, Math.max((ELY_PITCH_PX + ELY_MARGIN_PX) / s, pitchFloor)));
+  L.covers.push(s => elytralStriae(C.meta, striae, C.B.elytra, outline, Math.max((ELY_PITCH_PX + ELY_MARGIN_PX) / s, pitchFloor)));
 }
-// The elytron's striae and punctures at plate scale (#15): each stria keeps its longest run (through its widest point,
-// where the striae are furthest apart) that stays Pf (body units) from every other stria and the outline; a puncture is
-// kept where its centre is Pf from every line and from the last puncture kept in its row. Measured against the striae
-// in full, so a stria cut short never lets a neighbour closer than the floor.
+// The elytron's striae at plate scale (#15): each stria keeps its longest run (through its widest point, where the
+// striae are furthest apart) that stays Pf (body units) from every other stria and the outline, measured against the
+// striae in full, so a stria cut short never lets a neighbour closer than the floor. G is B.elytra (#24): a smooth stria
+// draws its run as a line; a punctate one a puncture every max(G.pitch, Pf) along it (centred on the run); a dashed one
+// dashes G.dash of a period at least 2 Pf, the gaps at least Pf. The marks lie on the run, so they keep its clearance.
+const ELY_W = 1.03;        // an elytron's width over the abdomen's half-width (rollBodyGenes reads it to hold the pronotum / elytra ratio, #24)
 const ELY_PITCH_PX = 3;    // plate px between neighbouring striae, a stria and the outline, and a puncture and any of them
 const ELY_MARGIN_PX = 0.02;   // drawn that much clear of the floor, so tests/check.js's own sampling of the curves cannot fail it
-const ELY_DOT_R = 0.8;     // a puncture's radius (body units)
-function elytralStriae(meta, striae, rows, outline, Pf) {
+const ELY_DOT_R = 0.8;     // a puncture's radius (body units); on a device plate at least ELY_DOT_DEV of the pitch floor, so it survives the threshold as a dot
+const ELY_DOT_DEV = 0.3;
+const ELY_ARC = 1.05;      // punctures and dash gaps are spaced by arc length along a curved stria; the chord between them is a little shorter
+function elytralStriae(meta, striae, G, outline, Pf) {
   const PER = 32, nSeg = bz => (bz.length - 1) / 3;   // samples per bezier segment (the drawn striae go onto meta.elytra at twice that)
   const at = (bz, T) => {   // the point at global parameter T in [0, nSeg] of a cubic bezier chain
     const i = Math.min(Math.floor(T), nSeg(bz) - 1), t = T - i, u = 1 - t, p0 = bz[3 * i], c1 = bz[3 * i + 1], c2 = bz[3 * i + 2], p1 = bz[3 * i + 3];
@@ -4763,7 +4808,7 @@ function elytralStriae(meta, striae, rows, outline, Pf) {
     }
     return out;
   };
-  const els = [], drawn = [];
+  const els = [], drawn = [], dots = [], dotStria = [], dashes = [], style = G.style;
   striae.forEach((bz, k) => {
     const N = nSeg(bz), ok = T => clear(at(bz, T), k) >= Pf;
     // the widest point: the third control point (top + elen * 0.45) is the end of the second segment
@@ -4778,20 +4823,31 @@ function elytralStriae(meta, striae, rows, outline, Pf) {
     };
     const T0 = edge(-1), T1 = edge(1);
     const part = T0 === 0 && T1 === N ? bz : slice(bz, T0, T1);
-    els.push(pathEl(cubicBezierPath(part, false), SW.F));
     const pl = [], nP = 2 * PER * nSeg(part); for (let j = 0; j <= nP; j++) pl.push(at(part, j / nP * nSeg(part)));
+    const kk = drawn.length;
     drawn.push(pl);
-  });
-  const dots = [];
-  for (const row of rows) {
-    let last = null;
-    for (const c of row) {
-      if (clear(c, -1) < Pf || (last && vlen(sub(c, last)) < Pf)) continue;
-      els.push(circleEl(c, ELY_DOT_R, SW.F));
-      dots.push(c); last = c;
+    if (style === 'smooth') { els.push(pathEl(cubicBezierPath(part, false), SW.F)); return; }
+    // the run's arc length, then the marks along it: a puncture every `step`, or a dash of `dashLen` every `step`, the
+    // gap after a dash at least Pf (the marks are on the run, which is Pf clear of every other line)
+    const cum = [0]; for (let j = 1; j < pl.length; j++) cum.push(cum[j - 1] + vlen(sub(pl[j], pl[j - 1])));
+    const len = cum[cum.length - 1];
+    const ptAt = d => { let j = 1; while (j < cum.length - 1 && cum[j] < d) j++; const t = cum[j] === cum[j - 1] ? 0 : (d - cum[j - 1]) / (cum[j] - cum[j - 1]); return lerpP(pl[j - 1], pl[j], Math.max(0, Math.min(1, t))); };
+    if (style === 'punctate') {
+      const step = floorPitch(Math.max(G.pitch, Pf * ELY_ARC)), n = Math.floor(len / step);
+      for (let i = 0; i <= n; i++) { const c = ptAt((len - n * step) / 2 + i * step); els.push(circleEl(c, Math.max(ELY_DOT_R, ELY_DOT_DEV * pitchFloor), SW.F)); dots.push(c); dotStria.push(kk); }
+    } else {   // dashed
+      const step = floorPitch(Math.max(G.pitch * 2, Pf * ELY_ARC / (1 - G.dash), 2 * Pf * ELY_ARC)), dashLen = Math.min(step * G.dash, step - Pf * ELY_ARC), n = Math.floor((len + step - dashLen) / step);
+      const d0 = (len - (n * step - (step - dashLen))) / 2;
+      for (let i = 0; i < n; i++) {
+        const a = d0 + i * step, b = a + dashLen, pts = [ptAt(a)];
+        for (let j = 0; j < cum.length; j++) if (cum[j] > a && cum[j] < b) pts.push(pl[j]);
+        pts.push(ptAt(b));
+        els.push(pathEl('M' + pts.map(p => fmt(p[0]) + ',' + fmt(p[1])).join(' L'), SW.F));
+        dashes.push({ stria: kk, pts });
+      }
     }
-  }
-  meta.elytra = { striae: drawn, dots, outline, rows: rows.length };
+  });
+  meta.elytra = { style, striae: drawn, dots, dotStria, dashes, lines: style === 'smooth', outline };
   return els;
 }
 function wingsOrthoptera(C) {   // (type === 'grasshopper')

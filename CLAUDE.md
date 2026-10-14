@@ -84,9 +84,12 @@ contract for changes.
   straight into `L.abdomen`.
 - The elytral striae never fuse at the apex (#15): they converge toward it (and fan out of a narrow base), so
   `wingsElytra` rolls them as before and draws them through one deferred element (`elytralStriae`) resolved at the plate
-  scale: each stria keeps only its run `ELY_PITCH_PX` (3) plate px clear of every other stria and the outline, and a
-  puncture is kept only where its centre clears every line and the last puncture in its row by as much. `meta.elytra`
-  records what it drew and `elytraPitch` in `tests/check.js` measures it on the default and the device plate.
+  scale: each stria keeps only its run `ELY_PITCH_PX` (3) plate px clear of every other stria and the outline, and the
+  body gene `B.elytra.style` (#24, the entry's `elytra` table, on `bodySig`) lays it along that run as a line (smooth),
+  a row of punctures (punctate) or dashes, the marks a floor apart; there are no puncture rows between the striae.
+  `meta.elytra` records what it drew; `elytraPitch` and `elytraTexture` in `tests/check.js` measure it on the default
+  and the device plate. The beetle's pronotum is held to the research proportions by the entry's `pronotum` bands
+  (`beetleProportions`) and the rove family draws short truncate elytra over a tapering, hatched abdomen (`roveBody`).
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px

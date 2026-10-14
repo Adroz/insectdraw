@@ -92,6 +92,14 @@ long; widest before the middle (cordate, hind angles narrowed), at the middle (t
 as wide as the elytra: scarabs) or with parallel sides (quadrate, rove and longhorn beetles).
 Surface: punctate or smooth disc, a lateral bead (margin line), often a fine median line and a
 pair of basal foveae near the hind margin (10).
+Elytra (#24, `thorax-col-engraving.jpg`): the tone of an engraved elytron comes from the striae,
+converging toward the apex, with the punctures *in* the striae (punctate striae: a stria drawn as
+a row of dots; or as dashes), never as a grid of dots between them; smooth elytra draw plain
+striae. Rove beetles (Staphylinidae): elytra short, about the pronotum's length, truncate (a
+straight hind margin), the hindwings folded away under them, over a long abdomen that tapers to
+the tip with every exposed tergite shaded. Engine: the beetle entry's `pronotum` bands (soft-clipped
+in `rollBodyGenes`), `elytra` (puncture style gene, the rove's short truncate elytra) and
+`abdFams.rove`; asserted by `beetleProportions`, `elytraTexture` and `roveBody` in `tests/check.js`.
 
 **Diptera.** Prothorax and metathorax "considerably reduced"; the mesonotum "occupies most of the
 region" (2, 3). Dorsal landmarks (fig. `thorax-diptera-dorsal.png`): postpronotal lobes =
