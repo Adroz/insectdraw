@@ -1703,6 +1703,7 @@ function growVeins(g, G) {
       const x = xb + j / 16 * reach, h = atX(lb.pl, x);
       if (!h || (o.xMax !== undefined && x > o.xMax) || (o.xMin !== undefined && x < o.xMin)) continue;
       if (o.gap && !junctionOK(lb, x, o.gap)) continue;
+      if (o.own && o.own.some(j => j > x - o.ownGap)) continue;   // o.own: this ladder's own far ends (placed in order along the strip): the next one lands ownGap past them all, so two rungs never cross nor close a sliver, even where o.gap is looser (G.gapFar)
       if (crossesOther(A, h.p, la, lb)) continue;
       const pl = bowVein(A, h.p, bow, 6);
       const aA = obtuse(dA, norm(sub(pl[1], pl[0]))), aB = obtuse(h.d, norm(sub(pl[pl.length - 1], pl[pl.length - 2])));
@@ -1811,16 +1812,21 @@ function growVeins(g, G) {
       if (cell) for (let i = 0; i + 1 < sites.length; i++) stats.cellMin = Math.min(stats.cellMin, (sites[i + 1] - sites[i]) * Lw);
       // G.refill (the mayfly, #21): a rung that cannot be placed at the bisector (next to a junction, or no in-band far
       // end) is tried again further along its cell, so a strip never keeps an open cell beside crowded ones
-      const tries = G.refill ? [0.5, 0.3, 0.7, 0.15, 0.85] : [0.5];
+      // A retry keeps REFILL_SEP of a step from the last rung placed in this ladder and from the next one's bisector, so
+      // it never closes a cell narrower than the ladders without refill draw
+      const tries = G.refill ? [0.5, 0.3, 0.7, 0.15, 0.85] : [0.5], REFILL_SEP = 0.5;
+      let lastU = -Infinity;
+      const own = G.gapFar !== undefined ? [] : null, ownK = G.evenSites ? 0.5 : 0.35;   // G.gapFar loosens the far end's clearance from the other strip's junctions only; from this ladder's own it stays the default
       for (let i = 0; i + 1 < sites.length; i++) {   // the Voronoi edge between two consecutive sites, clipped to the lanes
         let placed = false;
+        const nextU = i + 2 < sites.length ? (sites[i + 1] + sites[i + 2]) / 2 : Infinity;
         for (const f of tries) {
           const um = lerp(sites[i], sites[i + 1], f), spx = sp(um), t = at2(um);
-          if (!t) continue;
+          if (!t || (f !== 0.5 && (um - lastU < REFILL_SEP * spx / Lw || nextU - um < REFILL_SEP * spx / Lw))) continue;
           const P = lerpP(t.ha.p, t.hb.p, 0.5), dir = perp(norm(add(t.ha.d, t.hb.d)));
           const hA = hitPl(a.pl, P, dir) || t.ha, hB = hitPl(b.pl, P, dir) || t.hb;
           if (!junctionOK(a, hA.p[0], gapA * spx)) continue;
-          if (place(a, hA.p, hA.d, b, hB.p[0], Math.max(spx, (G.reachW || 0) * t.w), { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw, retry: tries.length > 1 })) { placed = true; break; }   // reachW: the slide also grows with the strip width, so a rung across a wide strip can still lean into the band
+          if (place(a, hA.p, hA.d, b, hB.p[0], Math.max(spx, (G.reachW || 0) * t.w), { sw: joinSw(a, b), gap: gapK * spx, xMin: ua * Lw, xMax: ub * Lw, retry: tries.length > 1, own, ownGap: ownK * spx })) { placed = true; lastU = um; if (own) own.push(lastPl[lastPl.length - 1][0]); break; }   // reachW: the slide also grows with the strip width, so a rung across a wide strip can still lean into the band
         }
         if (!placed && tries.length > 1) stats.dropped++;
       }

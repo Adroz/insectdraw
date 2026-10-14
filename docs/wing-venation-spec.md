@@ -533,9 +533,11 @@ coordinates, and the `eph*` checks of `tests/check.js` assert the rules below on
   each rung draws its own preferred lean, measured against its near lane's tangent, so the two leans come out about
   even (`wingStats.leans`, each at least 20% of the leaning rungs, mean junction under 110°, `ephLean`, default and
   device plate). `gapNear` 0.2 and `reachW` 0.7 as before. Open cells (#21): a rung that cannot be placed at its
-  bisector is tried again at 0.3, 0.7, 0.15 and 0.85 of its cell (`refill`), and a far end keeps only 0.3 of a step
-  clear of the junctions already on its lane (`gapFar`; the default 0.5 left no room where the ladder on the lane's
-  other side had the same step, so whole stretches of a strip went unrunged beside crowded ones). No gap between
+  bisector is tried again at 0.3, 0.7, 0.15 and 0.85 of its cell, half a step clear of the ladder's last rung and the
+  next bisector (`refill`), and a far end keeps only 0.3 of a step clear of the other strip's junctions on its lane
+  (`gapFar`; the default 0.5 left no room where the ladder on the lane's other side had the same step, so whole
+  stretches of a strip went unrunged beside crowded ones), while its own ladder's far ends stay in order and half a
+  step apart, so no two rungs cross or close a sliver (narrowest cell over 80 plates 1.8 px, 0.35 px before). No gap between
   neighbouring rungs of a non-costal strip of four or more is over 3 times the strip's median gap (`ephOpen`).
 - **Hindwing (12).** Present with odds 0.8, `hindL` 0.22–0.36 of the forewing; length : width 1.6, broadest at about
   40%, with an angular costal process at 0.12 of its length and a notch behind it (Sc and R1 run under the process, not
@@ -628,7 +630,8 @@ to its `deflect` step:
   leaning more than 3° each way. `walls` (per lane pair, span fractions) add ladder stops, so a strip changes step
   there (the mayfly's costal field). `refill` retries a ladder rung that fails at its bisector further along its
   cell (0.3, 0.7, 0.15, 0.85; one drop counted if every try fails) and `gapFar` sets the far end's junction clearance
-  in steps (default 0.5 with `evenSites`, else 0.35); the mayfly passes `refill` and `gapFar` 0.3 (#21).
+  in steps from the junctions other ladders left on the far lane (default 0.5 with `evenSites`, else 0.35; the ladder's
+  own far ends keep the default and stay in order); the mayfly passes `refill` and `gapFar` 0.3 (#21).
 - **Open apex** (R-F): joins stop at `uOpen`; a stub lane is cut `stubLen` past its last junction and
   drawn at `SW.F` from there.
 - **Weight** (R-G): stems `SW.O` (Sc+R, M+Cu to its fork), named branches `SW.D`, A and
@@ -793,7 +796,7 @@ evidence seeds and nine random seeds before and after, on `evidence/ticket-21`):
 costa running down into it (the hook at 0.95–0.96 of the length, up to 0.0075 of the length in front of the costal
 tangent, is gone); the hindwing lies under the forewing (already so since #59; now asserted); the fan's stems leave
 the base a strip apart (#59), so no root convergence; open cells beside crowded ones are gone from the long strips
-(worst gap over the median 3.8 median plate, 7.3 worst, before; about 1.6 and 2.5 after). The fore coxa (a body rule,
+(worst gap over the strip's median gap: 3.8 on the median plate and 7.3 at worst before; 1.6 and 2.2 after). The fore coxa (a body rule,
 `ORDERS.mayfly.foreCoxa`) now sits on the prothorax behind the head (`ephForeleg`). Still weaker than the reference:
 the central field between MA and MP carries few rungs where its strips are short.
 
