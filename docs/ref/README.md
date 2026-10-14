@@ -71,3 +71,15 @@ References for `../research-legs-eyes-antennae.md`. From Wikimedia Commons.
 |---|---|---|---|
 | leg-orth-femur.jpg | Grasshopper hind femur, lateral micrograph of the outer face: drumstick profile deepest at a fifth of the length, herringbone (pinnate) muscle chevrons over the whole face, genicular lobe at the knee; the #23 femur measurements | [Grasshopper leg.tif](https://commons.wikimedia.org/wiki/File:Grasshopper_leg.tif), Tenbergen (2020), downscaled to 1280 px JPEG | CC BY-SA 4.0 |
 | leg-orth-psm1891.jpg | Grasshopper hind leg engraving (femur with herringbone, serrated tibia) and the stridulatory peg row, *Popular Science Monthly* vol. 39 p. 697 (1891) | [PSM V39 D697 Grasshopper leg.jpg](https://commons.wikimedia.org/wiki/File:PSM_V39_D697_Grasshopper_leg.jpg) | Public domain |
+
+## Cicada habitus (`hab-cic-` prefix)
+
+References for `../research-cicada-habitus.md` (#49). From Wikimedia Commons, downscaled to 800 px.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| hab-cic-orni-dorsal.jpg | *Cicada orni* (Cicadinae) at rest, dorsal: the tegmina roofed back over the abdomen, inner margins meeting along the midline, hindwings hidden; mesonotum with paired dark spots | [Cicada orni dorsal Ateret 0715 01.jpg](https://commons.wikimedia.org/wiki/File:Cicada_orni_dorsal_Ateret_0715_01.jpg), Sir Shurf | CC BY-SA 4.0 |
+| hab-cic-notopsalta-dorsal.jpg | *Notopsalta sericea* (Cicadettinae), spread, dorsal: slender abdomen, head narrower than the pronotum, the paired obconical spots and M-shaped mark on the mesonotum, narrow tegmina | [Notopsalta sericea dorsal view.jpg](https://commons.wikimedia.org/wiki/File:Notopsalta_sericea_dorsal_view.jpg), B. E. Rhode, Landcare Research | CC BY 4.0 |
+| hab-cic-cicadettana-dorsal.jpg | *Cicadettana calliope* (Cicadettinae), a small cicadettine, dorsal | [Cicadettana calliope calliope male US.IL.QHR male dorsal view.jpg](https://commons.wikimedia.org/wiki/File:Cicadettana_calliope_calliope_male_US.IL.QHR_male_dorsal_view.jpg), D. C. Marshall | CC BY-SA 4.0 |
+| hab-cic-tibicen-dorsal.jpg | *Tibicen* (now *Hadoa*) *bifidus* (Cicadinae) at rest, dorsal: broad body, roofed tegmina | [Tibicen bifidus dorsal.jpg](https://commons.wikimedia.org/wiki/File:Tibicen_bifidus_dorsal.jpg), JerryFriedman | CC BY-SA 3.0 |
+| hab-cic-platypleura-capensis.jpg | *Platypleura capensis* (Platypleurini) at rest: the pronotal collar flared into lateral flanges wider than the head, broad rounded tegmina roofed over a stout abdomen | [Platypleura capensis00.jpg](https://commons.wikimedia.org/wiki/File:Platypleura_capensis00.jpg), Karen Pagel | CC BY-SA 4.0 |

@@ -485,6 +485,20 @@ function polyMaxXAt(poly, y) {   // half-width of a closed symmetric loop at y
   return best;
 }
 
+// Hatch a closed polygon with parallel fine lines `deg` degrees off the x axis, `spacing` apart (through floorPitch), each
+// stopped `inset` short of the outline (#49, the cicada's mesonotum markings). Returns the line elements.
+function hatchPolyEls(poly, spacing, deg, sw, inset) {
+  const a = -deg * D2R, R = poly.map(p => rot(p, a)), sp = floorPitch(spacing), out = [];
+  let y0 = Infinity, y1 = -Infinity; for (const p of R) { y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }
+  for (let y = y0 + sp / 2; y < y1; y += sp) {
+    const xs = [];
+    for (let i = 0, j = R.length - 1; i < R.length; j = i++) { const p = R[i], q = R[j]; if ((p[1] > y) !== (q[1] > y)) xs.push(p[0] + (q[0] - p[0]) * (y - p[1]) / (q[1] - p[1])); }
+    xs.sort((u, v) => u - v);
+    for (let k = 0; k + 1 < xs.length; k += 2) if (xs[k + 1] - xs[k] > 2 * inset + 0.6) out.push(lineEl(rot([xs[k] + inset, y], -a), rot([xs[k + 1] - inset, y], -a), sw));
+  }
+  return out;
+}
+
 // ---------- antennae (right side) ----------
 // Rules and sources: docs/research-antennae.md. rollAntGenes rolls every per-seed choice (kind, segment count, club /
 // rami / lamellae / arista parameters, pose family, socket); antennaGeom turns genes plus a pose into centreline
@@ -2092,7 +2106,11 @@ function insectName(seed, type, variant, fam, genes) {
 //     count range; ticks: side-tick odds; petiole: a rolled waist (the wasp-waisted orders); bandEvery / bandPart: the
 //     banded hatch on every segment / over its basal fraction only. abdFams (optional): family overrides of the same keys.
 //   thorax: front: pronotum width / head width; peak: widest t; hump: shoulder dip; waist: narrowing at t = 1;
-//     lenK: length factor (docs/research-thorax.md).
+//     lenK: length factor (docs/research-thorax.md); marks (optional): weights of the hatched mesonotum markings (#49).
+//   habitus / abdShapes / wingSets / wingShapes (optional, the cicada, #49; docs/research-cicada-habitus.md): per-family
+//     scale ranges, abdomen taper family weights and family structures (tymbal covers, pronotal flange), read by the
+//     entry's proportions and rollBodyGenes; the abdomen taper families (anchors and abd overrides); the wing sets and
+//     forewing shapes rollBodyGenes picks into B.wing (weights w) and the wing block reads.
 //   head: outline, W/H ratio, eye cx / rx / ry / cy (off centre), ocelli count and arrangement, mouthparts, eye
 //     styles and face markings (docs/research-head-eyes.md); headFams: family / variant overrides of the same keys.
 //   legs: leg family ranges over the LD defaults in rollBodyGenes (base, then the wing / body family).
@@ -2410,9 +2428,53 @@ const ORDERS = {
         thoraxAnchors: [[0, 0.8], [0.3, 1], [0.8, 0.95], [1, 0.75]],
         abdAnchors: [[0, 0.95], [0.2, 1], [0.6, 0.8], [0.9, 0.4], [1, 0]],
         antenna: 'setaceous', antLen: 9 * jitter(0.2) });
+      // #49 family habitus (docs/research-cicada-habitus.md): the family scales the head, the thorax and the abdomen's
+      // length, and picks the abdomen's taper family (abdShapes) from its own weights
+      const O = ORDERS.cicada;
+      P.fam = pick(Object.keys(O.habitus));
+      const H = O.habitus[P.fam];
+      P.headW *= randRange(H.headW[0], H.headW[1]); P.thoraxW *= randRange(H.thoraxW[0], H.thoraxW[1]); P.abdLen *= randRange(H.abdLen[0], H.abdLen[1]);
+      if (H.size) { const k = randRange(H.size[0], H.size[1]); for (const f of ['headW', 'headH', 'thoraxW', 'thoraxLen', 'abdW', 'abdLen']) P[f] *= k; }   // a small family drawn small: the plate scale is capped, so it stands smaller on the plate
+      P.abdShape = weightedPick(H.abdShapes);
+      P.abdAnchors = O.abdShapes[P.abdShape].anchors;
+    },
+    // #49: cicadine (broad, the tymbal covers showing at the abdomen base), cicadettine (slender, small, the head
+    // narrower than the pronotum), platypleurine (stout, the pronotal collar flared into flanges wider than the head)
+    habitus: {
+      cicadine: { headW: [0.95, 1.05], thoraxW: [1.0, 1.1], abdLen: [0.92, 1.05], abdShapes: { barrel: 3, cone: 2, spindle: 1 }, tymbals: [0.32, 0.42] },
+      cicadettine: { headW: [0.72, 0.8], thoraxW: [0.84, 0.92], abdLen: [1.05, 1.2], size: [0.68, 0.8], abdShapes: { cone: 3, spindle: 3, barrel: 1 } },
+      platypleurine: { headW: [0.84, 0.92], thoraxW: [1.02, 1.1], abdLen: [0.78, 0.9], abdShapes: { barrel: 3, cone: 2 }, flange: [1.3, 1.5] },
+    },
+    // #49 abdomen taper families: barrel (parallel-sided, blunt), cone (widest at the base, straight taper), spindle
+    // (narrow at the base, widest at mid-length); each overrides the abd ranges below (peak) and sets the anchors
+    abdShapes: {
+      barrel: { anchors: [[0, 0.9], [0.2, 1], [0.6, 0.96], [0.9, 0.55], [1, 0]], peak: [0.3, 0.5] },
+      cone: { anchors: [[0, 1], [0.12, 1], [0.6, 0.68], [0.9, 0.3], [1, 0]], peak: [0.08, 0.16] },
+      spindle: { anchors: [[0, 0.62], [0.4, 1], [0.6, 0.86], [0.9, 0.4], [1, 0]], peak: [0.35, 0.5] },
     },
     abd: { tips: { pointed: 3, rounded: 1 }, marks: { plain: 2, banded: 2 }, peak: [0.15, 0.35], wK: [0.85, 1.15], start: [0.05, 0.12], seg: [5, 7], ticks: 0.6 },
-    thorax: { front: [0.8, 1.0], peak: [0.3, 0.4], hump: [0, 0], waist: [0, 0], lenK: [0.9, 1.15] },
+    abdFams: {
+      cicadine: { wK: [1.15, 1.35] },
+      cicadettine: { wK: [0.62, 0.74], tips: { pointed: 1 } },
+      platypleurine: { wK: [1.25, 1.45], tips: { rounded: 2, truncate: 1 } },
+    },
+    // #49 wing set (B.wing.set, rolled with the body, read by wingsCicada): sweep, the forewing's root-to-apex line in
+    // degrees below the horizontal; reach, its length in root-to-abdomen-tip lengths; spread, the hindwing's further
+    // turn. roofed: at rest, the tegmina folded back over the abdomen (their inner margins meeting along the midline at
+    // mid of it, the outer margin `over` past the abdomen's side), the hindwings hidden under them
+    wingSets: {
+      spread: { w: 1, sweep: [30, 45], reach: [1.46, 1.72], spread: [10, 26] },
+      half: { w: 1, sweep: [52, 64], reach: [1.32, 1.5], spread: [4, 12] },
+      roofed: { w: 1, roof: true, reach: [1.3, 1.5], mid: [1.0, 1.3], over: [3, 6] },
+    },
+    // #49 forewing shape (B.wing.shape): narrow with a pointed apex, or broad with a rounded one. hw: half depth per
+    // length (the spread wing's outline); sharp: the apex gene; roofW: the roofed tegmen's width over the abdomen's,
+    // apexX: where its apex sits across the tegmen (0 the midline, 1 the outer margin)
+    wingShapes: {
+      narrow: { w: 1, hw: [0.13, 0.15], sharp: [0.65, 1], roofW: [1.3, 1.45], apexX: [0.22, 0.34] },
+      broad: { w: 1, hw: [0.19, 0.23], sharp: [0, 0.3], roofW: [1.55, 1.8], apexX: [0.4, 0.55] },
+    },
+    thorax: { front: [0.8, 1.0], peak: [0.3, 0.4], hump: [0, 0], waist: [0, 0], lenK: [0.9, 1.15], marks: { none: 1, obconic: 1, M: 1, both: 1 } },
     head: { outline: 'transverse', ratio: [1.9, 2.4], capK: [0.84, 0.9], cx: [0.38, 0.41], rx: [0.08, 0.1], ry: [0.3, 0.4], cy: [0.02, 0.08], ocelli: 3, oc: 'triangle', ocY: [0.38, 0.5], ocDx: [0.05, 0.08], ocDy: [0.05, 0.1], bump: [[0.17, 0.25], [0.12, 0.22]], pointed: 0.4, striae: [3, 6], styles: { lattice: 3, stipple: 2 } },
     // the foreleg's own angles per pose (#26): reaching forward (spread), the tibia angled out (walking) or folded back
     // under the femur (tucked), so the stout, toothed forelegs are not held one way on every plate
@@ -2427,7 +2489,10 @@ const ORDERS = {
     wings: wingsCicada,
     names: {
       tails: [['cicada', 'f'], ['tettix', 'm'], ['tibicen', 'm'], ['cephala', 'f'], ['psaltria', 'f'], ['soma', 'n'], ['neura', 'f'], ['ptera', 'f'], ['cerus', 'm'], ['notus', 'm']],
-      common: { nouns: ['Harvest', 'Dog-day', 'Dusk', 'Scissor', 'Floury', 'Bladder', 'Hill', 'Bush', 'Mountain', 'Grass', 'Drummer', 'Squeaker', 'Ticker'], base: 'Cicada' },
+      common: { nouns: ['Harvest', 'Dog-day', 'Dusk', 'Scissor', 'Floury', 'Bladder', 'Hill', 'Bush', 'Mountain', 'Grass', 'Drummer', 'Squeaker', 'Ticker'], base: 'Cicada',
+        // #49 per family: the large Cicadinae (dog-day / scissor-grinder Neotibicen, floury baker Aleeta, bladder Cystosoma,
+        // drummer Thopha), the small Cicadettinae (the grass, bush and hill pygmies, squeakers, tickers), the Platypleurini
+        famNouns: { cicadine: ['Harvest', 'Dog-day', 'Scissor', 'Floury', 'Bladder', 'Drummer'], cicadettine: ['Grass', 'Bush', 'Hill', 'Squeaker', 'Ticker'], platypleurine: ['Dusk', 'Mountain', 'Bark', 'Collared'] } },
     },
   },
   wasp: {
@@ -2536,7 +2601,7 @@ function rollBodyGenes(type, P) {
   // (pointed / rounded / truncate / clubbed), a rolled petiole on the wasp-waisted orders and a width factor.
   // Then segmentation, a markings family (plain / banded / spotted / striped / tip-dark / hairy) and the terminalia.
   const weighted = w => { const ks = Object.keys(w), tot = ks.reduce((a, k) => a + w[k], 0); let x = rng() * tot; for (const k of ks) { x -= w[k]; if (x < 0) return k; } return ks[ks.length - 1]; };
-  const order = ORDERS[type], abdRanges = Object.assign({}, order.abd, (order.abdFams && order.abdFams[fam]) || {});   // the family's overrides (abdFams) on the order's table
+  const order = ORDERS[type], abdRanges = Object.assign({}, order.abd, (order.abdFams && order.abdFams[fam]) || {}, (order.abdShapes && order.abdShapes[P.abdShape]) || {});   // the family's overrides (abdFams), then the taper family's (abdShapes, #49), on the order's table
   const A = B.abd;
   A.tip = weighted(abdRanges.tips); A.mark = weighted(abdRanges.marks); A.peak = rr(abdRanges.peak); A.wK = rr(abdRanges.wK) * (P.variant === 'butterfly' ? 0.9 : 1);
   A.seg = randInt(abdRanges.seg[0], abdRanges.seg[1]); A.startT = rr(abdRanges.start); A.bow = randRange(0.08, 0.3); A.sw = rng() < 0.25 ? SW.F : SW.D; A.double = rng() < 0.25;
@@ -2636,7 +2701,7 @@ function rollBodyGenes(type, P) {
   }
   T.lines = [];   // transverse lines { t, bow (fraction of hw, + toward the tail), sw, gap (interrupted: half-width fraction left open) }
   T.median = null; T.notauli = null; T.para = null; T.paramedian = null; T.vee = null; T.humeral = null; T.carina = null; T.latCar = null;
-  T.patagia = false; T.crest = false; T.scut = null; T.calli = null; T.bristles = 0; T.bands = null; T.punct = null; T.pile = null; T.bead = false; T.foveae = false;
+  T.marks = null; T.patagia = false; T.crest = false; T.scut = null; T.calli = null; T.bristles = 0; T.bands = null; T.punct = null; T.pile = null; T.bead = false; T.foveae = false;
   switch (type) {
     case 'beetle':
       T.median = rng() < 0.6 ? { t0: 0.12, t1: 0.95, sw: SW.F } : null;
@@ -2695,6 +2760,12 @@ function rollBodyGenes(type, P) {
       T.paramedian = rng() < 0.6 ? { x: randRange(0.26, 0.34), t0: 0.4, t1: 0.7 } : null;
       T.scut = { shape: 'cruciform', t0: randRange(0.72, 0.78), w: randRange(0.3, 0.45), len: randRange(0.15, 0.22) };
       T.punct = rng() < 0.2 ? { spacing: randRange(4.5, 6.5), r: 0.6, coarse: false } : null;
+      // #49 mesonotum markings (docs/research-cicada-habitus.md), hatched: the paired obconical spots behind the collar
+      // (x: centre off the midline, w: half width at the front, len: share of the mesonotum, both fractions of the half
+      // width / length), the M mark across the middle of the mesonotum (a: half span, y0 / y1: its arms' tops and feet
+      // in mesonotum lengths, wb: band width), or both
+      T.marks = { kind: weighted(order.thorax.marks), obconic: { x: randRange(0.2, 0.3), w: randRange(0.13, 0.2), len: randRange(0.45, 0.65) },
+        M: { a: randRange(0.5, 0.66), y0: randRange(0.3, 0.42), y1: randRange(0.85, 0.97), wb: randRange(0.18, 0.26) }, spacing: randRange(2.2, 2.6), deg: randRange(30, 60) };
       break;
     default:   // lacewing, mayfly: ground plan
       T.lines.push({ t: randRange(0.1, 0.2), bow: randRange(0.1, 0.2), sw: SW.D });
@@ -2708,7 +2779,7 @@ function rollBodyGenes(type, P) {
   B.sig.push(T.shape || T.margin || '-', T.lines.map(l => Math.round(l.t * 10) + (l.gap ? 'g' : '')).join('/'), T.median ? 1 : 0, T.notauli ? 1 : 0, T.para || T.paramedian ? 1 : 0,
     T.humeral ? (T.humeral.double ? 2 : 1) + (T.humeral.stripe ? 's' : '') : 0, T.scut ? T.scut.shape[0] + Math.round(T.scut.w * 10) + (T.scut.hatched ? 'h' : '') + (T.scut.axillae ? 'a' : '') : '-',
     T.pile ? 'p' + (T.pile.interior ? 'i' : '') : T.punct ? 'd' + (T.punct.coarse ? 'c' : '') : T.bands ? 'b' + T.bands.n : '-', T.hatch ? T.hatch.n : 0, T.calli ? 1 : 0, T.bristles, T.latCar ? 'lc' + T.latCar.kind[0] : 0, T.patagia ? 1 : 0, T.crest ? 1 : 0,
-    T.tegula ? Math.round(T.tegula.rx) : '-', Math.round(T.front * 10), Math.round(T.hump * 20), Math.round(T.waist * 20), Math.round(T.lenK * 10), Math.round(T.peak * 10));
+    T.tegula ? Math.round(T.tegula.rx) : '-', T.marks ? 'mk' + T.marks.kind : '-', Math.round(T.front * 10), Math.round(T.hump * 20), Math.round(T.waist * 20), Math.round(T.lenK * 10), Math.round(T.peak * 10));
   // ---- head: outline, eyes, ocelli, mouthparts, face markings -- see docs/research-head-eyes.md ("Rules derived") ----
   // Fractions of headW (x) and headH (y) unless px. The order table gives the ranges, the family (P.fam / variant) overrides
   // some, the seed rolls every value. headW stays the bounding width of the head including the eyes and headH its
@@ -2856,6 +2927,21 @@ function rollBodyGenes(type, P) {
     B.elytra = { style: weighted(ET.styles), pitch: rr(ET.pitch), dash: rr(ET.dash) };
     B.sig.push('ely' + B.elytra.style[0], Math.round(B.elytra.pitch * 2));
   }
+  // ---- wing set and forewing shape (#49, the cicada): body-plan genes the wing block reads, rolled last so every gene
+  // above keeps its draws; the family habitus (tymbal covers, the pronotal flange) is rolled with them ----
+  B.wing = null; B.habitus = null;
+  if (order.wingSets) {
+    const wOf = t => Object.fromEntries(Object.keys(t).map(k => [k, t[k].w]));
+    B.wing = { set: weighted(wOf(order.wingSets)), shape: weighted(wOf(order.wingShapes)) };
+    const H = (order.habitus && order.habitus[fam]) || {};
+    B.habitus = { tymbals: H.tymbals ? rr(H.tymbals) : 0, flange: H.flange ? rr(H.flange) : 0 };
+    if (B.habitus.flange) {   // the pronotal collar (B.thorax.lines[0]) flared into lateral flanges, flange x the head's half width at the collar
+      const T = B.thorax, tc = T.lines[0].t, fF = T.anchors[0][1], F = B.habitus.flange * P.headW / P.thoraxW;
+      T.anchors = [[0, fF], [tc * 0.55, lerp(fF, F, 0.75)], [tc, F], [tc + 0.07, lerp(F, 1, 0.55)]].concat(T.anchors.filter(a => a[0] > tc + 0.16));
+      if (!T.anchors.some(a => a[1] >= 1 && a[0] > tc)) T.anchors.splice(4, 0, [tc + 0.18, 1]);
+    }
+    B.sig.push('ws' + B.wing.set, 'wf' + B.wing.shape, 'ab' + (P.abdShape || '-'), B.habitus.tymbals ? 'ty' : '-', B.habitus.flange ? 'fl' + Math.round(B.habitus.flange * 10) : '-');
+  }
   return B;
 }
 
@@ -2935,6 +3021,7 @@ function layoutBody(C) {
   meta.recipe = P.fam;
   meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam; the damselfly wing block sets it (its antenodal family, #17)
   meta.bodyGenes = B;
+  if (B.wing) meta.cicada = { set: B.wing.set, shape: B.wing.shape, fam: P.fam, abdShape: P.abdShape, marks: null, collarY: null, tymbals: null };   // #49, filled in by the thorax and abdomen sections
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   P.thoraxAnchors = B.thorax.anchors;
   // organic irregularity on profiles
@@ -2959,7 +3046,7 @@ const ABD_STEP_DY = 0.1, ABD_STEP_MAX = 400;   // the markings' walk to the next
 // the kinds of transverse mark meta.abdMarks records per segment (tests/check.js reads them as these strings)
 const ABD_MARK = Object.freeze({ EDGE: 'edge', MEMBRANE: 'membrane', CURVE: 'curve', HATCH: 'hatch', TICK: 'tick' });
 function drawAbdomen(C) {
-  const { L, P, B, abdomen } = C;
+  const { L, P, B, abdomen, meta } = C;
   L.abdomen.push(pathEl(abdomen.path, SW.O, '#fff'));
   {
     const A = B.abd, n = A.seg, startT = A.startT, bow = A.bow;
@@ -3109,6 +3196,16 @@ function drawAbdomen(C) {
     if (A.cerci) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * 2.5, tipY - 5], [sgn * A.cerci.spread, tipY - 5 + A.cerci.len], SW.D));
     if (A.filaments && A.filaments.n === 3) L.abdomen.push(pathEl(smoothPath(shaftPoints([0, tipY - 2], 90, P.abdLen * A.filaments.len * 0.95, 0, 6), false), SW.D));   // middle tail filament
     if (A.appendages) for (const sgn of [-1, 1]) L.abdomen.push(lineEl([sgn * 2, tipY - 4], [sgn * A.appendages.spread, tipY - 4 + A.appendages.len], SW.D));
+    if (B.habitus && B.habitus.tymbals) {   // #49 the cicadine tymbal covers: rounded plates over the tymbals at the sides of the abdomen base, standing past its outline
+      let hwM = 0; for (let y = abdomen.yTop; y < abdomen.yBot; y += 2) hwM = Math.max(hwM, abdomen.hwAt(y));
+      const y = abdomen.yTop + P.abdOverlap + 0.08 * P.abdLen, rx = B.habitus.tymbals * hwM, c = [abdomen.hwAt(y) - rx * 0.55, y];
+      for (const sg of [-1, 1]) {   // the abdomen layer is drawn once, so both sides here
+        const m = p => [sg * p[0], p[1]];
+        L.abdomen.push(pathEl(ellipsePath(m(c), rx, rx * 0.78, sg * -18), SW.D, '#fff'));
+        L.abdomen.push(pathEl(cubicBezierPath([[c[0] - rx * 0.55, c[1] - rx * 0.3], [c[0] - rx * 0.1, c[1] + rx * 0.05], [c[0] + rx * 0.3, c[1] + rx * 0.2], [c[0] + rx * 0.62, c[1] + rx * 0.05]].map(m), false), SW.F));   // the cover's rim
+      }
+      if (meta.cicada) meta.cicada.tymbals = sampleBezier(ellipseBezier(c, rx, rx * 0.78, -18), 8);
+    }
   }
 }
 
@@ -3194,6 +3291,26 @@ function drawThorax(C) {
     if (T.paramedian) {   // cicada mesonotum: paired sutures running back to the cruciform elevation
       const yA = yAt(T.paramedian.t0), yB = Math.min(yAt(T.paramedian.t1), scutY - 1.5);
       both(s => TH.push(lineEl([s * T.paramedian.x * hwAt(yA), yA], [s * T.paramedian.x * 0.85 * hwAt(yB), yB], SW.F)));
+    }
+    if (B.habitus && B.habitus.flange) both(s => {   // #49 the platypleurine collar flange: its flattened lateral lamina, a fine rim inside the margin
+      const tc = T.lines[0].t, pts = [];
+      for (let t = tc * 0.45; t <= tc + 0.1; t += 0.02) { const y = yAt(t), hw = hwAt(y) - 2.6; if (hw > 3) pts.push([s * hw, y]); }
+      if (pts.length > 2) TH.push(pathEl(smoothPath(pts, false), SW.F));
+    });
+    if (T.marks) {   // #49 cicada mesonotum markings: hatched closed shapes between the collar and the cruciform elevation
+      const c0 = yAt(T.lines[0].t), yC = c0 + hwAt(c0) * T.lines[0].bow + 1.5, yE = (T.scut ? yAt(T.scut.t0) : yBot) - 1.5, mL = yE - yC;
+      const polys = [], M = T.marks.M, O = T.marks.obconic;
+      const fit = p => { const h = hwAt(p[1]) - 2.5; return [Math.sign(p[0]) * Math.min(Math.abs(p[0]), Math.max(0, h)), p[1]]; };   // inside the outline
+      if (T.marks.kind === 'obconic' || T.marks.kind === 'both') both(sg => {
+        const yA = yC + 0.5, yB = yC + mL * O.len, hA = hwAt(yA), x = O.x * hA, w = O.w * hA;
+        polys.push([[x - w, yA], [x + w, yA], [x + w * 0.55, lerp(yA, yB, 0.5)], [x * 0.85 + w * 0.12, yB], [x * 0.85 - w * 0.12, yB], [x - w * 0.55, lerp(yA, yB, 0.5)]].map(p => fit([sg * p[0], p[1]])));
+      });
+      if (T.marks.kind === 'M' || T.marks.kind === 'both') {
+        const yT = yC + mL * M.y0, yF = yC + mL * M.y1, yM = lerp(yT, yF, 0.45), a = M.a * hwAt(yM), wb = M.wb * mL;
+        polys.push([[-a, yF], [-a * 0.62, yT], [0, yM], [a * 0.62, yT], [a, yF], [a - wb, yF], [a * 0.6, yT + wb * 1.5], [0, yM + wb * 1.4], [-a * 0.6, yT + wb * 1.5], [-a + wb, yF]].map(fit));
+      }
+      for (const poly of polys) { TH.push(polygonEl(poly, SW.D)); TH.push(...hatchPolyEls(poly, T.marks.spacing, T.marks.deg, SW.D, 0.4)); }
+      if (meta.cicada) { meta.cicada.marks = { kind: T.marks.kind, polys }; meta.cicada.collarY = yC; }
     }
     if (T.vee) {   // V-shaped transverse suture (lower Diptera): two straight lines meeting on the midline behind
       const yV = yAt(T.vee.t), hw = hwAt(yV);
@@ -4283,8 +4400,9 @@ function wingsNeuroptera(C) {   // (type === 'lacewing')
 }
 
 const CIC_CLAVUS = 10;   // degrees the forewing's claval margin runs in from straight back (#26)
+const CIC_MID = 2.5;     // body units a spread or half-open forewing keeps off the midline (tests/check.js CIC.midline is 2)
 function wingsCicada(C) {   // (type === 'cicada')
-  const { order, L, meta, thorax, abdomen } = C;
+  const { order, L, meta, thorax, abdomen, B } = C;
   // ---- Cicadidae, grown by growVeins v2 (docs/wing-venation-spec.md, Cicadidae; ref cic-cicada). Sc+R, M, CuA and CuP
   // are smooth bowed lanes from the base (M and CuA off a short common stem) to the nodal nodes; the nodal line is a
   // `then` chain of named crossveins stepping from Sc+R through M and CuA to CuP at one slant, back toward the base.
@@ -4297,29 +4415,58 @@ function wingsCicada(C) {   // (type === 'cicada')
   // horizontal, and the wing's length is anatomical (`reach` root-to-abdomen-tip lengths, a set cicada's forewing about
   // 1.2-1.4 body lengths), not stretched to put the apex level with the abdomen tip, so a shallow sweep no longer widens
   // the plate twice over (cicada plates at median scale 0.81 before, about 1.04 now)
-  const sweep = randRange(30, 45);
+  // #49: the wing set (spread as #26 drew it, half-open, or roofed over the abdomen at rest) and the forewing shape
+  // (narrow and pointed / broad and round) are body-plan genes (B.wing, the entry's wingSets / wingShapes)
+  const WS = order.wingSets[B.wing.set], WF = order.wingShapes[B.wing.shape], rr = r => randRange(r[0], r[1]);
+  const roof = !!WS.roof;
+  const sweep = roof ? 0 : rr(WS.sweep);   // roofed: the root-to-apex line follows from the outline built over the abdomen
   const by0 = thorax.yAt(order.wingRoots[0]);
-  const Lw = (abdomen.yBot - by0) * randRange(1.46, 1.72);
+  const Lw = (abdomen.yBot - by0) * rr(WS.reach);
   // clamp the span so a long body cannot push the plate scale under the 0.55 floor
   const LwMax = (abdomen.yBot - thorax.yTop) * 1.9;
   const LwC = Math.min(Lw, LwMax);
   const G = {
-    hw: randRange(0.13, 0.21), tipY: randRange(-0.25, 0.15), sharp: randRange(0, 1), bulge: randRange(0.82, 1.12),
-    hindL: randRange(0.48, 0.64), hindW: randRange(1.1, 1.45), spread: randRange(10, 26), heavy: rng() < 0.4,
+    hw: rr(WF.hw), tipY: randRange(-0.25, 0.15), sharp: rr(WF.sharp), bulge: randRange(0.82, 1.12),
+    hindL: randRange(0.48, 0.64), hindW: randRange(1.1, 1.45), spread: roof ? 0 : rr(WS.spread), heavy: rng() < 0.4,
     nM: randInt(2, 4), cuFork: rng() < 0.8, nx0: randRange(0.46, 0.6), slant: randRange(0.04, 0.14), inset: randRange(0.05, 0.1),
     ulnar: rng() < 0.6, nxb: randInt(1, 3), anal: randInt(1, 3), ambGap: rng() < 0.25,
     mcuFork: rng() < 0.7, uFork: randRange(0.1, 0.2), angle: randRange(112, 128), lean: rng() < 0.7 ? -1 : 1, bow: randRange(0.015, 0.04),   // M and CuA leaving a common basal stem; junction genes; lane bow
     scr: rng() < 0.5, apBow: randRange(-0.03, 0.03),                                                                                        // a crossvein Sc+R - M in the radial cell; the apical lanes' common bow
   };
-  const theta = sweep - Math.atan(G.tipY * G.hw) / D2R;   // the outline's apex sits tipY * hw off the wing's x axis: turn the wing so the root-apex line lies at the sweep
+  let theta = sweep - Math.atan(G.tipY * G.hw) / D2R;   // the outline's apex sits tipY * hw off the wing's x axis: turn the wing so the root-apex line lies at the sweep
   const nA = 2 + G.nM + (G.cuFork ? 2 : 1);
   const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0 };
   let foreGrown = null;
-  const defs = [{ L: LwC * G.hindL, k: G.hindW, th: theta + G.spread, t: order.wingRoots[1], hind: true }, { L: LwC, k: 1, th: theta, t: order.wingRoots[0], hind: false }];
+  // roofed (#49): the tegmen is laid out in body coordinates over the abdomen, then turned into the wing's own frame
+  // (root at the origin, the apex on +x) so the venation below grows in it as on a spread wing. Its costa runs back
+  // `over` outside the abdomen's side, widest at roofW x the abdomen's widest; its inner (claval) margin runs from the
+  // root in to `mid` off the midline at the thorax's hind edge and straight back past the abdomen tip, where it curves
+  // out to the apex, apexX of the way across. The hindwing is not drawn: it lies wholly under the tegmen.
+  let roofPts = null;
+  if (roof) {
+    const R = [thorax.hwAt(by0) * order.wingRootX, by0], m = rr(WS.mid), over = rr(WS.over);
+    let abW = 0; for (let y = abdomen.yTop; y < abdomen.yBot; y += 2) abW = Math.max(abW, abdomen.hwAt(y));
+    for (let y = thorax.yTop; y < thorax.yBot; y += 2) abW = Math.max(abW, thorax.hwAt(y));   // the body's widest, thorax or abdomen
+    const Wt = Math.max(abW * rr(WF.roofW), R[0] + 6), yEnd = R[1] + LwC, yI = Math.max(abdomen.yBot + 4, lerp(R[1], yEnd, 0.84));
+    const ax = lerp(m, Wt, rr(WF.apexX)), sh = G.sharp;
+    // the costa: out from the root in a smooth convex curve to Wt at about mid-length, then in toward the apex
+    const cos = [0.04, 0.09, 0.16, 0.23, 0.3, 0.38, 0.46, 0.55, 0.64, 0.73, 0.82, 0.9].map(f => { const y = lerp(R[1], yEnd, f), x = f <= 0.55 ? lerp(R[0], Wt, Math.sin(Math.PI / 2 * f / 0.55)) : lerp(Wt, lerp(ax, Wt, 0.35), ((f - 0.55) / 0.45) ** 1.8); return [Math.max(x, abdomen.hwAt(y) + over), y]; });
+    const apexPts = [[lerp(lerp(ax, Wt, 0.35), ax, lerp(0.35, 0.7, sh)), lerp(R[1], yEnd, 0.96)], [ax, yEnd]];
+    const cv = [lerp(R[0], m, 0.45), lerp(R[1], thorax.yBot, 0.85)], tip = [lerp(m, ax, 0.55), lerp(yI, yEnd, 0.7)];
+    // the claval margins straight along the midline, evenly spaced and with a guard point either side of each bend, so
+    // the spline cannot bow across the midline there
+    const inner = [tip, lerpP([m, yI], tip, 0.12)].concat([1, 0.8, 0.6, 0.4, 0.2, 0].map(f => [m, lerp(thorax.yBot, yI, f)]), [lerpP([m, thorax.yBot], cv, 0.12), cv]);
+    const world = [R].concat(cos, apexPts, inner);
+    theta = Math.atan2(yEnd - R[1], ax - R[0]) / D2R;
+    const Lr = Math.hypot(yEnd - R[1], ax - R[0]);
+    roofPts = { L: Lr, local: world.map(p => rot(sub(p, R), -theta * D2R)), hw: (Wt - m) / Lr / 2 };
+  }
+  const defs = roof ? [{ L: roofPts.L, k: 1, th: theta, t: order.wingRoots[0], hind: false }]
+    : [{ L: LwC * G.hindL, k: G.hindW, th: theta + G.spread, t: order.wingRoots[1], hind: true }, { L: LwC, k: 1, th: theta, t: order.wingRoots[0], hind: false }];
   const s = G.sharp;
   for (const d of defs) {
     const by = thorax.yAt(d.t), bx = thorax.hwAt(by) * order.wingRootX;
-    const X = f => f * d.L, Y = f => f * d.L * G.hw * d.k;
+    const X = f => f * d.L, Y = f => f * d.L * (roof ? roofPts.hw : G.hw) * d.k;
     // the forewing's clavus (#26): its basal hind margin runs back along the body, CIC_CLAVUS degrees in from straight
     // back, past the hindwing root, so the hindwing root lies under the forewing and the hindwing shows only from under
     // the forewing's hind margin (it peeked out ahead of the forewing base beside the thorax). The clavus corner is that
@@ -4331,9 +4478,16 @@ function wingsCicada(C) {   // (type === 'cicada')
       cl = [v[0] / d.L, v[1] / (d.L * G.hw)];
       cl2 = [Math.max(cl2[0], cl[0] + 0.08), Math.max(cl2[1], cl[1] + 0.1)];
     }
-    const o = [[0, 0], [0.06, -0.5], [0.3, -0.85], [0.6, -1], [0.85, -0.85], [lerp(0.95, 0.98, s), -lerp(0.5, 0.25, s)], [1, G.tipY], [lerp(0.92, 0.97, s), lerp(0.5, 0.25, s) * G.bulge],
+    const o = roof ? roofPts.local : [[0, 0], [0.06, -0.5], [0.3, -0.85], [0.6, -1], [0.85, -0.85], [lerp(0.95, 0.98, s), -lerp(0.5, 0.25, s)], [1, G.tipY], [lerp(0.92, 0.97, s), lerp(0.5, 0.25, s) * G.bulge],
       [0.75, 0.85 * G.bulge], [0.45, 1 * G.bulge], cl2, cl]
       .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+    // a half-open forewing's hind margin faces the midline (#49): pull it in, without rng, until the outline as drawn keeps
+    // CIC_MID off the midline (the mirror wing's margin would otherwise cross it)
+    if (!roof && !d.hind) for (let k = 0; k < 12; k++) {
+      const minX = Math.min(...sampleSmooth(o, true, 0.9, 8).map(p => bx + rot(p, d.th * D2R)[0]));
+      if (minX >= CIC_MID) break;
+      for (const p of o) if (p[1] > 0) p[1] *= 0.94;
+    }
     const wing = makeWing([bx, by], d.th, o, 0.9);
     L.wings.push(pathEl(wing.path, SW.O, '#fff'));
     L.wings.push(...costaEls(wing, X(0), X(0.97)));
@@ -4354,7 +4508,10 @@ function wingsCicada(C) {   // (type === 'cicada')
     targets.forEach((p, k) => g.nodeAt('ap' + k, p));
     const sOf = p => { const r = wing.yRange(p[0]); return r && r[1] > r[0] ? Math.max(0.03, Math.min(0.97, (p[1] - r[0]) / (r[1] - r[0]))) : 0.5; };
     // basal lanes to the nodal nodes (s = chord fraction from the costa); the nodal line slants back toward the base
-    const nx = G.nx0, nodal = ['N0', 'N1', 'N2', 'N3'].map((id, i) => g.node(id, nx - G.slant * i / 3, lerp(0.14, 0.72, i / 3)));
+    // a roofed tegmen is shallow for its length (seen foreshortened), so its nodal line's slant along the span shrinks with
+    // its depth, or the crossveins across the close trunks lie too obtuse to place (#49)
+    const slant = roof ? G.slant * Math.min(1, roofPts.hw / 0.22) : G.slant;
+    const nx = G.nx0, nodal = ['N0', 'N1', 'N2', 'N3'].map((id, i) => g.node(id, nx - slant * i / 3, lerp(0.14, 0.72, i / 3)));
     // the four basal trunks (Sc+R, M, CuA, CuP and the M+CuA stem) at the outline weight on the forewing, as heavy as the
     // reference draws them (#26: at SW.D they read as thin radiating lines); the hindwing's stay at SW.D. `heavy` now
     // weights the nodal line, the chain of crossveins across the trunks' ends
@@ -4387,9 +4544,12 @@ function wingsCicada(C) {   // (type === 'cicada')
     }
     // nodal line: Sc+R -> M -> CuA -> CuP as one `then` chain at one slant; the basal rungs (m-cua in the median cell,
     // the optional Sc+R - M rung in the radial cell); the ulnar row of rungs across the apical lanes
-    const named = [{ a: 'ScR', ua: nx - 0.004, b: 'M', ub: nx - G.slant / 3 - 0.004, reach: 0.03, sw: wN, bow: 0, then: ['CuA', 'CuP'] }];
-    for (let q = 0; q < G.nxb; q++) named.push({ a: 'M', ua: lerp(0.45, 0.85, (q + 0.5) / G.nxb) * nx, b: 'CuA', reach: 0.04, sw: SW.F });
-    if (G.scr) named.push({ a: 'ScR', ua: 0.62 * nx, b: 'M', reach: 0.04, sw: SW.F });
+    const named = [{ a: 'ScR', ua: nx - 0.004, b: 'M', ub: nx - slant / 3 - 0.004, reach: 0.03, sw: wN, bow: 0, then: ['CuA', 'CuP'] }];
+    // the basal rungs; on a roofed tegmen the basal cells are narrow (the claval margin runs in to the midline), so they
+    // sit further out where the cells open (#49)
+    const rb = roof ? [0.68, 0.9, 0.8] : [0.45, 0.85, 0.62];
+    for (let q = 0; q < G.nxb; q++) named.push({ a: 'M', ua: lerp(rb[0], rb[1], (q + 0.5) / G.nxb) * nx, b: 'CuA', reach: 0.04, sw: SW.F });
+    if (G.scr) named.push({ a: 'ScR', ua: rb[2] * nx, b: 'M', reach: 0.04, sw: SW.F });
     if (G.ulnar && !d.hind) { const t0 = randRange(0.45, 0.6); for (let i = 0; i + 1 < apical.length; i++) { const p = apical[i], q = apical[i + 1]; named.push({ a: p.id, ua: lerp(p.u0, p.u1, t0), b: q.id, ub: lerp(q.u0, q.u1, t0), reach: 0.05, sw: SW.F }); } }
     const grown = growVeins(g, { lanes, named, forks: 0, uOpen: nx, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0, noSites: true });
     // anal veins: short, in the clavus (cic-cicada: they end on the claval margin within the basal fifth, #26)
@@ -4400,7 +4560,7 @@ function wingsCicada(C) {   // (type === 'cicada')
     if (!d.hind) foreGrown = grown;
   }
   meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0 };
-  meta.wingSig = ['cic', G.heavy ? 1 : 0, Math.round(sweep / 6), Math.round(G.spread / 5), nA, G.nM, G.cuFork ? 1 : 0, G.ulnar ? 1 : 0, G.nxb, G.anal, G.ambGap ? 1 : 0, foreGrown.joins.length, Math.round(G.tipY * 5), Math.round(G.sharp * 2),
+  meta.wingSig = ['cic', B.wing.set, B.wing.shape, G.heavy ? 1 : 0, Math.round(theta / 6), Math.round(G.spread / 5), nA, G.nM, G.cuFork ? 1 : 0, G.ulnar ? 1 : 0, G.nxb, G.anal, G.ambGap ? 1 : 0, foreGrown.joins.length, Math.round(G.tipY * 5), Math.round(G.sharp * 2),
     Math.round(G.nx0 * 10), Math.round(G.slant * 10), Math.round(G.hw * 50), Math.round(G.hindL * 10), Math.round(G.inset * 20), G.mcuFork ? 1 : 0, G.scr ? 1 : 0, Math.round(G.bow * 100)].join(',');
 }
 

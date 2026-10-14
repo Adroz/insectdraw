@@ -243,7 +243,14 @@ margin-terminating vein ends on an outline sample.
   stem) to a nodal line that is one chain of crossveins at a single slant, the
   apical veins leaving the nodal nodes through short stems and ending on the
   ambient vein (a lane along the inset outline), the optional ulnar row across
-  them, peripheral membrane left blank, anal veins to the clavus.
+  them, peripheral membrane left blank, anal veins to the clavus. The wing set
+  is a body gene (#49, `docs/research-cicada-habitus.md`): spread, half-open, or
+  roofed at rest (the tegmen laid back over the abdomen, inner margins meeting
+  along the midline, the hindwing hidden), with a narrow pointed or broad round
+  forewing; the family (cicadine with tymbal covers, small slender cicadettine,
+  platypleurine with a flared pronotal collar), the abdomen's taper (barrel,
+  cone, spindle) and hatched mesonotum markings (obconical spots, M mark) vary
+  the body.
 - **Damselfly** — the dragonfly model on petiolate (stalked) wings: the fan
   leaves the end of the petiole from two fused stems, a quadrilateral below the
   arculus, and ladders nearly everywhere with a two-row mesh only at the tip.
