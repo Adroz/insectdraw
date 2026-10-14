@@ -349,7 +349,7 @@ added step 9 (#72).
 - It sees ink, not anatomy: a wing set swung by 10° moves it as much as a new abdomen family. That is the point (the
   eye sees the same), but a ticket cannot buy its way past the floor with jitter that is not anatomy; every change
   still answers to the references, the sheet and `tests/check.js`.
-- It is not a gate. Wiring it into `tests/check.js` waits until the eight steps below have landed and the floor has
+- It is not a gate. Wiring it into `tests/check.js` waits until the nine steps below have landed and the floor has
   been re-tuned on the result.
 
 **How a ticket uses it.** Before: `node tests/perceptual.js 60 --type <type> --pairs 3` on main, and
@@ -474,9 +474,10 @@ rules for all of them:
    wings, which the wing block may only stipple). Acceptance adds a pose count: at least three leg-pose families
    each on ≥ 15% of 300 seeds.
 
-9. **Grasshopper: tegmen length, tetrigid pronotum, ovipositor and wing set, #72** (9.44 after #22 and #23). Added
-   by #57, which re-measured the grasshopper on `backlog` at bdd7f7c, after #22 (tegmen, hindwing fan, pronotum
-   saddle) and #23 (hind femur, antennae) merged. `node tests/perceptual.js 60 --type grasshopper`, main at 4a9ad53 →
+9. **Grasshopper: tegmen length, tetrigid pronotum, ovipositor and wing set, #72** (9.44 after #22 and #23). Appended
+   after steps 1–8 rather than ranked among them (their numbers are already in their tickets). Added by #57, which
+   re-measured the grasshopper on `backlog` at bdd7f7c, after #22 (tegmen, hindwing fan, pronotum saddle) and #23
+   (hind femur, antennae) merged. `node tests/perceptual.js 60 --type grasshopper`, main at 4a9ad53 →
    backlog:
 
    | block | min | closest pair (backlog) | sheet9 (backlog) | body min |
