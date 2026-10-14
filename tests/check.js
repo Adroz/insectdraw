@@ -63,6 +63,13 @@ const ODO_NOUNS = { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Spr
 const ODO_LADDER_MIN = 5;   // antenodals on a ladder wing (the ticket's 5-9 on the damselflies it calls a ladder)
 const ODO_Q_GAP = 0.02;   // the quadrilateral's proximal side within this of the arculus (span fractions)
 const odoSeen = {};   // damselfly family -> plates odoAntenodal saw, for POST.odoAntenodal
+// #18, from the references (odo-anax-ris1921, odo-dragonfly) and the 2026-10-07 audit, stated here rather than read from the engine:
+// mesh cells under 3 plate px read as stipple on the panel (the libellulid end of the cells gene drew ~2 px); an anisopteran
+// hindwing is widest at its base, its anal lobe against the body (the chord a tenth of the way out is at least ODO_LOBE of
+// the widest, which lies in the basal third); the fore and hind wing outlines meet only near the roots (no overlap past
+// ODO_ROOT of the hindwing's span from its root; it ran to 35-40%); the pterostigma is 4-8% of the span (it reached 11-12%)
+const ODO_CELL_PX = 3, ODO_LOBE = 0.9, ODO_LOBE_AT = 0.1, ODO_ROOT = 0.15, ODO_STIGMA = 0.08;
+const odoRun = { cell: Infinity, cellSeed: 0, overlap: 0, overlapSeed: 0 };   // over the run, for the report (POST.odoMesh)
 const ODO_MIN = 40;   // damselfly plates a run needs before a family with no plate fails rather than being reported
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
@@ -569,6 +576,63 @@ const CHECKS = {
     one(meta.wingStats, '');
     one(dev.meta.device.wingStats, 'device plate: ');   // pass 2's geometry
   },
+  // Odonata mesh (#18): the narrowest cell laid out on either wing (wingStats.cellMin, body units: the closest two
+  // neighbouring sites of a mesh or a ladder, i.e. the cell's width across their shared crossvein) at the plate scale
+  odoMesh(meta, svg, fail, { seed }) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const c = meta.wingStats && meta.wingStats.cellMin;
+    if (!(typeof c === 'number' && isFinite(c))) return fail('odonate wingStats has no cellMin');
+    const px = c * meta.scale;
+    if (px < odoRun.cell) { odoRun.cell = px; odoRun.cellSeed = seed; }
+    if (px < ODO_CELL_PX) fail('odonate mesh cell ' + px.toFixed(2) + ' px at plate scale (min ' + ODO_CELL_PX + ')');
+  },
+  // Odonata hindwing (#18): an anisopteran hindwing (meta.wingOutlines[1], body coordinates) has an anal lobe: its chord,
+  // measured across the axis from the root (the middle of the outline's points nearest the body) to the farthest point,
+  // is widest in the basal third and no narrower than ODO_LOBE of that a tenth of the way out
+  odoHindwing(meta, svg, fail) {
+    if (meta.type !== 'dragonfly') return;
+    const hw = meta.wingOutlines && meta.wingOutlines[1];
+    if (!hw) return fail('dragonfly plate has no hindwing outline');
+    const xMin = Math.min(...hw.map(p => p[0])), near = hw.filter(p => p[0] < xMin + 1);
+    const root = [near.reduce((a, p) => a + p[0], 0) / near.length, near.reduce((a, p) => a + p[1], 0) / near.length];
+    const tip = hw.reduce((b, p) => dist(p, root) > dist(b, root) ? p : b, hw[0]), span = dist(tip, root);
+    const u = [(tip[0] - root[0]) / span, (tip[1] - root[1]) / span], v = [-u[1], u[0]];
+    const chord = t => {   // extent across the axis of the outline's crossings of the station t
+      const d = t * span, ys = [];
+      for (let i = 0; i < hw.length; i++) {
+        const a = hw[i], b = hw[(i + 1) % hw.length], da = (a[0] - root[0]) * u[0] + (a[1] - root[1]) * u[1], db = (b[0] - root[0]) * u[0] + (b[1] - root[1]) * u[1];
+        if ((da - d) * (db - d) > 0 || da === db) continue;
+        const f = (d - da) / (db - da), q = [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f];
+        ys.push((q[0] - root[0]) * v[0] + (q[1] - root[1]) * v[1]);
+      }
+      return ys.length < 2 ? 0 : Math.max(...ys) - Math.min(...ys);
+    };
+    let best = 0, bestT = 0;
+    for (let t = 0.02; t < 0.98; t += 0.01) { const c = chord(t); if (c > best) { best = c; bestT = t; } }
+    if (bestT > 1 / 3) fail('dragonfly hindwing widest at ' + Math.round(bestT * 100) + '% of the span, not in the basal third');
+    const lobe = chord(ODO_LOBE_AT) / best;
+    if (lobe < ODO_LOBE) fail('dragonfly hindwing has no anal lobe: the chord at ' + ODO_LOBE_AT * 100 + '% of the span is ' + lobe.toFixed(2) + ' of the widest (min ' + ODO_LOBE + ')');
+  },
+  // Odonata wing overlap (#18): no point of either outline (meta.wingOutlines[0..1]) lies inside the other farther than
+  // ODO_ROOT of the hindwing's span (body x, root to tip) from the hindwing's root
+  odoOverlap(meta, svg, fail, { seed }) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const [fw, hw] = meta.wingOutlines || [];
+    if (!fw || !hw) return fail('odonate plate has fewer than two wing outlines');
+    const x0 = Math.min(...hw.map(p => p[0])), x1 = Math.max(...hw.map(p => p[0]));
+    let far = 0;
+    for (const [a, b] of [[fw, hw], [hw, fw]]) for (const p of a) if (inPoly(p, b)) far = Math.max(far, (p[0] - x0) / (x1 - x0));
+    if (far > odoRun.overlap) { odoRun.overlap = far; odoRun.overlapSeed = seed; }
+    if (far > ODO_ROOT) fail('odonate fore and hind wings overlap to ' + Math.round(far * 100) + '% of the hindwing span (max ' + ODO_ROOT * 100 + '%)');
+  },
+  // Odonata pterostigma (#18): wingStats.stigma, the longest pterostigma on either wing along the costa, as a fraction of
+  // that wing's span (root to apex), is at most ODO_STIGMA
+  odoStigma(meta, svg, fail) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const st = meta.wingStats && meta.wingStats.stigma;
+    if (typeof st !== 'number') return fail('odonate wingStats has no stigma length');
+    if (st > ODO_STIGMA) fail('odonate pterostigma ' + (st * 100).toFixed(1) + '% of the span (max ' + ODO_STIGMA * 100 + '%)');
+  },
   // Odonata antenodals as the family cue (#17): a coenagrionid damselfly has exactly two antenodals (Ax1, Ax2) and a
   // calopterygid a ladder, as does every dragonfly (wingStats.antMin / .antMax: the fewest and most antenodals placed on
   // one wing); the common name's noun is one of the drawn family's; and the damselfly quadrilateral starts at the arculus
@@ -804,6 +868,11 @@ const POST = {
     if (missing.length && total >= HYM_MIN) fail('no Hymenoptera plate of family ' + missing.join(', ') + ' in ' + total + ' Hymenoptera plates: the cell-plan assertions for it never ran');
     console.log('Hymenoptera cell plans asserted on:', fams.map(f => f + ' ' + (hymSeen[f] || 0)).join(', ') +
       (missing.length && total < HYM_MIN ? '; too few Hymenoptera plates (' + total + ' < ' + HYM_MIN + ') to require ' + missing.join(', ') : ''));
+  },
+  // the report for CHECKS.odoMesh / odoOverlap: the narrowest odonate mesh cell and the farthest overlap seen
+  odoMesh() {
+    console.log('odonate mesh: narrowest cell ' + (odoRun.cell === Infinity ? 'none' : odoRun.cell.toFixed(2) + ' px (seed ' + odoRun.cellSeed + ', floor ' + ODO_CELL_PX + ')') +
+      '; farthest fore/hind overlap ' + Math.round(odoRun.overlap * 100) + '% of the hindwing span (seed ' + odoRun.overlapSeed + ', max ' + ODO_ROOT * 100 + '%)');
   },
   // odoAntenodal asserts a damselfly family only on its own plates: both need a plate once the run has ODO_MIN damselflies
   odoAntenodal(fail) {
