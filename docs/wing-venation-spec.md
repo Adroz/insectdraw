@@ -147,9 +147,9 @@ Rules (implemented 2026-10-02 on `growVeins` v2, after Hoffmann et al. 2018; see
   structural crossveins with their own wide band (75–179°, the subnodus 60–179°), so the rung band
   never drops them; `meta.wingStats.discoidal` / `.subnodus` count the wings that have them and
   `tests/check.js` (`odoCells`) wants 2 of 2 on the plate and on the device plate. The damselfly's
-  antenodal regime is the family: a coenagrionid (70%) has exactly two antenodals, Ax1 just past
-  the stalk and Ax2 over the arculus, both heavy (Ris plate 2); a calopterygid (30%) the ladder on a
-  short stalk (0.07–0.11 of the span). Every dragonfly has a ladder. `meta.fam` carries it and the
+  antenodal regime is the family (`P.fam`, rolled with the body since #48): a coenagrionid, lestid or
+  platycnemidid has exactly two antenodals, Ax1 just past the stalk and Ax2 over the arculus, both heavy
+  (Ris plate 2); a calopterygid the ladder on a broad wing with a short stalk (0.07–0.11 of the span). Every dragonfly has a ladder. `meta.fam` carries it and the
   common name's noun follows it (Bluet / Damsel / Dancer / … vs Demoiselle / Jewelwing / Rubyspot).
   The triangle's base lies distal to the arculus on both wings (the hindwing's sat 0.03 of the span
   basal to it; `wingStats.triOff` > 0), and the discoidal sides are drawn heavy (O) so the cell reads.

@@ -384,6 +384,28 @@ rules for all of them:
    0–12°, both on the root, nothing in the venation), bolder dorsal abdomen pattern families (paired spots, rings,
    dark tip) as hatch bands, leg pose basket / tucked under the thorax. Grounded in `research-thorax.md` (Odonata),
    `research-head-eyes.md` (gomphid eyes); the abdomen families need a note.
+
+   **Done (2026-10-14), floor not reached.** Implemented as specified (`docs/research-odonata-habitus.md`, refs
+   `docs/ref/odo-hab-*`): `P.fam` for both suborders, the abdomen width profiles (`ABD_PROFILES`), rings and a 2-4
+   segment dark tip, the wing set (`B.wingSet`, the entry's `wingSet`), the tucked leg pose and the platycnemidid
+   tibiae; `odoHabitus` in `tests/check.js` asserts them. Measured with `tests/perceptual.js`, N = 60, before (backlog
+   at e8b95af) → after:
+
+   | type | min 1–60 | min 61–120 | sheet9 1–60 | sheet9 61–120 | median 1–60 | body min 1–60 | body sheet9 1–60 |
+   |---|---|---|---|---|---|---|---|
+   | dragonfly | 6.05 → 6.07 | 7.54 → 6.92 | 9.02 → 12.40 | 9.96 → 11.41 | 21.52 → 30.86 | 4.54 → 7.22 | 9.38 → 10.21 |
+   | damselfly | 5.41 → 5.21 | 7.71 → 7.42 | 9.36 → 11.00 | 10.14 → 11.01 | 21.86 → 28.44 | 4.61 → 4.02 | 7.00 → 6.95 |
+
+   `sheet9` and the median rise on both blocks and a seeds 1–9 sheet reads as about 6–7 insects (was 3) for the
+   dragonfly and 5–6 (was 2–3) for the damselfly, but the minimum stays where it was. Why: the thumbnail's ink is
+   mostly wing (outline and mesh), so the closest pair is always two plates whose wings are set at nearly the same
+   angles, whatever their abdomens (dragonfly 4,51: a waisted corduliid and a broad libellulid, 6.07). The wing set has
+   little room: a dragonfly's broad wings on close roots need about 40° between them to meet only at the roots (#18,
+   `ODO_ROOT`), and its hindwing cannot sweep past `ODO_HIND_MAX` (22°) without its anal lobe narrowing or reaching over
+   the abdomen, so most forewing sweeps resolve to the same drawn pair. Raising the minimum needs a lever on the wings
+   themselves, outside this step: wing outline families per family (the aeshnid's narrow hindwing base against the
+   libellulid's broad one), pigment bands or basal patches as hatch (*Calopteryx*, *Libellula*), and the zygopteran
+   resting pose with the wings closed over the abdomen.
 2. **Cicada: wing set, body breadth, mesonotum pattern, #49** (6.20). Same tented spread and the same stout body on all
    nine. Genes: wing set from spread to half-open to roofed over the abdomen (in dorsal view the tegmina cover the
    abdomen and meet along the midline, the hindwings hidden: the resting pose of most cicada plates); forewing

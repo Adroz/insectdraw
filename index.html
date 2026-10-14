@@ -839,7 +839,9 @@ function legEls(attach, spec, meta) {
   // the drawn femur, for tests/check.js: its length and its outline's width every twentieth of the way (s = 0 at the trochanter)
   const fg = geoms[0], fem = { L: fg.L, widths: [], herring: fg.herring || null, teeth: fg.teeth || 0 };
   for (let i = 0; i <= 20; i++) fem.widths.push(vlen(sub(bez3(fg.e1, i / 20), bez3(fg.e2, i / 20))));
-  if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip, fem });
+  const tg = geoms[1], tib = { L: tg.L, wMax: 0 };   // the drawn tibia: its length and widest width (the platycnemidid's, #48)
+  for (let i = 0; i <= 20; i++) tib.wMax = Math.max(tib.wMax, vlen(sub(bez3(tg.e1, i / 20), bez3(tg.e2, i / 20))));
+  if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip, fem, tib });
   return els;
 }
 // The joint polyline legEls would draw, without drawing it: attach, coxa, trochanter, femur tip (index 3), tibia tip,
@@ -2138,7 +2140,20 @@ function insectName(seed, type, variant, fam, genes) {
 //     and base (adj overrides the shared COMMON_ADJ list, qual the NAME_QUAL qualifiers); famNouns / famBase: the nouns
 //     (and base) per drawn family, required when the order rolls two or more families, the lists disjoint (#28;
 //     tests/check.js nameFamilies); variantNames: the same tables per variant.
-const LEGS_ODONATA = { spines: 1, spineSeg: 'both', spineSide: 'inner', spineLen: [0.8, 1.2], spineSp: [3.5, 5.5], spurs: [0, 0], tarsomeres: [3, 3], tibR: [0.92, 1.08], hindK: [1.2, 1.4], poses: { basket: 1 } };   // the odonate leg plan, shared by dragonfly and damselfly
+// the odonate leg plan, shared by dragonfly and damselfly: the prey basket (all legs forward, spread wide) or, #48, tucked:
+// every pair folded forward close against the thorax and the back of the head, as at rest (poseAng: the order's own angles
+// for that pose, per pair, over LEG_POSES'; legs folded under the thorax out of sight would leave only half-hidden tarsi)
+const LEGS_ODONATA = { spines: 1, spineSeg: 'both', spineSide: 'inner', spineLen: [0.8, 1.2], spineSp: [3.5, 5.5], spurs: [0, 0], tarsomeres: [3, 3], tibR: [0.92, 1.08], hindK: [1.2, 1.4], poses: { basket: 2, tucked: 1 },
+  poseAng: { tucked: [{ F: [-72, -58], tib: [-112, -92], T: [-15, -5] }, { F: [-55, -40], tib: [-110, -90], T: [-15, -5] }, { F: [-30, -15], tib: [-100, -80], T: [-15, -5] }] } };
+// #48 abdomen width profiles (docs/research-odonata-habitus.md): anchors [t, half width / the widest] up to the tip, which
+// the tip shape adds; rod is the order's own anchors (P.abdAnchors) with the widest point slid as before. broad: the
+// libellulid abdomen, widest at S3-S4 and tapering from there; club: the gomphid's slender mid abdomen and S1-S2 swelling,
+// the club (S7-S9) coming from the clubbed tip; waisted: the corduliid / aeshnid constriction at S3 behind swollen S1-S2.
+const ABD_PROFILES = {
+  broad: [[0, 0.55], [0.06, 0.78], [0.24, 1], [0.45, 0.9], [0.62, 0.72]],
+  club: [[0, 0.85], [0.07, 1], [0.2, 0.62], [0.45, 0.55]],
+  waisted: [[0, 0.85], [0.07, 1], [0.19, 0.55], [0.32, 0.68], [0.6, 0.7]],
+};
 const ORDERS = {
   beetle: {
     proportions: P => {
@@ -2329,11 +2344,27 @@ const ORDERS = {
         thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.6]],
         abdAnchors: [[0, 0.85], [0.1, 1], [0.5, 0.9], [0.85, 0.85], [0.97, 0.7], [1, 0]],
         antenna: 'setaceous', antLen: 9 * jitter(0.2), wingLen: 235 * jitter(0.08) });
+      // #48 the anisopteran families (docs/research-odonata-habitus.md): aeshnid long and slender, libellulid short with a
+      // broad flattened abdomen 1.8-2.5x the rod's width, gomphid and corduliid near the rod's length (the club and the
+      // waist narrow the profile, so the width factor keeps the slender part about the rod's width)
+      P.fam = pick(['aeshnid', 'libellulid', 'gomphid', 'corduliid']);
+      const k = { aeshnid: [1.08, 1.2, 0.8, 0.95], libellulid: [0.68, 0.8, 1.8, 2.5], gomphid: [0.95, 1.05, 1.35, 1.55], corduliid: [0.9, 1.0, 1.1, 1.3] }[P.fam];
+      P.abdLen *= randRange(k[0], k[1]); P.abdW *= randRange(k[2], k[3]);
     },
-    abd: { tips: { pointed: 2, rounded: 2, clubbed: 2, truncate: 1 }, marks: { plain: 2, banded: 2, spotted: 2, striped: 1 }, peak: [0.1, 0.3], wK: [0.85, 1.2], start: [0.05, 0.1], seg: [8, 8], ticks: 0.5 },
+    abd: { tips: { pointed: 2, rounded: 2, clubbed: 2, truncate: 1 }, marks: { plain: 1, banded: 2, spotted: 2, rings: 2, tipdark: 1, striped: 1 }, peak: [0.1, 0.3], wK: [0.85, 1.2], start: [0.05, 0.1], seg: [8, 8], ticks: 0.5, profiles: { rod: 1 }, tipDark: [2, 4] },
+    abdFams: {
+      aeshnid: { profiles: { rod: 3, waisted: 1 }, tips: { pointed: 2, rounded: 2, truncate: 1 } },
+      libellulid: { profiles: { broad: 1 }, tips: { pointed: 2, rounded: 1 }, wK: [1.0, 1.15], marks: { plain: 1, banded: 2, spotted: 3, rings: 1, tipdark: 1 } },
+      gomphid: { profiles: { club: 1 }, tips: { clubbed: 1 } },
+      corduliid: { profiles: { waisted: 1 }, tips: { clubbed: 2, rounded: 1 } },
+    },
     thorax: { front: [0.5, 0.7], peak: [0.4, 0.55], hump: [0, 0.05], waist: [0, 0], lenK: [0.95, 1.2] },
-    head: { outline: 'transverse', ratio: [1.55, 1.95], cx: [0.24, 0.27], rx: [0.23, 0.26], ry: [0.38, 0.45], cy: [0.03, 0.08], ocelli: 3, oc: 'odo', bump: [[0.18, 0.24], [0.1, 0.15]], notch: 0.6, ocR: [0.9, 1.3], labrum: [1, 2], styles: { lattice: 3, stipple: 2 }, apart: 0.15, hl: [-0.25, -0.5], hlR: [0.26, 0.34] },
+    head: { outline: 'transverse', ratio: [1.55, 1.95], cx: [0.24, 0.27], rx: [0.23, 0.26], ry: [0.38, 0.45], cy: [0.03, 0.08], ocelli: 3, oc: 'odo', bump: [[0.18, 0.24], [0.1, 0.15]], notch: 0.6, ocR: [0.9, 1.3], labrum: [1, 2], styles: { lattice: 3, stipple: 2 }, apart: 0, hl: [-0.25, -0.5], hlR: [0.26, 0.34] },
+    // #48: gomphid eyes well apart (research-head-eyes.md), aeshnid eyes meeting along a long seam (larger eyes)
+    headFams: { gomphid: { apart: 1 }, aeshnid: { rx: [0.24, 0.26], ry: [0.42, 0.46] } },
     legs: { base: LEGS_ODONATA },
+    // #48 wing set (degrees, + swept back toward the tail): the forewing's sweep at its root, the hindwing a further hw
+    wingSet: { fw: [-10, 15], hw: [0, 12] },
     ant: { base: { ref: 'hw', len: [0.12, 0.22], seg: [4, 7], socket: [0.14, 0.12], kinds: { setaceous: 1 } } },
     headScaleP5: 0.99,
     wingRoots: [0.5, 0.8],
@@ -2344,6 +2375,7 @@ const ORDERS = {
       tails: [['gomphus', 'm'], ['lestes', 'm'], ['themis', 'f'], ['ptera', 'f'], ['cordulia', 'f'], ['aeschna', 'f'], ['neura', 'f'],
         ['agrion', 'n'], ['cordia', 'f'], ['libellula', 'f'], ['cnemis', 'f'], ['anax', 'm']],   // -agrion is neuter: see the damselfly's names
       common: { nouns: ['Hawker', 'Darter', 'Skimmer', 'Emperor', 'Chaser', 'Clubtail', 'Emerald', 'Goldenring'], base: '',
+        famNouns: { aeshnid: ['Hawker', 'Emperor', 'Darner'], libellulid: ['Darter', 'Skimmer', 'Chaser'], gomphid: ['Clubtail'], corduliid: ['Emerald'] },   // the noun follows the drawn family (#48)
         adj: ['Migrant', 'Brown', 'Ruddy', 'Black', 'Keeled', 'Broad-bodied', 'Vagrant', 'Emerald', 'Moorland', 'Golden-ringed', 'Yellow-winged', 'Red-veined', 'White-faced', 'Blue-eyed', 'Amber-winged'] },
     },
   },
@@ -2545,11 +2577,17 @@ const ORDERS = {
         thoraxAnchors: [[0, 0.5], [0.4, 1], [0.9, 0.9], [1, 0.6]],
         abdAnchors: [[0, 0.85], [0.1, 1], [0.5, 0.95], [0.9, 0.9], [0.97, 0.8], [1, 0]],
         antenna: 'setaceous', antLen: 8 * jitter(0.2), wingLen: 230 * jitter(0.08) });
+      // #48 the zygopteran families (docs/research-odonata-habitus.md): coenagrionid (the thin rod), lestid (wings held half
+      // open), calopterygid (broad unstalked wings, a longer abdomen), platycnemidid (broad flattened mid and hind tibiae).
+      // The family is also the antenodal regime the wing block draws (#17: two antenodals, a ladder on the calopterygid).
+      P.fam = pick(['coenagrionid', 'lestid', 'calopterygid', 'platycnemidid']);
+      P.abdLen *= randRange(...{ coenagrionid: [0.88, 1.05], lestid: [1.04, 1.16], calopterygid: [1.08, 1.2], platycnemidid: [0.82, 0.95] }[P.fam]);   // the abdomen against the wings: long in Lestes and Calopteryx, short in Platycnemis
     },
-    abd: { tips: { rounded: 2, truncate: 2, pointed: 1 }, marks: { plain: 2, striped: 2, banded: 2 }, peak: [0.1, 0.3], wK: [0.85, 1.2], start: [0.05, 0.1], seg: [8, 8], ticks: 0.3 },
+    abd: { tips: { rounded: 2, truncate: 2, pointed: 1 }, marks: { plain: 1, striped: 1, banded: 1, rings: 3, tipdark: 2, spotted: 1 }, peak: [0.1, 0.3], wK: [0.85, 1.2], start: [0.05, 0.1], seg: [8, 8], ticks: 0.3, profiles: { rod: 1 }, tipDark: [2, 4] },
     thorax: { front: [0.4, 0.55], peak: [0.4, 0.55], hump: [0, 0.05], waist: [0, 0], lenK: [0.95, 1.2] },
     head: { outline: 'transverse', ratio: [2.3, 2.9], cx: [0.36, 0.4], rx: [0.09, 0.11], ry: [0.38, 0.46], cy: [0, 0.04], ocelli: 3, oc: 'triangle', ocY: [0.3, 0.45], styles: { lattice: 3, stipple: 2 } },
-    legs: { base: LEGS_ODONATA },
+    legs: { base: LEGS_ODONATA, platycnemidid: { tibFlat: [2.1, 2.6] } },   // tibFlat: the mid and hind tibiae this many times as wide, leaf-like (#48)
+    wingSet: { fw: [-10, 15], hw: [0, 12], fams: { lestid: { fw: [20, 35], hw: [0, 8] } } },   // #48: the lestid holds its wings half open
     ant: { base: { ref: 'hw', len: [0.12, 0.22], seg: [4, 7], socket: [0.12, 0.25], kinds: { setaceous: 1 } } },
     headScaleP5: 1.02,
     wingRoots: [0.5, 0.78],
@@ -2562,7 +2600,8 @@ const ORDERS = {
       // a feminine: puella is a noun in apposition and does not agree. The dragonfly's tails share this entry's reading.
       tails: [['lestes', 'm'], ['agrion', 'n'], ['neura', 'f'], ['cnemis', 'f'], ['basis', 'f'], ['phlebia', 'f'], ['ptera', 'f'], ['nura', 'f'], ['cera', 'f'], ['pteryx', 'f']],
       common: { nouns: ['Demoiselle', 'Bluet', 'Spreadwing', 'Damsel', 'Featherleg', 'Jewelwing', 'Bluetail', 'Redtail'], base: '',
-        famNouns: { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'] },   // the noun follows the drawn antenodals (#17)
+        famNouns: { coenagrionid: ['Bluet', 'Damsel', 'Dancer', 'Forktail', 'Sprite', 'Bluetail', 'Redtail'], calopterygid: ['Demoiselle', 'Jewelwing', 'Rubyspot'],
+          lestid: ['Spreadwing', 'Reedling'], platycnemidid: ['Featherleg', 'Threadtail'] },   // the noun follows the drawn family (#17, #48)
         adj: ['Azure', 'Red', 'Emerald', 'White-legged', 'Variable', 'Blue-tailed', 'Willow', 'Dainty', 'Dusky', 'Copper', 'Red-eyed', 'Orange', 'Familiar', 'Slender', 'Sedge'] },
     },
   },
@@ -2617,16 +2656,19 @@ function rollBodyGenes(type, P) {
   A.seg = randInt(abdRanges.seg[0], abdRanges.seg[1]); A.startT = rr(abdRanges.start); A.bow = randRange(0.08, 0.3); A.sw = rng() < 0.25 ? SW.F : SW.D; A.double = rng() < 0.25;
   A.ticks = rng() < abdRanges.ticks ? { spacing: randRange(2.5, 4), len: randRange(3, 5) } : null;
   A.keel = isOdo || ((type === 'grasshopper' || type === 'cicada' || type === 'mayfly') && rng() < 0.4);
-  // profile anchors: slide the widest point, then replace the tail with the tip shape
+  A.profile = abdRanges.profiles ? weighted(abdRanges.profiles) : null;   // #48 width profile family (ABD_PROFILES); only the orders whose table has one draw it
+  // profile anchors: slide the widest point (the order's own profile), then replace the tail with the tip shape
   {
-    const base = P.abdAnchors, peak0 = base.find(a => a[1] === 1)[0], peak = A.peak;
-    const remap = t => t <= peak0 ? t * peak / peak0 : peak + (t - peak0) * (1 - peak) / (1 - peak0);
+    const own = !A.profile || A.profile === 'rod', base = own ? P.abdAnchors : ABD_PROFILES[A.profile], peak0 = base.find(a => a[1] === 1)[0], peak = A.peak;
+    const remap = t => !own ? t : t <= peak0 ? t * peak / peak0 : peak + (t - peak0) * (1 - peak) / (1 - peak0);
     const cut = A.tip === 'clubbed' ? 0.5 : 0.72;
     let anchors = base.map(([t, f]) => [remap(t), f]).filter(a => a[0] < cut);
     const tails = { pointed: [[0.8, 0.78], [0.92, 0.45], [0.98, 0.18], [1, 0]], rounded: [[0.8, 0.9], [0.93, 0.62], [0.99, 0.28], [1, 0]],
       truncate: [[0.86, 0.9], [0.97, 0.78], [1, 0.35]], clubbed: [[0.62, randRange(0.55, 0.7)], [0.82, randRange(0.88, 1)], [0.94, 0.7], [1, 0]] };
-    const lastT = anchors[anchors.length - 1][0];
-    anchors = anchors.concat(tails[A.tip].filter(a => a[0] > lastT + 0.04));
+    const lastT = anchors[anchors.length - 1][0], lastF = anchors[anchors.length - 1][1];
+    // a profile narrower than the rod at its cut takes the tail at its own width (the club keeps its swelling)
+    const tailK = own || A.tip === 'clubbed' ? 1 : Math.min(1, lastF / 0.9);
+    anchors = anchors.concat(tails[A.tip].filter(a => a[0] > lastT + 0.04).map(([t, f]) => [t, f * tailK]));
     if (abdRanges.petiole) {   // waist: the first two anchors set its width and length
       const k = randRange(0.6, 1.4), m = randRange(0.7, 1.5);
       anchors[0] = [0, Math.min(0.5, anchors[0][1] * k)]; anchors[1] = [Math.min(anchors[2][0] - 0.05, anchors[1][0] * m), Math.min(0.55, anchors[1][1] * k)];
@@ -2641,6 +2683,8 @@ function rollBodyGenes(type, P) {
   A.spot = { pos: randRange(0.3, 0.6), rx: randRange(0.14, 0.26), every: rng() < 0.7 ? 1 : 2 };
   A.stripe = { n: randInt(1, 3), k: randRange(0.3, 0.65), hatch: rng() < 0.5 };
   A.tipDark = randInt(1, 3);
+  if (A.mark === 'rings') { A.band.part = randRange(0.4, 0.6); A.band.period = 1; A.band.phase = 0; }   // #48: a dark ring over the base of every segment (the banded hatch over part of each); drawn only on a ringed plate
+  if (A.mark === 'tipdark' && abdRanges.tipDark) A.tipDark = randInt(abdRanges.tipDark[0], abdRanges.tipDark[1]);   // the order's own dark-tip length in segments (odonates: S7-S10, #48); drawn only where the table has one
   A.hair = { spacing: randRange(2, 3.5), len: randRange(4, 7) };
   // terminalia
   A.ovipositor = null; A.cerci = null; A.filaments = null; A.appendages = null;
@@ -2655,7 +2699,8 @@ function rollBodyGenes(type, P) {
   if (type === 'mayfly') A.filaments = { n: rng() < 0.6 ? 3 : 2, len: randRange(0.6, 1.0), splay: randRange(10, 18) };
   if (isOdo) A.appendages = { len: randRange(8, 16), spread: randRange(3, 7) };
   B.sig.push(A.tip, A.mark, Math.round(A.peak * 10), Math.round(A.startT * 10), A.sw === SW.F ? 'f' : 'd', A.double ? 1 : 0, A.ticks ? 1 : 0, A.keel ? 1 : 0, A.waist || 0,
-    A.ovipositor ? Math.round(A.ovipositor.len / 10) : '-', A.cerci ? 1 : 0, A.filaments ? A.filaments.n : 0, A.mark === 'banded' ? A.band.period + ':' + A.band.phase : A.mark === 'striped' ? A.stripe.n : A.mark === 'tipdark' ? A.tipDark : 0);
+    A.ovipositor ? Math.round(A.ovipositor.len / 10) : '-', A.cerci ? 1 : 0, A.filaments ? A.filaments.n : 0, A.mark === 'banded' ? A.band.period + ':' + A.band.phase : A.mark === 'striped' ? A.stripe.n : A.mark === 'tipdark' ? A.tipDark : 0,
+    ...(A.profile ? [A.profile] : []));
   // ---- thorax: docs/research-thorax.md, "Rules derived" ----
   // Profile: the order's anchors re-rolled (pronotum front against the head, widest point, mesonotal hump, propodeal
   // waist, length); beetles roll a pronotum shape (the pronotum is the whole visible thorax), grasshoppers the
@@ -2916,6 +2961,8 @@ function rollBodyGenes(type, P) {
     if (corbicula && i === 2) { g.corbicula = true; g.basitarsus = true; g.spurs = 0; g.ang = F.corbAng; g.safe = F.corbSafe; }   // corbicula + flat basitarsus, posed from the family entry
     if (i === 2 && F.hindSafe) g.safe = F.hindSafe;   // the order's own hind-leg fallback (beetle: splayed wide of a broad abdomen, #24)
     if (i === 0 && F.foreAng) { g.poseAng = F.foreAng; g.safe = F.foreSafe; }   // the order's own foreleg angles for every pose it rolls, and its fallback (lacewing, #19)
+    if (F.poseAng) g.poseAng = Object.assign({}, g.poseAng, ...Object.keys(F.poseAng).map(k => ({ [k]: F.poseAng[k][i] })));   // the order's own angles for a pose, per pair (the odonate tucked pose, #48)
+    if (F.tibFlat && i > 0) g.tibFlat = rr(F.tibFlat);   // platycnemidid: flattened, leaf-like mid and hind tibiae (#48)
     if (type === 'mayfly' && i === 0 && B.pose === 'raised') g.ang = { F: [-88, -68], tib: [-100, -70], T: [-10, 10] };   // forelegs held straight out ahead
     if (type === 'cicada' && i === 0) {   // Cicadidae fore femora: stout (2.3-2.9x as long as deep, #26) and armed beneath with 2-3 strong teeth, on every plate; the old 10% unarmed roll is still drawn so the stream does not move
       const rolled = rng() < 0.9;
@@ -2935,7 +2982,15 @@ function rollBodyGenes(type, P) {
   B.sig.push(B.pose, fam || type, tarsomeres, Math.round(lenK * 5), B.thorax.subSeg, B.abd.seg, B.abd.ovipositor ? 1 : 0,
     ...(F.habitus ? ['p' + Math.round(P.headW / P.thoraxW * 10) + '/' + Math.round(P.abdW / P.thoraxW * 10)] : []),   // #12 (bee): head and abdomen to thorax width, tenths
     ...(F.legCap ? ['k' + (B.legCapped ? 1 : 0)] : []),   // whether the leg cap scaled this insect's legs down
-    ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4), Math.round(g.skew)].join('')));
+    ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4), Math.round(g.skew), g.tibFlat ? 'T' : ''].join('')));
+  // ---- wing set (#48): the order's wingSet ranges (a family's over them), the forewing's sweep at its root and the hindwing's
+  // further sweep, in degrees, + toward the tail; the wing block reads it and draws the venation unchanged ----
+  B.wingSet = null;
+  if (order.wingSet) {
+    const WS = Object.assign({}, order.wingSet, (order.wingSet.fams || {})[fam]);
+    B.wingSet = { fw: rr(WS.fw), hw: rr(WS.hw) };
+    B.sig.push('ws' + Math.round(B.wingSet.fw / 5) + ':' + Math.round(B.wingSet.hw / 4));
+  }
   // ---- elytra (#24): the puncture style of the striae, rolled last so every gene above keeps its draws ----
   B.elytra = null;
   if (order.elytra) {
@@ -3035,7 +3090,7 @@ function layoutBody(C) {
   const B = rollBodyGenes(type, P);
   meta.antenna = B.ant.kind;
   meta.recipe = P.fam;
-  meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam; the damselfly wing block sets it (its antenodal family, #17)
+  meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam; an odonate family is also its antenodal regime (#17, #48)
   meta.bodyGenes = B;
   if (B.wing) meta.cicada = { set: B.wing.set, shape: B.wing.shape, fam: P.fam, abdShape: P.abdShape, marks: null, collarY: null, tymbals: null };   // #49, filled in by the thorax and abdomen sections
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
@@ -3095,7 +3150,7 @@ function drawAbdomen(C) {
       const fp = v => Math.max(v, pitchFloor);   // floorPitch without recording: layout(s) records the drawn pitches
       for (let i = 0; i < n; i++) {
         const y0 = ys[i], y1 = ys[i + 1], segH = y1 - y0;
-        const banded = A.mark === 'banded' && i % A.band.period === A.band.phase;
+        const banded = (A.mark === 'banded' || A.mark === 'rings') && i % A.band.period === A.band.phase;   // rings: every segment's base (#48)
         const dark = A.mark === 'tipdark' && i >= n - A.tipDark;
         if (banded || dark) { const sp = fp(banded ? A.band.spacing : 2.6); for (let y = y0 + 3; y < y1 - 2; y += sp) { const hw = abdomen.hwAt(y) - 2; if (hw > 2) bowLine(y, hw, hw * bow, SW.F); } }
         else if (A.mark !== 'hairy' || segH > 10) {
@@ -3138,7 +3193,7 @@ function drawAbdomen(C) {
         // the last line at the segment's top (its segment line, or the membrane line under it) and the line at its end
         const sStart = edges[i].filter(e => e.y < y0 + ABD_MEMBRANE_DY + 0.01).pop() || null, sEnd = edges[i].find(e => e.y > y1 - 0.01) || null;
         const push = (c, k) => { out.push(bowLine(c.y, c.hw, c.hw * bow, SW.F)); const m = { y: c.y, mid: c.mid, k }; seg.push(m); return m; };
-        const banded = A.mark === 'banded' && i % A.band.period === A.band.phase;
+        const banded = (A.mark === 'banded' || A.mark === 'rings') && i % A.band.period === A.band.phase;   // rings: every segment's base (#48)
         const dark = A.mark === 'tipdark' && i >= n - A.tipDark;
         let firstCurve = null;
         if (banded || dark) {   // hatched band: bowed lines across the segment
@@ -3578,6 +3633,7 @@ function drawLegs(C) {
       }
       if (g.herringbone) spec.widths[2] = [5.5 * wk, 3.2 * g.flare * wk];
       if (g.corbicula) { spec.widths[2] = [4.5 * wk, 9.5 * wk]; spec.basitarsus = [7 * wk, 6 * wk]; }
+      if (g.tibFlat) spec.widths[2] = [4.2 * g.tibFlat * wk, 5 * g.tibFlat * wk];   // platycnemidid: a broad, flattened tibia (#48)
       return spec;
     };
     const rollDirs = (i, pose) => {
@@ -3593,6 +3649,7 @@ function drawLegs(C) {
     // widths, the antenna's at its base width) plus ANT_LEAN for the lean of a near-straight shaft, or no antenna pose
     // could clear it; the odonate basket is exempt like the midline rule below (a bristle antenna beside a wide head)
     const antX = P.headW * B.ant.socket[0] + (ANT_CLEAR + ANT_LEAN) + antBaseW(P.headW, B.ant.wK) / 2;
+    const exempt = () => isOdo && pose === 'basket';   // the odonate prey basket is exempt from the head rules (tiny beside its wide head); the tucked pose folds against the head, so it keeps clear of the sockets (#48)
     const legsOk = (joints, specs) => {
       const fy = joints.map(j => j[3][1]);
       if (!(fy[0] < fy[1] && fy[1] < fy[2])) return 'order';
@@ -3601,9 +3658,9 @@ function drawLegs(C) {
       for (let i = 0; i < 3; i++) for (let k = 0; k < joints[i].length; k++) {   // nothing on the mirror line; forelegs stay apart in front of the head
         const p = joints[i][k], need = halfW(specs[i], Math.max(1, k)) + 2;
         if (p[0] < (p[1] < 0 && !isOdo ? Math.max(need, P.headW * 0.3) : need)) return 'midline';   // the odonate basket is tiny beside its wide head
-        if (p[1] < 0 && !isOdo && p[0] < antX + halfW(specs[i], Math.max(1, k))) return 'socket';
+        if (p[1] < 0 && !exempt() && p[0] < antX + halfW(specs[i], Math.max(1, k))) return 'socket';
       }
-      if (!isOdo) for (let i = 0; i < 3; i++) for (let k = 2; k + 1 < joints[i].length; k++) {   // and where a segment crosses the head top
+      if (!exempt()) for (let i = 0; i < 3; i++) for (let k = 2; k + 1 < joints[i].length; k++) {   // and where a segment crosses the head top
         const a = joints[i][k], b = joints[i][k + 1];
         if ((a[1] < 0) !== (b[1] < 0) && lerpP(a, b, (0 - a[1]) / (b[1] - a[1]))[0] < antX + halfW(specs[i], k)) return 'socket';
       }
@@ -4851,15 +4908,16 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
     Math.round(G.uOpen * 10), Math.round(G.theta / 6), Math.round(G.spread / 6), Math.round(G.tipY * 6), Math.round(G.sharp * 2), Math.round(G.bulge * 10), Math.round(G.xStig * 10), Math.round(G.xMarg * 20), Math.round(G.len * 10)].join(',');
 }
 
-const DAM_LADDER = 0.3;   // share of damselflies drawn as calopterygids (antenodal ladder); the rest are coenagrionids (#17)
 const DAM_ARC = 0.08;   // the damselfly arculus, span fraction past the end of the stalk
 const ODO_ROOT = 0.12;   // the fore and hind wings overlap only this near the hindwing's root (fraction of its span; tests/check.js allows 0.15)
-const ODO_HIND_MAX = 22;   // the hindwing sweeps back at most this far for it (degrees); the forewing sweeps forward for the rest
+const ODO_HIND_MAX = 22;   // a dragonfly hindwing sweeps back at most this far (degrees; a damselfly's half of this past its wing set, #48); the forewing sweeps forward for the rest
+const ODO_LOBE_MAX = 16;   // degrees of hindwing sweep the anal lobe follows; past it (up to ODO_HIND_MAX) the lobe keeps its depth across the wing (#48)
 const ODO_SWEEP_MAX = 60;   // degrees the two wings may be swept apart in all to meet ODO_ROOT (a broad pair on close roots needs ~45)
 const ODO_ARC_H = 0.22;   // a dragonfly's upper fan starts within this fraction of the depth under R1: the arculus's height (#18; 0.5 before)
 const ODO_FAN_GAP = 2.4;   // body units between neighbouring lanes of a dragonfly's upper fan at the arculus (the lane floor is 1.8 px)
 const ODO_TRI_H = 0.25;   // the discoidal triangle's strip at least this fraction of the chord gene deep at the arculus
 const ODO_CELL = 0.0135;   // the narrowest odonate cell, span fractions: a wing spans 228-270 plate px, so >= 3 px (#18; ~2 px read as stipple)
+const ODO_CELL_MIN = 3.3;   // and never under this many body units: a short wing (wingLen x len reaches ~190) on a plate scaled 0.93 still keeps 3 px (#48)
 const ODO_STRUCT = [75, 179];   // junction band of the structural odonate crossveins (discoidal sides, Ax1 / Ax2, the damselfly arculus): wide, so they are never dropped
 function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   const { type, order, L, meta, P, B, thorax } = C;
@@ -4883,31 +4941,37 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     psStyle: pick(['solid', 'solid', 'cross', 'axis']), psLean: randRange(18, 38),
     // cells: libellulid (small) .. aeshnid (large); k ladder spacing / strip width; angle, lean, zig: junction genes
     cells: dam ? randRange(1.0, 1.5) : randRange(0.95, 1.3), k: randRange(1.0, 1.4), angle: randRange(108, 124), lean: rng() < 0.6 ? -1 : 1, zig: randRange(0.14, 0.24),
-    ladderR: rng(), bridge: rng() < 0.5, spare: rng(),   // ladderR picks the damselfly antenodal regime; spare: the old subnodus roll, kept so no later draw moves (#17)
+    ladderR: rng(), bridge: rng() < 0.5, spare: rng(),   // ladderR, spare: the old antenodal-regime (the family is P.fam since #48) and subnodus rolls, kept so no later draw moves
     len: randRange(0.88, 1.12), heavy: rng() < 0.35,
   };
-  // antenodal regime, the damselfly family cue (#17): Coenagrionidae carry exactly two antenodals (Ax1, Ax2; odo-damsel-ris1921),
-  // Calopterygidae a ladder on a wing that barely narrows to a stalk; every dragonfly a ladder. It names the plate (meta.fam).
-  G.ladder = !dam || G.ladderR < DAM_LADDER;
-  const fam = dam ? (G.ladder ? 'calopterygid' : 'coenagrionid') : null;
-  if (dam) meta.fam = fam;
-  if (fam === 'calopterygid') G.petiole = lerp(0.07, 0.11, (G.petiole - 0.12) / 0.14);   // the same roll, mapped onto a short stalk
+  // antenodal regime, the damselfly family cue (#17): Coenagrionidae, Lestidae and Platycnemididae carry exactly two antenodals
+  // (Ax1, Ax2; odo-damsel-ris1921), Calopterygidae a ladder on a broad wing that barely narrows to a stalk; every dragonfly a
+  // ladder. The family is rolled with the body (P.fam, #48), so the wing, the abdomen, the legs and the name agree.
+  const fam = P.fam;
+  G.ladder = !dam || fam === 'calopterygid';
+  if (fam === 'calopterygid') { G.petiole = lerp(0.07, 0.11, (G.petiole - 0.12) / 0.14); G.wF = lerp(0.2, 0.26, (G.wF - 0.13) / 0.06); }   // the same rolls, mapped onto a short stalk and a broad wing (#48)
   const Lw = P.wingLen * G.len, nodusX = Lw * G.nodus;
   const [tF, tH] = order.wingRoots;   // forewing / hindwing roots along the thorax (the damselfly's hind pair sits a little further forward)
+  // the wing set (B.wingSet, #48): the forewing at its sweep, the hindwing a further sweep behind it, each with the old
+  // per-wing roll narrowed to a few degrees of jitter (the same two draws)
+  const ws = B.wingSet;
   const wingDefs = dam
-    ? [{ t: tF, theta: randRange(-16, -1), w: Lw * G.wF, baseW: 0.05, hind: false }, { t: tH, theta: randRange(2, 16), w: Lw * G.wF * G.wH, baseW: 0.05, hind: true }]
-    : [{ t: tF, theta: randRange(-14, -1), w: Lw * G.wF, baseW: 0.14, hind: false }, { t: tH, theta: randRange(3, 18), w: Lw * G.wF * G.wH, hind: true }];
+    ? [{ t: tF, theta: ws.fw + randRange(-3, 0), w: Lw * G.wF, baseW: 0.05, hind: false }, { t: tH, theta: ws.fw + ws.hw + randRange(0, 3), w: Lw * G.wF * G.wH, baseW: 0.05, hind: true }]
+    : [{ t: tF, theta: ws.fw + randRange(-3, 0), w: Lw * G.wF, baseW: 0.14, hind: false }, { t: tH, theta: Math.min(ODO_HIND_MAX, ws.fw + ws.hw + randRange(0, 3)), w: Lw * G.wF * G.wH, hind: true }];
+  // the hindwing's sweep limit: a dragonfly's anal lobe is laid back along the body for at most ODO_HIND_MAX (past it the lobe
+  // narrows across the wing or reaches over the abdomen); a damselfly's stalked hindwing may sweep a little past its set
+  const hindMax = dam ? Math.max(ODO_HIND_MAX, wingDefs[1].theta + ODO_HIND_MAX / 2) : ODO_HIND_MAX;
   const ss = t => t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t);
   const S = { cellMin: Infinity, stigma: 0, joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0, discoidal: 0, subnodus: 0, antMin: Infinity, antMax: 0, qGap: 0, triOff: Infinity };
   for (const wd of wingDefs) { wd.by = thorax.yAt(wd.t); wd.bx = thorax.hwAt(wd.by) * order.wingRootX; }
   const outlinePts = wd => {   // a wing's outline in its local frame (x along the span, y across it, negative toward the costa)
-    const w = wd.w, s = G.sharp, bl = G.bulge;
+    const w = wd.w, s = G.sharp, bl = G.bulge, lobeA = Math.min(wd.theta, ODO_LOBE_MAX) * D2R;   // the anal lobe is laid back along the body for at most ODO_LOBE_MAX of the sweep (#48)
     const apexPts = [[Lw * lerp(0.88, 0.94, s), -w * lerp(0.38, 0.22, s)], [Lw, w * G.tipY], [Lw * lerp(0.9, 0.95, s), w * lerp(0.33, 0.18, s) * bl]];
     return dam
       ? [[0, -w * 0.05], [Lw * G.petiole, -w * 0.34], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.48], ...apexPts, [Lw * 0.65, w * 0.5 * bl], [Lw * 0.35, w * 0.4 * bl], [Lw * G.petiole, w * 0.1], [0, w * 0.05]]
       : wd.hind   // the anisopteran hindwing is widest at its base: a straighter costa, and the anal lobe (G.anal) rounding out of the hind margin against the body (odo-anax-ris1921, #18)
         ? [[0, -w * 0.05], [Lw * 0.06, -w * 0.3], [Lw * 0.25, -w * 0.45], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], ...apexPts,
-          [Lw * 0.6, w * 0.45 * bl], [Lw * 0.32, w * 0.49 * bl], rot([Lw * 0.15, w * (0.64 + 0.5 * G.anal)], -0.5 * wd.theta * D2R), ...[[Lw * 0.05, w * (0.5 + G.anal)], [Lw * 0.01, w * (0.25 + G.anal)]].map(p => rot([p[0], p[1] / Math.cos(wd.theta * D2R)], -wd.theta * D2R))]   // the lobe laid out along the body (its shoulder half way), so however far the wing sweeps back it never reaches over the abdomen's midline, and as deep across the wing
+          [Lw * 0.6, w * 0.45 * bl], [Lw * 0.32, w * 0.49 * bl], rot([Lw * 0.15, w * (0.64 + 0.5 * G.anal)], -0.5 * lobeA), ...[[Lw * 0.05, w * (0.5 + G.anal)], [Lw * 0.01, w * (0.25 + G.anal)]].map(p => rot([p[0], p[1] / Math.cos(lobeA)], -lobeA))]   // the lobe laid out along the body (its shoulder half way), so however far the wing sweeps back it never reaches over the abdomen's midline, and as deep across the wing
         : [[0, -w * 0.05], [Lw * 0.06, -w * 0.42], [Lw * 0.25, -w * 0.5], [nodusX - 3, -w * 0.5], [nodusX + 1, -w * 0.45], [Lw * 0.7, -w * 0.47], ...apexPts,
           [Lw * 0.6, w * 0.5 * bl], [Lw * 0.25, w * 0.5 * bl], [Lw * 0.06, w * 0.3], [0, w * wd.baseW]];
   };
@@ -4923,7 +4987,8 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     for (const [a, b] of [[fp, hp], [hp, fp]]) for (const p of a) if ((p[0] - x0) / (x1 - x0) > far && pointInPoly(p, b)) far = (p[0] - x0) / (x1 - x0);
     return far;
   };
-  for (let k = 0; k < ODO_SWEEP_MAX && overlapFar() > ODO_ROOT; k++) if (k % 2 || hwD.theta >= ODO_HIND_MAX) fwD.theta -= 1; else hwD.theta += 1;
+  // (a damselfly's stalked hindwing takes the whole separation while it can, so the forewing keeps its set: the lestid's half-open pose, #48)
+  for (let k = 0; k < ODO_SWEEP_MAX && overlapFar() > ODO_ROOT; k++) if (hwD.theta < hindMax && (dam || k % 2 === 0)) hwD.theta += 1; else fwD.theta -= 1;
   for (const wd of wingDefs) {
     const { bx, by, w } = wd, pts = outlinePts(wd);
     const wing = makeWing([bx, by], wd.theta, pts, 0.8);
@@ -5052,7 +5117,7 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     const base = Lw * 0.03;
     const cellFn = (u, sMid, A, B) => (A === 'C' || B === 'C') ? Lw * G.postStep * (1 - 0.2 * Math.max(0, u - G.nodus)) : base * G.cells * (1 - 0.3 * u) * (1 - 0.25 * sMid);
     const grown = growVeins(g, { lanes, named, forks: 0, uOpen: 1.0, k: G.k, minSep: 0.015, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0,
-      rows2: true, rowsAt: 1.6, evenSites: true, gapNear: 0.25, cell: cellFn, cellMin: 3.2, siteMin: floorPitch(ODO_CELL * Lw), zig: G.zig, joinSw: SW.F, gaps, noPair: [['C', 'Sc'], ['Sc', 'R1']] });   // the antenodal strips carry only the named antenodals
+      rows2: true, rowsAt: 1.6, evenSites: true, gapNear: 0.25, cell: cellFn, cellMin: 3.2, siteMin: floorPitch(Math.max(ODO_CELL * Lw, ODO_CELL_MIN)), zig: G.zig, joinSw: SW.F, gaps, noPair: [['C', 'Sc'], ['Sc', 'R1']] });   // the antenodal strips carry only the named antenodals
     L.wings.push(...g.emit());
     L.wings.push(...costaEls(wing, x0, apex[0]));   // the costa itself, heavy (R7)
     const st = grown.stats;
