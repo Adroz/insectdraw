@@ -54,8 +54,8 @@ prefix (licences in `ref/README.md`); the venation stays as `wing-venation-spec.
 | tymbal covers | cicadine only: a rounded plate 0.32-0.42 of the abdomen's half width at the abdomen base, standing past its outline | `habitus.tymbals`, `drawAbdomen` |
 | pronotal flange | platypleurine only: the collar flared to 1.3-1.5 x the head's half width, with a fine rim | `habitus.flange`, `rollBodyGenes`, `drawThorax` |
 | abdomen taper | barrel / cone / spindle, family weights | `abdShapes` |
-| wing set (`B.wing.set`) | spread (sweep 30-45, #26), half (52-64), roofed (the tegmen laid over the abdomen: inner margin 1.0-1.3 off the midline, costa 3-6 past the abdomen's side, the hindwing not drawn), 1:1:1 | `wingSets`, `wingsCicada` |
-| forewing shape (`B.wing.shape`) | narrow (half depth 0.13-0.15 of the length, sharp apex; roofed width 1.3-1.45 x the body) / broad (0.19-0.23, round apex; 1.55-1.8) | `wingShapes` |
+| wing set (`B.wing.set`) | spread (sweep 30-45, #26), half (52-64), roofed (the tegmen laid over the abdomen, 1.3-1.5 root-to-abdomen-tip lengths: inner margin 1.0-1.3 off the midline, parting toward the apex at 0.7-0.95 of the length, costa 3-6 past the abdomen's side, the hindwing not drawn), 1:1:1 | `wingSets`, `wingsCicada` |
+| forewing shape (`B.wing.shape`) | narrow (half depth 0.13-0.15 of the length, sharp apex; roofed width 1.3-1.6 x the body's widest) / broad (0.19-0.23, round apex; 1.65-1.95) | `wingShapes` |
 | mesonotum markings | none / obconic / M / both, 1:1:1:1, hatched at 2.2-2.6 | `thorax.marks`, `drawThorax` |
 
 Checks (`tests/check.js`): `cicSweep` (the sweep band per set), `cicWingSet` (roofed: tegmen over the whole abdomen,
