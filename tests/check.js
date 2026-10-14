@@ -207,6 +207,28 @@ const elyStyles = {};   // style -> beetle plates, for POST.elytraTexture
 const ROVE = { ely: [0.8, 1.3], trunc: 0.6, edge: 0.04, tipT: 0.95, tipK: 0.45, exposed: 3 };
 let roveSeen = 0, beetlePlates = 0;   // rove plates roveBody asserted on, and beetle plates in the run (counted by the seed loop)
 const beetleRun = { n: 0, wl: [Infinity, -Infinity], pe: [Infinity, -Infinity] };   // over the run: the ranges seen, for the report
+// #25 beetle head and antennae, stated from the references, not read from the engine:
+// - no beetle has ocelli (beetleOcelli; the audit found a median ocellus on a rove);
+// - the weevil's antennae insert on the rostrum (head-col-weevil: the scape leaves the side of the rostrum about a quarter
+//   of the way from the head on a long Curculio rostrum, nearer the middle on a short one), so the socket
+//   (meta.antennae.base) lies on the rostrum's side (within WEEVIL.edge body units of its half width) between
+//   WEEVIL.along of its length ahead of the capsule front (meta.head.top; the rostrum's tip is top - rostrum.len);
+// - a carabid (the ground family) draws two sickle mandibles (head-col-carabus: stout jaws from the front corners that
+//   hook inward to tips at the midline, the labrum and palps showing in the open space between them, never a closed
+//   leaf): meta.head.mand holds each jaw's outline (closed polyline, body units); each jaw reaches CARABID.len head widths
+//   ahead of the capsule front, its tip within CARABID.tipX head widths of the midline, its base outside CARABID.baseX,
+//   and at half the jaws' length their inner edges stand at least CARABID.gap head widths apart;
+// - a longhorn's antenna (ant-longhorn-dorcadion: thick, segmented, about the body's length, swept back beside the
+//   elytra): the shaft as drawn at most LONGHORN.len[1] (at least LONGHORN.len[0]) body lengths (head front to abdomen tip),
+//   the shaft at its narrowest at least the detail stroke wide on the plate (LONGHORN.minPx plate px, so never a
+//   hairline) and at its base at least LONGHORN.baseW head widths, the pose 'swept', no point ahead of the head's front,
+//   the tip beside the elytra (between their top and LONGHORN.tipBack of their length past their end, and within
+//   LONGHORN.tipOut elytral half widths of the midline)
+const WEEVIL = { along: [0.15, 0.7], edge: 1.5 };
+const CARABID = { len: [0.22, 0.55], tipX: 0.12, baseX: 0.22, gap: 0.12 };
+const LONGHORN = { len: [0.7, 1.3], minPx: 0.8, baseW: 0.1, tipBack: 0.15, tipOut: 1.9 };
+const colSeen = { beetleOcelli: 0, weevilSocket: 0, carabidMandibles: 0, longhornAntenna: 0 };   // beetle plates each #25 check asserted on, for POST.colSeen
+const COL_MIN = 40;   // beetle plates a run needs before a #25 check that never ran fails rather than being reported (a family is 1/6 of beetles: no weevil in 40 has odds 0.0007)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
 const pcaAspect = poly => {
@@ -1185,6 +1207,58 @@ const CHECKS = {
     if (exposed.length < ROVE.exposed) fail('rove abdomen shows ' + exposed.length + ' tergites past the elytra (want >= ' + ROVE.exposed + ')');
     if (exposed.some(seg => !seg.some(m => m.k === 'hatch'))) fail('a rove tergite past the elytra is not hatched');
   },
+  // #25: no ocelli on a beetle
+  beetleOcelli(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    colSeen.beetleOcelli++;
+    if (meta.head.ocelli.length) fail('beetle draws ocelli: ' + meta.head.ocelli.length + ' (' + meta.fam + ')');
+  },
+  // #25: the weevil's antenna socket on the rostrum (WEEVIL)
+  weevilSocket(meta, svg, fail) {
+    if (meta.type !== 'beetle' || meta.fam !== 'weevil') return;
+    colSeen.weevilSocket++;
+    const h = meta.head, ro = h.rostrum, b = meta.antennae.base;
+    if (!ro) return fail('weevil without a rostrum on meta.head');
+    const along = (h.top - b[1]) / ro.len;
+    if (along < WEEVIL.along[0] || along > WEEVIL.along[1]) fail('weevil antenna socket not on the rostrum: ' + along.toFixed(2) + ' of its length ahead of the head (want ' + WEEVIL.along.join('-') + ')');
+    if (Math.abs(Math.abs(b[0]) - ro.w / 2) > WEEVIL.edge) fail('weevil antenna socket off the rostrum side: x ' + b[0].toFixed(1) + ', rostrum half width ' + (ro.w / 2).toFixed(1));
+  },
+  // #25: a carabid's two sickle mandibles (CARABID)
+  carabidMandibles(meta, svg, fail) {
+    if (meta.type !== 'beetle' || meta.fam !== 'ground') return;
+    colSeen.carabidMandibles++;
+    const h = meta.head, M = h.mand, W = h.W;
+    if (!Array.isArray(M) || M.length !== 2 || M.some(j => !Array.isArray(j) || j.length < 8)) return fail('carabid without two mandible outlines on meta.head.mand');
+    let reach = Infinity;
+    for (const j of M) {
+      const ys = j.map(p => p[1]), tipY = Math.min(...ys), tip = j[ys.indexOf(tipY)], len = (h.top - tipY) / W;
+      reach = Math.min(reach, h.top - tipY);
+      if (len < CARABID.len[0] || len > CARABID.len[1]) fail('carabid mandible length: ' + len.toFixed(2) + ' head widths (want ' + CARABID.len.join('-') + ')');
+      if (Math.abs(tip[0]) > CARABID.tipX * W) fail('carabid mandible tip off the midline: ' + (Math.abs(tip[0]) / W).toFixed(2) + ' head widths (want <= ' + CARABID.tipX + ')');
+      if (Math.max(...j.map(p => Math.abs(p[0]))) < CARABID.baseX * W) fail('carabid mandible base inside ' + CARABID.baseX + ' head widths of the midline');
+    }
+    // the open space between the jaws at half their reach: the inner edges (the jaw points nearest the midline at that y)
+    const y = h.top - reach / 2, inner = M.map(j => { let best = Infinity; for (let i = 0; i < j.length; i++) { const a = j[i], c = j[(i + 1) % j.length]; if ((a[1] - y) * (c[1] - y) <= 0 && a[1] !== c[1]) best = Math.min(best, Math.abs(a[0] + (c[0] - a[0]) * (y - a[1]) / (c[1] - a[1]))); } return best; });
+    if (!(Math.min(...inner) * 2 >= CARABID.gap * W)) fail('carabid jaws close into one shape: the gap at half their length ' + (Math.min(...inner) * 2 / W).toFixed(2) + ' head widths (want >= ' + CARABID.gap + ')');
+  },
+  // #25: a longhorn's antenna, thick, about body length and swept back beside the elytra (LONGHORN)
+  longhornAntenna(meta, svg, fail) {
+    if (meta.type !== 'beetle' || meta.fam !== 'longhorn') return;
+    colSeen.longhornAntenna++;
+    const an = meta.antennae, h = meta.head, Y = meta.elytra;
+    if (!an || !(an.wTip > 0) || !Y) return fail('no longhorn shaft widths (meta.antennae.wTip) or elytra on meta');
+    const pl = an.lines[0].pl; let len = 0;
+    for (let i = 1; i < pl.length; i++) len += Math.hypot(pl[i][0] - pl[i - 1][0], pl[i][1] - pl[i - 1][1]);
+    const bl = meta.abdomen.yBot - h.top, k = len / bl;
+    if (k < LONGHORN.len[0] || k > LONGHORN.len[1]) fail('longhorn antenna length: ' + k.toFixed(2) + ' body lengths (want ' + LONGHORN.len.join('-') + ')');
+    if (an.wTip * meta.scale < LONGHORN.minPx) fail('longhorn antenna a hairline: ' + (an.wTip * meta.scale).toFixed(2) + ' plate px at its narrowest (want >= ' + LONGHORN.minPx + ')');
+    if (an.lines[0].w < LONGHORN.baseW * h.W) fail('longhorn antenna base too thin: ' + (an.lines[0].w / h.W).toFixed(2) + ' head widths (want >= ' + LONGHORN.baseW + ')');
+    if (an.pose !== 'swept') fail('longhorn antenna not swept: ' + an.pose);
+    if (an.pts.some(p => p[1] < h.top)) fail('longhorn antenna reaches ahead of the head (' + an.pose + ')');
+    const ys = Y.outline.map(p => p[1]), y0 = Math.min(...ys), y1 = Math.max(...ys), ehw = Math.max(...Y.outline.map(p => p[0]));
+    if (an.tip[1] < y0 || an.tip[1] > y1 + LONGHORN.tipBack * (y1 - y0)) fail('longhorn antenna tip not beside the elytra: ' + ((an.tip[1] - y0) / (y1 - y0)).toFixed(2) + ' of their length');
+    if (an.tip[0] > LONGHORN.tipOut * ehw) fail('longhorn antenna tip too far out: ' + (an.tip[0] / ehw).toFixed(2) + ' elytral half widths (want <= ' + LONGHORN.tipOut + ')');
+  },
   // #24: the puncture style gene and its marks on the striae (ELY_STYLES), on the default plate and on the device plate
   elytraTexture(meta, svg, fail, { dev }) {
     if (meta.type !== 'beetle') return;
@@ -1415,6 +1489,14 @@ const POST = {
     console.log('#22 grasshopper checks asserted on (of ' + n + ' grasshopper plates):', Object.keys(orthSeen).filter(k => ran.has(k)).map(k => k + ' ' + orthSeen[k]).join(', ') +
       (n < ORTH_MIN ? '; too few grasshopper plates (' + n + ' < ' + ORTH_MIN + ') to require every check' : ''));
   },
+  // the #25 checks assert only on beetle plates (three of them on one family each): once the run has COL_MIN beetle plates
+  // every selected one must have run
+  colSeen(fail) {
+    const n = beetlePlates, idle = Object.keys(colSeen).filter(k => ran.has(k) && !colSeen[k]);
+    if (idle.length && n >= COL_MIN) fail('#25 beetle checks that never ran in ' + n + ' beetle plates: ' + idle.join(', '), 'beetle');
+    console.log('#25 beetle checks asserted on (of ' + n + ' beetle plates):', Object.keys(colSeen).filter(k => ran.has(k)).map(k => k + ' ' + colSeen[k]).join(', ') +
+      (n < COL_MIN ? '; too few beetle plates (' + n + ' < ' + COL_MIN + ') to require every check' : ''));
+  },
   // #26 the run's cicadas: the median plate scale at least CIC.scale (0.81 before #26), once the run has CIC_MIN of them
   cicScale(fail) {
     const n = cicRun.scales.length, m = median(cicRun.scales);
@@ -1489,7 +1571,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'] };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 

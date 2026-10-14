@@ -153,7 +153,10 @@ contract for changes.
   no point lies inside a wing, elytron or tegmen outline (`meta.wingOutlines`, pushed by `makeWing`
   and the elytra). A leg or wing hit is sticky: every later attempt is forward and nearly straight (a swept pose
   can only lie across them) and walks toward straight ahead, shortening a plume that has no clear pose at full
-  length; re-roll, then a known-good pose shortened until it clears. `tests/check.js` asserts it on
+  length; re-roll, then a known-good pose shortened until it clears. A family's `ant` entry may reshape a pose (`poses`, e.g. the longhorn's
+  sweep, #25); a `back` sweep leaves the head already turned back and is never straightened: a leg hit turns its root
+  further back, a wing hit turns it less, and after half the attempts it searches the pose's `alt` on a grid (a steep root
+  that turns out past the elytral shoulders); its tip stays within `ANT_BACK_OUT` of the covers' half width. `tests/check.js` asserts it on
   `meta.antennae.pts` and `.lines`. The legs block holds up its end: `legsOk` keeps every leg ahead of the head
   off the antenna socket by that clearance (`socket`), so a foreleg can never stand where no antenna fits.
   Curvature is signed outward-positive; keep inward curvature tiny or the long kinds will cross.

@@ -134,7 +134,9 @@ front-to-back extent (our `headH`).
 - Orthoptera: three, but only the two lateral ones (above the antennal bases) face up; the
   median is on the frontal costa (15), i.e. invisible from above.
 - Lepidoptera: moths two (above / behind the eyes, under the scales), butterflies none (11).
-- Coleoptera: none, except a single median ocellus in Dermestidae and some rove beetles (9).
+- Coleoptera: none, except a single median ocellus in Dermestidae and some rove beetles (9). The engine
+  draws none on any beetle (#25: a lone median ocellus read as a mistake on a plate, and the rove family
+  stands for Staphylinidae at large); `beetleOcelli` in `tests/check.js` asserts it.
 - Neuroptera: none in Chrysopidae (19). Hemiptera cicada: three (13).
 - Radius: an ocellus is 3–8 % of head width; the engine's 1.1–1.3 px on a 40 px head is 3 %,
   so the range should reach 0.8–1.8 px.
@@ -207,9 +209,9 @@ and `P.headH` keep their meaning: bounding width, bounding depth and centre of t
 | fly | 1.2–1.45, `round` (globose); holoptic 55 % (asilid 0 %, nemato 30 %) | holoptic: cx 0.24–0.26, rx 0.23–0.26, ry 0.4–0.48; dichoptic: cx 0.3–0.34, rx 0.16–0.21, ry 0.38–0.46 | 3 ocellar triangle at the back of the vertex (asilid: in a dish) | none visible; asilid mystax ticks | lattice (floor 2.3) / stipple / plain |
 | bee / wasp | 1.1–1.35, `round`, vertex flat 50 % | cx 0.32–0.36, rx 0.12–0.16, ry 0.36–0.44, tilt ±8°, dent toward the socket 0.15–0.3 | 3 large, flat triangle on the vertex | clypeus bow; mandible tips 0.1–0.2 W at 60 %; sawfly (type wasp): bigger round eyes, broad head | lattice / stipple; bee (#12): head 0.85–0.97 of the thorax width, ocelli always a triangle (height 0.1–0.15 H), the lattice worked over the whole eye, highlight included |
 | moth / butterfly | 0.95–1.2, `round` | cx 0.3–0.35, rx 0.14–0.18, ry 0.24–0.3 | moth 0–2 small behind the eyes, butterfly 0 | palps 2 forward clubs 80 %; proboscis spiral 35 % (butterfly 50 %), 1.5–2.5 turns | lattice / stipple; hair ticks on the vertex (moth) |
-| beetle, ground / rove | 0.7–0.9, `elongate` (narrower than the pronotum, frontal furrows) | cx 0.38–0.42, rx 0.09–0.13, ry 0.16–0.24, flat at the rear corners | 0 (rove: 0–1 median 20 %) | mandibles 0.4–0.6 W, curvature strong, crossing 50 %, serration 30 %; labrum line; palps 2 | plain-with-highlight or stipple |
+| beetle, ground / rove | 0.7–0.9, `elongate` (narrower than the pronotum, frontal furrows) | cx 0.38–0.42, rx 0.09–0.13, ry 0.16–0.24, flat at the rear corners | 0 | mandibles 0.28–0.4 W (rove 0.3–0.45): stout sickles from under the capsule's front corners, the outer edge convex, hooking in to tips at the midline (crossing 50 %), an open space between the jaws where the transverse labrum shows (#25, `carabidMandibles`); serration 30 %; palps 2 | plain-with-highlight or stipple |
 | beetle, scarab / longhorn | 0.85–1.1, `round`, vertex flat | cx 0.36–0.4, rx 0.1–0.14, ry 0.2–0.28, dent toward the antennal base (longhorn) 0.3–0.45 | 0 | mandibles 0.1–0.2 W, blunt; clypeus line | stipple / plain |
-| beetle, weevil | 0.8–1.0 capsule, `elongate` + rostrum 0.6–1.8 W long, 0.15–0.25 W wide | cx 0.36–0.4, rx 0.1–0.13, ry 0.18–0.26 | 0 | tiny mandibles at the rostrum tip | plain / stipple |
+| beetle, weevil | 0.8–1.0 capsule, `elongate` + rostrum 0.6–1.8 W long, 0.15–0.25 W wide | cx 0.36–0.4, rx 0.1–0.13, ry 0.18–0.26 | 0 | tiny mandibles at the rostrum tip; the rostrum is drawn straight from above (its curve is lateral), the antennal socket on its side `antOn` 0.2–0.55 of its length ahead of the capsule (#25, `weevilSocket`) | plain / stipple |
 | grasshopper | 0.8–1.0, `triangular` (rear width W, fastigium 0.3–0.5 W wide at the front) | cx 0.3–0.34, rx 0.1–0.13, ry 0.26–0.34, tilt −15–0° (leaning with the face) | 2 lateral beside the antennal bases (the median is on the face) | palps 2 dots past the fastigium 50 %; fastigium furrow; no mandibles from above | lattice / stipple |
 | cicada | 1.9–2.4, `transverse` with eye stalks past the rear line and a postclypeus bulge 0.3–0.4 W (rounded 60 % / pointed 40 %) | cx 0.4–0.44, rx 0.08–0.11, ry 0.3–0.42 | 3 tight triangle at the centre | postclypeus with 3–6 transverse striations; beak hidden | lattice (floor 2.7) / stipple |
 | crane fly | 1.0–1.2, `round` + snout 0.1–0.3 W | cx 0.32–0.36, rx 0.13–0.16, ry 0.3–0.36 | 0 | snout; no mandibles | stipple / plain |
