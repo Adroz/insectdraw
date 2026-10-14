@@ -3,8 +3,8 @@
 Status: two plans in one file. The first, the per-seed genes for legs, body, head, eyes and antennae, has all seven
 steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07); it follows the wing-genes work (see
 README "Venation" and `meta.wingSig`). The second, "Nine plates, nine insects (#30)" at the end, is open: the
-perceptual criterion (`tests/perceptual.js`) and eight steps, one ticket per order (#48–#55); step 2 (cicada, #49) is
-done.
+perceptual criterion (`tests/perceptual.js`) and nine steps, one ticket per order (#48–#55, and #72 for the
+grasshopper, added by #57); step 2 (cicada, #49) and step 7 (fly, #54) are done.
 
 ### Status detail
 
@@ -338,7 +338,8 @@ canonical block; every order the audit named fails. The crane fly and the fly ne
 plates are mostly single strokes (legs, wing margin): the measure scores their closest pairs at 11.3 and 10.6 although
 those pairs are visibly the same insect, so they are held to the wasp's level. Damselfly and grasshopper, which
 the audit did not name, fall under 10.0 too: the damselfly is the lowest type of all and joins the dragonfly in step 1;
-the grasshopper is left to its open tickets (#22, #23) and tracked by #57, which re-measures it after them.
+the grasshopper was left to its open tickets (#22, #23); #57 re-measured it after them, found it still under, and
+added step 9 (#72).
 
 **Limits, stated so nobody over-reads the number.**
 
@@ -348,7 +349,7 @@ the grasshopper is left to its open tickets (#22, #23) and tracked by #57, which
 - It sees ink, not anatomy: a wing set swung by 10° moves it as much as a new abdomen family. That is the point (the
   eye sees the same), but a ticket cannot buy its way past the floor with jitter that is not anatomy; every change
   still answers to the references, the sheet and `tests/check.js`.
-- It is not a gate. Wiring it into `tests/check.js` waits until the eight steps below have landed and the floor has
+- It is not a gate. Wiring it into `tests/check.js` waits until the nine steps below have landed and the floor has
   been re-tuned on the result.
 
 **How a ticket uses it.** Before: `node tests/perceptual.js 60 --type <type> --pairs 3` on main, and
@@ -486,6 +487,15 @@ rules for all of them:
    bands, tachinid round with bristle rows, asilid long and tapering, tabanid broad and flat, bombyliid round and
    hairy, conopid petiolate), abdominal macrochaetae, leg pose and length per family (asilid long raptorial legs).
    #9 and #10 cover the wing outline and venation.
+   **Done (#54, 2026-10-14)**, grounded in `research-diptera-habitus.md` (refs `docs/ref/dip-hab-*`): `P.fam` adds
+   tachinid, bombyliid and conopid (eight families; the new ones drawn on their nearest family's venation plan,
+   `wingPlans`), the wing set spread / half-folded / folded scissor-wise over the abdomen (`B.wing.set`, per-family
+   weights; a folded wing turns in until the abdomen's sides show), the abdomen family per `P.fam` (`habitus`,
+   `abdFams`), abdominal macrochaetae and pile (`chaetae`), and legs, antennae and head per family (asilid long
+   raptorial legs, conopid porrect antennae and broad head); `dipWingSet`, `dipHabitus`, `dipChaetae`, `dipLegs` and the
+   `dipShares` audit in `tests/check.js`. `node tests/perceptual.js 60 --type fly` before (backlog at 1a52ddd) -> after:
+   seeds 1-60 min 9.32 -> 13.85 (floor 12.5), sheet9 13.29 -> 18.16; seeds 61-120 min 9.07 -> 12.09, sheet9
+   14.38 -> 18.27; `--view body` 8.86 -> 13.49 (1-60) and 9.16 -> 12.93 (61-120).
 8. **Crane fly: pose families and Tipulomorpha families, #55** (11.28 under 12.5). One leg pose on every plate, and the
    wings always spread. Genes: leg pose families for very long legs (spread as now; trailing, hind pairs swept back
    past the abdomen tip; forward, front pair reaching ahead past the antennae; and a pose with the mid legs out and
@@ -495,5 +505,28 @@ rules for all of them:
    wings, which the wing block may only stipple). Acceptance adds a pose count: at least three leg-pose families
    each on ≥ 15% of 300 seeds.
 
-Not in this plan: bee and wasp (above the floor; #12 is a separate habitus fix) and the grasshopper (8.24 under
-10.0 but not named by the audit; #22 and #23 change its body anyway; #57 re-measures it after them).
+9. **Grasshopper: tegmen length, tetrigid pronotum, ovipositor and wing set, #72** (9.44 after #22 and #23). Appended
+   after steps 1–8 rather than ranked among them (their numbers are already in their tickets). Added by #57, which
+   re-measured the grasshopper on `backlog` at bdd7f7c, after #22 (tegmen, hindwing fan, pronotum saddle) and #23
+   (hind femur, antennae) merged. `node tests/perceptual.js 60 --type grasshopper`, main at 4a9ad53 →
+   backlog:
+
+   | block | min | closest pair (backlog) | sheet9 (backlog) | body min |
+   |---|---|---|---|---|
+   | seeds 1–60 | 8.24 → 9.44 | 25,35 (main 9,17) | 12.58 (main 12.11) | 8.06 → 12.68 |
+   | seeds 61–120 | 9.54 → 8.95 | 108,120 | 12.26 | 10.77 (backlog) |
+   | seeds 121–180 | 7.51 → 7.54 | 142,165 | 12.53 | — |
+
+   Still under 10.0 on every block, but the body view now clears it on both: what repeats is the wing cover. The
+   tegmina are always 1.05–1.18× the abdomen, so every plate carries the same long folded rod of archedictyon over
+   the abdomen, and it is most of the thumbnail's ink; every closest pair (25,35 acridids, 3,17 tettigoniids, 108,120
+   and 142,165 tetrigids drawn as acridids) is two plates of one family with tegmina of one length. Genes, by `P.fam`:
+   tegmen length class (macropterous as now; brachypterous, tegmina 0.25–0.6 of the abdomen with the tergites showing
+   behind; micropterous lateral pads, as on *Pholidoptera* and *Ephippiger*), the hindwing fan only when macropterous;
+   the tetrigid pronotum prolonged back over the abdomen to its tip, tapering to a point, with the tegmina reduced to
+   scales (the groundhopper's defining character); the tettigoniid ovipositor as a sabre 0.5–1.0× the abdomen; a wing
+   set, folded (as now) or the setting-board pose with the hindwing fan opened (band-winged Oedipodinae); a resting
+   hind-leg pose with the femur along the body. Grounded in `research-thorax.md` (Orthoptera); the wing-length classes
+   and the tetrigid pronotum need a note. Blocked by #8 for the hind-leg pose.
+
+Not in this plan: bee and wasp (above the floor; #12 is a separate habitus fix).

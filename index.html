@@ -2117,6 +2117,10 @@ function insectName(seed, type, variant, fam, genes) {
 //     scale ranges, abdomen taper family weights and family structures (tymbal covers, pronotal flange), read by the
 //     entry's proportions and rollBodyGenes; the abdomen taper families (anchors and abd overrides); the wing sets and
 //     forewing shapes rollBodyGenes picks into B.wing (weights w) and the wing block reads.
+//   the fly (#54; docs/research-diptera-habitus.md): habitus (per-family abdomen scales and anchors, foldReach), wingSets
+//     (theta per set, the folded set's reach) with per-family weights wingSetFams (no wingShapes: only the set is rolled),
+//     wingPlans (a family drawn on another family's venation plan), chaetae / chaetaeKinds (the abdominal macrochaetae or
+//     pile per family, B.abd.chaetae).
 //   head: outline, W/H ratio, eye cx / rx / ry / cy (off centre), ocelli count and arrangement, mouthparts, eye
 //     styles and face markings (docs/research-head-eyes.md); headFams: family / variant overrides of the same keys.
 //   legs: leg family ranges over the LD defaults in rollBodyGenes (base, then the wing / body family).
@@ -2339,20 +2343,68 @@ const ORDERS = {
         thoraxAnchors: [[0, 0.6], [0.3, 1], [0.75, 0.95], [1, 0.6]],
         abdAnchors: [[0, 0.75], [0.25, 1], [0.6, 0.9], [0.85, 0.55], [1, 0]],
         antenna: 'aristate', antLen: 14 * jitter(0.2) });
-      P.fam = pick(['muscid', 'muscid', 'nemato', 'syrphid', 'tabanid', 'asilid']);
+      // #54 family habitus (docs/research-diptera-habitus.md): the family scales the abdomen's width and length and sets its
+      // anchors (habitus below); the wing block draws a new family's venation on the plan of its nearest (wingPlans)
+      P.fam = pick(['muscid', 'nemato', 'syrphid', 'tabanid', 'asilid', 'tachinid', 'bombyliid', 'conopid']);
+      const H = ORDERS.fly.habitus[P.fam];
+      P.abdW *= randRange(H.abdW[0], H.abdW[1]); P.abdLen *= randRange(H.abdLen[0], H.abdLen[1]);
+      if (H.abdAnchors) P.abdAnchors = H.abdAnchors;
     },
+    // #54 the abdomen in dorsal view per family: muscid as #9 drew it; nematoceran slender; syrphid a flat oval; tabanid broad
+    // and flat, widest near the base; asilid long, tapering from the base; tachinid and bombyliid round; conopid petiolate,
+    // the base a narrow stalk swelling to a club. abdW / abdLen scale the order's sizes; abdAnchors replace its profile
+    habitus: {
+      muscid: { abdW: [1, 1], abdLen: [1, 1] },
+      nemato: { abdW: [0.62, 0.72], abdLen: [1.05, 1.2], foldReach: 0.78 },
+      syrphid: { abdW: [1.08, 1.18], abdLen: [0.88, 0.98], abdAnchors: [[0, 0.62], [0.4, 1], [0.66, 0.95], [0.88, 0.62], [1, 0]] },
+      tabanid: { abdW: [1.35, 1.5], abdLen: [0.95, 1.08], abdAnchors: [[0, 0.88], [0.3, 1], [0.6, 0.94], [0.86, 0.66], [1, 0]] },
+      asilid: { abdW: [0.66, 0.74], abdLen: [1.32, 1.45], foldReach: 0.7, abdAnchors: [[0, 0.9], [0.12, 1], [0.45, 0.76], [0.7, 0.56], [1, 0]] },
+      tachinid: { abdW: [1.15, 1.28], abdLen: [0.6, 0.68], abdAnchors: [[0, 0.72], [0.4, 1], [0.66, 0.94], [0.88, 0.62], [1, 0]] },
+      bombyliid: { abdW: [1.2, 1.32], abdLen: [0.58, 0.66], abdAnchors: [[0, 0.8], [0.42, 1], [0.7, 0.9], [0.9, 0.55], [1, 0]] },
+      conopid: { abdW: [0.9, 1.0], abdLen: [1.25, 1.4], foldReach: 0.7, abdAnchors: [[0, 0.3], [0.22, 0.36], [0.5, 0.85], [0.7, 1], [0.86, 0.85], [1, 0]] },
+    },
+    // #54 abdominal macrochaetae (B.abd.chaetae; refs dip-hab-tachina, dip-hab-bombylius): bristle, stout setae along the hind
+    // margins of the last `rows` tergites standing back and out past the sides (Tachinidae always, many calyptrates); fur,
+    // the dense pile all round a bee fly. p: the family's odds; n: bristles per side per row; len: body units; ang: degrees
+    // out from straight back
+    chaetae: { tachinid: { kind: 'bristle', p: 1 }, muscid: { kind: 'bristle', p: 0.45 }, asilid: { kind: 'bristle', p: 0.35 }, bombyliid: { kind: 'fur', p: 1 }, syrphid: { kind: 'fur', p: 0.25 } },
+    chaetaeKinds: { bristle: { rows: [2, 4], n: [2, 3], len: [9, 14], ang: [28, 45], sp: [2.4, 3.2] }, fur: { len: [2.8, 4.5], ang: [55, 75], sp: [2.2, 3.0] } },
+    wingPlans: { tachinid: 'muscid', bombyliid: 'tabanid', conopid: 'syrphid' },   // #54: venation of the nearest family (the calyptrate plan, R4 and R5 apart with M to the margin, cell r4+5 closed); the venation is #9 / #10's
     abd: { tips: { rounded: 3, pointed: 2, truncate: 2 }, marks: { plain: 2, banded: 3, spotted: 2, striped: 1, tipdark: 1 }, peak: [0.25, 0.55], wK: [0.8, 1.25], start: [0.05, 0.2], seg: [4, 7], ticks: 0.7 },
+    abdFams: {
+      nemato: { wK: [0.9, 1.05], tips: { pointed: 2, rounded: 1 }, seg: [6, 8] },
+      syrphid: { wK: [1.0, 1.1], tips: { rounded: 1 }, marks: { banded: 5, spotted: 2 }, peak: [0.38, 0.5] },
+      tabanid: { wK: [0.98, 1.1], tips: { rounded: 2, truncate: 1 }, peak: [0.25, 0.4], marks: { plain: 1, banded: 1, spotted: 2, striped: 2 } },
+      asilid: { wK: [0.9, 1.05], tips: { pointed: 1 }, tailFit: true, peak: [0.08, 0.16], seg: [7, 8], marks: { plain: 2, banded: 2, tipdark: 1 } },
+      tachinid: { wK: [0.95, 1.08], tips: { rounded: 1 }, peak: [0.38, 0.5], seg: [4, 5], marks: { plain: 3, tipdark: 1, spotted: 1 } },
+      bombyliid: { wK: [0.95, 1.08], tips: { rounded: 1 }, peak: [0.38, 0.5], seg: [4, 6], marks: { hairy: 4, banded: 1 } },
+      conopid: { wK: [0.95, 1.08], tips: { rounded: 1 }, peak: [0.62, 0.72], seg: [5, 6], marks: { banded: 3, plain: 1, tipdark: 1 } },
+    },
     thorax: { front: [0.8, 1.0], peak: [0.3, 0.45], hump: [0.04, 0.15], waist: [0, 0], lenK: [0.9, 1.15] },
     head: { outline: 'round', ratio: [1.2, 1.45], holoptic: 0.55, holo: { cx: [0.24, 0.26], rx: [0.23, 0.26], ry: [0.4, 0.47] }, cx: [0.3, 0.33], rx: [0.15, 0.19], ry: [0.36, 0.45], cy: [-0.04, 0.02], ocelli: 3, oc: 'triangle', clypeus: 0.6, styles: { lattice: 3, stipple: 2, plain: 1 }, hl: [-0.3, -0.5], hlR: [0.26, 0.34], hair: 0.3 },
-    headFams: { asilid: { holoptic: 0, dish: 1, hair: 0.9 }, nemato: { holoptic: 0.3 }, tabanid: { holoptic: 0.8 } },
+    headFams: { asilid: { holoptic: 0, dish: 1, hair: 0.9 }, nemato: { holoptic: 0.3 }, tabanid: { holoptic: 0.8 },
+      tachinid: { holoptic: 0.2, hair: 0.7 }, bombyliid: { holoptic: 0.6, hair: 0.9 }, conopid: { holoptic: 0, ratio: [1.35, 1.6] } },   // #54: the conopid's broad 'thick head', the bee fly's hairy face
     legs: { base: { spurs: [0, 0], pads: 0.85, spines: 0.9, spineSeg: 'both', spineLen: [0.4, 0.7], spineSp: [6, 9], poses: { spread: 3, walking: 2, tucked: 1, raised: 0.5 } },
       muscid: {}, nemato: { lenK: [1.2, 1.5], wk: [0.65, 0.8], spines: 0.25 }, syrphid: { lenK: [0.95, 1.1], wk: [0.8, 0.95], spines: 0.3 }, tabanid: { wk: [1.0, 1.15], spines: 0.5 },
-      asilid: { lenK: [1.1, 1.3], wk: [1.0, 1.15], spines: 0.95, spineLen: [0.7, 1.1], poses: { raised: 2, spread: 2, walking: 2 } } },
+      asilid: { lenK: [1.62, 1.85], wk: [1.0, 1.15], spines: 1, spineBoth: 1, spineLen: [0.8, 1.2], poses: { raised: 3, spread: 2, walking: 1 } },
+      // #54: tachinid legs stout and bristly; bee-fly legs long and slender; conopid legs a little long
+      tachinid: { wk: [1.05, 1.2], spines: 1, spineLen: [0.7, 1.1] }, bombyliid: { lenK: [1.15, 1.35], wk: [0.6, 0.72], spines: 0.3 }, conopid: { lenK: [1.0, 1.2], wk: [0.8, 0.95], spines: 0.4 } },
     ant: { base: { ref: 'hw', len: [0.25, 0.4], seg: [3, 3], socket: [0.055, 0.2], kinds: { aristate: 1 }, arista: 'plumose' },
       syrphid: { aristas: { bare: 3, pubescent: 1 }, len: [0.25, 0.38] },
       tabanid: { kinds: { stylate: 1 }, annuli: [4, 8], len: [0.3, 0.45] },
       asilid: { kinds: { stylate: 1 }, annuli: [0, 0], len: [0.3, 0.42] },
+      // #54: a tachinid's arista bare; a bee fly's short stylate antenna; a conopid's long porrect one, the postpedicel elongate
+      tachinid: { aristas: { bare: 3, pubescent: 1 } }, bombyliid: { kinds: { stylate: 1 }, annuli: [0, 0], len: [0.32, 0.45] }, conopid: { kinds: { stylate: 1 }, annuli: [0, 0], len: [0.75, 1.05] },
       nemato: { kinds: { plumose: 2, moniliform: 2 }, whorls: true, len: [0.9, 1.5], seg: [13, 15] } },
+    // #54 wing set (B.wing.set, rolled with the body, read by wingsDiptera; docs/research-diptera-habitus.md): theta, the
+    // root-to-apex line in degrees below the horizontal. spread: a set specimen (as #9 drew it); half: swept back in a delta,
+    // as a tabanid or a house fly rests; folded: laid back over the abdomen scissor-wise, each hind margin over the midline,
+    // so the pair overlaps there and the abdomen's sides show beside them (the resting pose of most fly plates). The weights
+    // are per family (wingSetFams): asilids, conopids and the nematocerans rest folded, syrphids and bee flies hover spread.
+    wingSets: { spread: { w: 1, theta: [24, 56] }, half: { w: 1, theta: [58, 72] }, folded: { w: 1, theta: [94, 106], reach: [1.0, 1.12] } },   // reach: the folded span per root-to-abdomen-tip length, times the family's foldReach
+    wingSetFams: { muscid: { spread: 1, half: 3, folded: 3 }, nemato: { spread: 1, half: 1, folded: 4 }, syrphid: { spread: 3, half: 3, folded: 1 },
+      tabanid: { spread: 2, half: 5, folded: 0 }, asilid: { spread: 1, half: 1, folded: 4 }, tachinid: { spread: 1, half: 3, folded: 3 },
+      bombyliid: { spread: 3, half: 3, folded: 1 }, conopid: { spread: 1, half: 2, folded: 4 } },
     headScaleP5: 0.78,
     wingRoots: [0.42],
     wingRootX: 0.72,
@@ -2364,7 +2416,9 @@ const ORDERS = {
       common: { nouns: ['Hover', 'Soldier', 'Snipe', 'Dance', 'Robber', 'Bee', 'Flesh', 'Dung', 'Picture-winged', 'Long-legged', 'Stiletto', 'Thick-headed', 'Flat-footed'], base: 'Fly',
         famNouns: { muscid: ['House', 'Flesh', 'Dung', 'Blow', 'Stable', 'Cluster', 'Face', 'Root-maggot'], nemato: ['Dance', 'Fungus', 'March', 'Window', 'Moth', 'Gall', 'Black'],
           syrphid: ['Hover', 'Drone', 'Flower', 'Marmalade', 'Narcissus', 'Bulb'], tabanid: ['Horse', 'Deer', 'Cleg', 'Greenhead', 'Band-eyed'],
-          asilid: ['Robber', 'Assassin', 'Bee-killer', 'Hornet Robber', 'Hanging'] } },
+          asilid: ['Robber', 'Assassin', 'Bee-killer', 'Hornet Robber', 'Hanging'],
+          tachinid: ['Tachinid', 'Hedgehog', 'Bristle', 'Parasite', 'Caterpillar'], bombyliid: ['Bee', 'Woolly', 'Downy', 'Greater Bee', 'Dotted Bee'],
+          conopid: ['Thick-headed', 'Wasp-waisted', 'Big-headed', 'Bee-grabber'] } },   // #54
     },
   },
   bee: {
@@ -2805,7 +2859,7 @@ function rollBodyGenes(type, P) {
       truncate: [[0.86, 0.9], [0.97, 0.78], [1, 0.35]], clubbed: [[0.62, randRange(0.55, 0.7)], [0.82, randRange(0.88, 1)], [0.94, 0.7], [1, 0]] };
     const lastT = anchors[anchors.length - 1][0], lastF = anchors[anchors.length - 1][1];
     // a profile narrower than the rod at its cut takes the tail at its own width (the club keeps its swelling)
-    const tailK = own || A.tip === 'clubbed' ? 1 : Math.min(1, lastF / 0.9);
+    const tailK = (own && !abdRanges.tailFit) || A.tip === 'clubbed' ? 1 : Math.min(1, lastF / 0.9);   // tailFit (#54): the order's own profile tapering into the tail too (the asilid)
     anchors = anchors.concat(tails[A.tip].filter(a => a[0] > lastT + 0.04).map(([t, f]) => [t, f * tailK]));
     if (abdRanges.petiole) {   // waist: the first two anchors set its width and length
       const k = randRange(0.6, 1.4), m = randRange(0.7, 1.5);
@@ -3109,7 +3163,7 @@ function rollBodyGenes(type, P) {
       ang: null, skew: randRange(2, 6) * (rng() < 0.5 ? -1 : 1),   // mirror skew (plan step 7): the left leg is rotated this much about its coxa
     };
     if (rng() < F.spines) {
-      const seg = F.spineSeg === 'both' ? (rng() < 0.6 ? 'both' : 'tibia') : F.spineSeg;
+      const seg = F.spineSeg === 'both' ? (rng() < (F.spineBoth || 0.6) ? 'both' : 'tibia') : F.spineSeg;   // spineBoth: the family's odds of femur and tibia both spined (the raptorial asilid, #54)
       g.spines = { femur: seg !== 'tibia', tibia: seg !== 'femur', side: F.spineSide, spacing: rr(F.spineSp), len: rr(F.spineLen) };
       g.spines.sw = g.spines.len > 0.75 ? SW.D : SW.F;
     }
@@ -3209,10 +3263,14 @@ function rollBodyGenes(type, P) {
   }
   // ---- wing set and forewing shape (#49, the cicada): body-plan genes the wing block reads, rolled last so every gene
   // above keeps its draws; the family habitus (tymbal covers, the pronotal flange) is rolled with them ----
+  // the fly (#54) rolls only the set, from its family's weights (wingSetFams), and has no forewing shape or habitus structures
   B.wing = null; B.habitus = null;
   if (order.wingSets) {
     const wOf = t => Object.fromEntries(Object.keys(t).map(k => [k, t[k].w]));
-    B.wing = { set: weighted(wOf(order.wingSets)), shape: weighted(wOf(order.wingShapes)) };
+    B.wing = { set: weighted((order.wingSetFams && order.wingSetFams[fam]) || wOf(order.wingSets)), shape: order.wingShapes ? weighted(wOf(order.wingShapes)) : null };
+    if (!order.wingShapes) B.sig.push('ws' + B.wing.set);
+  }
+  if (order.wingShapes) {
     const H = (order.habitus && order.habitus[fam]) || {};
     B.habitus = { tymbals: H.tymbals ? rr(H.tymbals) : 0, flange: H.flange ? rr(H.flange) : 0, abdCap: H.abdCap || 0 };
     if (B.habitus.flange) {   // the pronotal collar (B.thorax.lines[0]) flared into lateral flanges, flange x the head's half width at the collar
@@ -3221,6 +3279,16 @@ function rollBodyGenes(type, P) {
       if (!T.anchors.some(a => a[1] >= 1 && a[0] > tc)) T.anchors.splice(4, 0, [tc + 0.18, 1]);
     }
     B.sig.push('ws' + B.wing.set, 'wf' + B.wing.shape, 'ab' + (P.abdShape || '-'), B.habitus.tymbals ? 'ty' : '-', B.habitus.flange ? 'fl' + Math.round(B.habitus.flange * 10) : '-');
+  }
+  // ---- abdominal macrochaetae and pile (#54, the fly): rolled last so every gene above keeps its draws ----
+  A.chaetae = null;
+  if (order.chaetae && order.chaetae[fam]) {
+    const CH = order.chaetae[fam];
+    if (CH.p >= 1 || rng() < CH.p) {
+      const K = order.chaetaeKinds[CH.kind];
+      A.chaetae = { kind: CH.kind, len: rr(K.len), ang: rr(K.ang), sp: rr(K.sp), rows: K.rows ? randInt(K.rows[0], K.rows[1]) : 0, n: K.n ? randInt(K.n[0], K.n[1]) : 0 };
+    }
+    B.sig.push(A.chaetae ? 'ch' + A.chaetae.kind[0] + A.chaetae.rows + A.chaetae.n : 'ch-');
   }
   return B;
 }
@@ -3304,7 +3372,8 @@ function layoutBody(C) {
   meta.recipe = P.fam;
   meta.fam = P.fam;   // the family as rolled (wing family of a winged order, body family of a beetle or grasshopper), for tests/check.js; the moth block overwrites recipe, never fam; an odonate family is also its antenodal regime (#17, #48)
   meta.bodyGenes = B;
-  if (B.wing) meta.cicada = { set: B.wing.set, shape: B.wing.shape, fam: P.fam, abdShape: P.abdShape, marks: null, collarY: null, tymbals: null };   // #49, filled in by the thorax and abdomen sections
+  if (B.wing && B.wing.shape) meta.cicada = { set: B.wing.set, shape: B.wing.shape, fam: P.fam, abdShape: P.abdShape, marks: null, collarY: null, tymbals: null };   // #49, filled in by the thorax and abdomen sections
+  if (type === 'fly') meta.fly = { set: B.wing.set, fam: P.fam, chaetae: null };   // #54, the macrochaetae filled in by the abdomen section
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   if (B.habitus && B.habitus.abdCap) P.abdW = Math.min(P.abdW, B.habitus.abdCap * P.thoraxW);   // a slender family (#49): the abdomen held under this share of the thorax's width
   P.thoraxAnchors = B.thorax.anchors;
@@ -3465,6 +3534,14 @@ function drawAbdomen(C) {
     };
     legacyMarksBox();
     L.abdomen.push(layout);
+    if (A.chaetae) {   // #54 macrochaetae / pile: strokes from the rim standing back and out past the outline (outside every segment, so not in the pitch element); no rng
+      const ch = A.chaetae, d = dirv(90 - ch.ang), marks = [], sp = floorPitch(ch.sp);
+      const mark = y => { const b = [abdomen.hwAt(y), y], t = add(b, mul(d, ch.len)); if (b[0] > 2 && t[0] > abdomen.hwAt(t[1]) + 0.5) marks.push([b, t]); };
+      if (ch.kind === 'bristle') { for (let i = Math.max(1, n - ch.rows); i < n; i++) for (let j = 0; j < ch.n; j++) mark(ys[i] - 0.6 - j * sp); }   // the hind margin of each of the last rows tergites
+      else for (let y = abdomen.yTop + P.abdOverlap + 2; y < abdomen.yBot - 2; y += sp) mark(y);
+      for (const [b, t] of marks) for (const sg of [-1, 1]) L.abdomen.push(lineEl([sg * b[0], b[1]], [sg * t[0], t[1]], ch.kind === 'bristle' ? SW.D : SW.F));
+      if (meta.fly) meta.fly.chaetae = { kind: ch.kind, marks };
+    }
     if (A.keel && !(A.mark === 'striped' && A.stripe.n === 1)) L.abdomen.push(lineEl([0, abdomen.yTop + 4], [0, abdomen.yBot - 6], SW.F));   // dorsal keel / mid line
     // terminalia
     const tipY = abdomen.yBot;
@@ -4520,8 +4597,10 @@ function wingsLepidoptera(C) {   // (type === 'moth')
   drawLepWing(fore, SF, fVeins, lepPattern(SF, fore, false), false);
 }
 
+const DIP_FOLD_SIDE = 2, DIP_FOLD_MAX = 118;   // a folded fly's wings turn in until the abdomen's side shows this far (body units) beside them, at most to this angle (#54)
+const DIP_SPAN_MAX = 2.4;   // a fly's wing span at most this many root-to-abdomen-tip lengths (#54: the asilid's long abdomen spread at 24 degrees put the plate at scale 0.48)
 function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
-  const { type, order, L, meta, P, thorax, abdomen } = C;
+  const { type, order, L, meta, P, B, thorax, abdomen } = C;
   // ---- Diptera, grown by growVeins v2 (docs/wing-venation-spec.md, Diptera; refs dip-eristalis, dip-asilid-photo,
   // dip-limonia). Lanes are the fly's Comstock-Needham trunks measured on dip-eristalis: Sc and R1 run under the costa
   // and meet it in turn; Rs forks off R1 at u 0.2 and splits again into R2+3 (costa) and R4+5 (apex); M runs through
@@ -4530,7 +4609,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   // M1 / M2 (+ M3); M1-M3 all to the margin), whether R4 forks off R4+5, whether cup closes, the site spacing and the
   // open line; the seed rolls every position, every bow, the optional h and bm-cu crossveins, the stigma and the
   // posture. C stays heavy to the apex; the small stigma sits where Sc ends. ----
-  const fam = P.fam;
+  const fam = P.fam, plan = (order.wingPlans && order.wingPlans[fam]) || fam;   // #54: a new family's venation is its nearest family's plan
   const F = {   // ky breadth / Lw; len span factor; sc / r1 / r23 where Sc, R1, R2+3 meet the costa; fork where Rs splits; bmcu / dmcu crossvein u;
     // cu1 CuA1's margin u past dm-cu; cu2 where CuA2 meets A1 (or the margin when cup is open); mEnd where M stops before the M1 bend;
     // m1: bend (muscid M1 bent forward), fork (nematoceran M1 / M2, m3 odds of M3), three (M1-M3 to the margin); r45 odds r4+5 closes;
@@ -4547,14 +4626,14 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
                m1: 'three', m3: 1, r45: 0, r4: 1, sepAbs: 0.1, k: [2.5, 4], uOpen: [0.74, 0.8], a2: 0.3, h: 0.7, bmcuP: 1, stig: ['solid', 'solid', 'none'] },
     tipulid: { ky: [0.38, 0.46], up: 0.47, pk: 0.08, sharp: 0.3, len: [0.95, 1.05], sc: [0.6, 0.7], r1: [0.76, 0.84], fork: [0.62, 0.72], r23: [0.88, 0.94], bmcu: [0.42, 0.52], dmcu: [0.62, 0.72], cu1: [0.04, 0.08], cu2: [0.54, 0.62], mEnd: [0.8, 0.86],
                m1: 'fork', m3: 0.8, r45: 0, r4: 0, sepAbs: 0.055, k: [1.6, 2.4], uOpen: [0.88, 0.92], a2: 1, h: 0.8, bmcuP: 0.8, stig: ['solid', 'stipple', 'none'], cupOpen: true },
-  }[fam];
+  }[plan];
   const rr = r => randRange(r[0], r[1]);
   const E = { sc: rr(F.sc), r1: rr(F.r1), fork: rr(F.fork), r23: rr(F.r23), bmcu: rr(F.bmcu), dmcu: rr(F.dmcu), cu2: rr(F.cu2), mEnd: rr(F.mEnd), a: randRange(0.14, 0.24), h: randRange(0.1, 0.17), r4: randRange(0.66, 0.74) };
   E.rm = Math.max(0.4, E.fork - randRange(0.03, 0.1));                      // r-m sits just basal of the Rs fork (dip-eristalis)
   E.cu1 = E.dmcu + rr(F.cu1);                                              // CuA1 turns down to the margin right after dm-cu
   E.mf = Math.max(E.dmcu + 0.08, fam === 'tipulid' ? randRange(0.78, 0.84) : lerp(E.dmcu, 0.94, randRange(0.3, 0.45)));   // where M forks into M1 / M2
   const G = {
-    fam, ky: rr(F.ky), len: rr(F.len), theta: type === 'cranefly' ? randRange(44, 68) : randRange(24, 56),
+    fam, ky: rr(F.ky), len: rr(F.len), theta: order.wingSets ? rr(order.wingSets[B.wing.set].theta) : randRange(44, 68),   // the fly's wing set (#54): spread, half-folded or folded over the abdomen; the crane fly's one spread
     tipY: randRange(-0.08, 0.1), sharp: randRange(0, 1), lobe: randRange(0.82, 1.18), stalk: type === 'cranefly' ? randRange(0.5, 0.8) : randRange(0.7, 1.15),
     spines: rng() < 0.65, spurious: fam === 'syrphid' || (fam === 'muscid' && rng() < 0.1),
     r45closed: F.m1 === 'bend' && rng() < F.r45, r4: rng() < F.r4, m2: F.m1 === 'three' || (F.m1 === 'fork' && rng() < 0.75), m3: F.m1 !== 'bend' && rng() < F.m3, a2: rng() < F.a2, h: rng() < F.h, bmcu: rng() < F.bmcuP,
@@ -4563,8 +4642,10 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
     bend: randRange(0.1, 0.16), dmBow: randRange(-0.06, -0.02),            // the muscid M1 bend (M1 rises by 0.3 of it, as a chord fraction, so the elbow stays under R4+5); dm-cu bows toward the apex (a bow rotates both end tangents, so it stays gentle for R-D)
   };
   const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * order.wingRootX;
-  const theta = G.theta;
-  const Lw = (abdomen.yBot - by) / Math.sin(theta * D2R) * G.len;
+  let theta = G.theta;
+  const WS = order.wingSets ? order.wingSets[B.wing.set] : null;
+  const fold = WS && WS.reach ? rr(WS.reach) * (order.habitus[fam].foldReach || 1) : 1;   // folded: the family's reach (a long asilid, conopid or nematoceran abdomen runs on past the tips)
+  const Lw = Math.min((abdomen.yBot - by) / Math.sin(theta * D2R) * G.len, (abdomen.yBot - by) * DIP_SPAN_MAX) * fold;   // a folded fly's wings end about the abdomen's tip (#54; a long asilid abdomen reaches past them); a shallow spread is capped so a long abdomen cannot push the plate scale under its floor
   const ky = G.ky * randRange(0.9, 1.1);
   const X = f => f * Lw, Y = f => f * Lw * ky;
   // outline (#9): the breadth is split about the root-apex line, F.up of it on the costal side (the references' costa runs
@@ -4575,6 +4656,21 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   const o = [[0, 0], [0.08, -0.05 * G.stalk * kT], [0.18, -0.14 * G.stalk * kT], [0.35 + pk * 0.6, -0.27 * kT], [0.55 + pk, -oT * kT], [0.78 + pk * 0.6, -0.3 * kT], [lerp(0.9, 0.95, s), -lerp(0.2, 0.1, s) * kT], [1.0, tipY], [lerp(0.9, 0.95, s), lerp(0.2, 0.1, s) * kB + tipY * 0.5],
     [0.75 + pk * 0.6, 0.3 * G.lobe * kB], [0.5 + pk, oB * G.lobe * kB], [0.3 + pk * 0.6, 0.35 * kB * randRange(0.85, 1.15)], [0.16, 0.22 * G.stalk * kB * randRange(0.6, 1.3)], [0.08, 0.08 * G.stalk * kB]]
     .map(p => [X(p[0]), Y(p[1]) * jitter(0.03)]);
+  // folded (#54): the pair laid scissor-wise over the abdomen leaves its sides showing; a broad wing over a slender abdomen
+  // folds further in (1.5 degrees a step, to DIP_FOLD_MAX) until somewhere beside the abdomen the outer edge stays
+  // DIP_FOLD_SIDE inside its side, or the abdomen runs on past the tips. No rng: the outline is the one already rolled
+  if (B.wing && B.wing.set === 'folded') {
+    const shows = th => {
+      const w = sampleSmooth(o, true, 0.9, 8).map(p => add([bx, by], rot(p, th * D2R)));
+      for (let y = thorax.yBot + 2; y < abdomen.yBot; y += 2) {
+        const hw = abdomen.hwAt(y); if (hw < 4) continue;   // a sliver of tip (under 4 wide) is not a side that shows
+        let x = null; for (let i = 0, j = w.length - 1; i < w.length; j = i++) { const a = w[i], b = w[j]; if ((a[1] > y) !== (b[1] > y)) { const xi = a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]); if (x === null || xi > x) x = xi; } }
+        if (x === null || x < hw - DIP_FOLD_SIDE) return true;
+      }
+      return false;
+    };
+    while (!shows(theta) && theta + 1.5 <= DIP_FOLD_MAX) theta += 1.5;
+  }
   const wing = makeWing([bx, by], theta, o, 0.9);
   L.wings.push(pathEl(wing.path, SW.O, '#fff'));
   L.wings.push(...fringe(wing, 2.2, 1.8, SW.F, p => p[0] > X(0.08)));
@@ -4638,9 +4734,9 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
     Math.round(G.uOpen * 10), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.lobe * 10), Math.round(G.stalk * 5), Math.round(E.fork * 10), Math.round(E.r1 * 10), Math.round(E.dmcu * 10)].join(',');
   // halteres
   const hy = thorax.yAt(0.8), hx = thorax.hwAt(hy) * 0.8;
-  const hd = dirv(theta + 20);
-  L.wings.push(lineEl([hx, hy], add([hx, hy], mul(hd, 11)), SW.D));
-  L.wings.push(circleEl(add([hx, hy], mul(hd, 13)), 2.4, SW.D, '#fff'));
+  const hd = dirv(theta + 20), halt = [lineEl([hx, hy], add([hx, hy], mul(hd, 11)), SW.D), circleEl(add([hx, hy], mul(hd, 13)), 2.4, SW.D, '#fff')];
+  if (WS && B.wing.set !== 'spread') L.wings.unshift(...halt);   // a half-folded or folded wing lies over its haltere (#54), so it goes under the wing
+  else L.wings.push(...halt);
 }
 
 function wingsNeuroptera(C) {   // (type === 'lacewing')

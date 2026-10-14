@@ -92,3 +92,15 @@ References for `../research-cicada-habitus.md` (#49). From Wikimedia Commons, do
 | hab-cic-cicadettana-dorsal.jpg | *Cicadettana calliope* (Cicadettinae), a small cicadettine, dorsal | [Cicadettana calliope calliope male US.IL.QHR male dorsal view.jpg](https://commons.wikimedia.org/wiki/File:Cicadettana_calliope_calliope_male_US.IL.QHR_male_dorsal_view.jpg), D. C. Marshall | CC BY-SA 4.0 |
 | hab-cic-tibicen-dorsal.jpg | *Tibicen* (now *Hadoa*) *bifidus* (Cicadinae) at rest, dorsal: broad body, roofed tegmina | [Tibicen bifidus dorsal.jpg](https://commons.wikimedia.org/wiki/File:Tibicen_bifidus_dorsal.jpg), JerryFriedman | CC BY-SA 3.0 |
 | hab-cic-platypleura-capensis.jpg | *Platypleura capensis* (Platypleurini) at rest: the pronotal collar flared into lateral flanges wider than the head, broad rounded tegmina roofed over a stout abdomen | [Platypleura capensis00.jpg](https://commons.wikimedia.org/wiki/File:Platypleura_capensis00.jpg), Karen Pagel | CC BY-SA 4.0 |
+
+## Fly habitus (`dip-hab-` prefix)
+
+References for `../research-diptera-habitus.md` (#54). From Wikimedia Commons, downscaled to 960 px where larger.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| dip-hab-tachina.jpg | *Tachina fera* (Tachinidae), dorsal: wings half open in a delta, round abdomen with stout marginal bristles standing out past its sides | [Fly (Tachina fera) top.jpg](https://commons.wikimedia.org/wiki/File:Fly_(Tachina_fera)_top.jpg), Charles J. Sharp | CC BY-SA 3.0 |
+| dip-hab-bombylius.jpg | *Bombylius major* (Bombyliidae): round, densely hairy body, long slender legs, long proboscis | [Grosser Wollschweber Bombylius major.jpg](https://commons.wikimedia.org/wiki/File:Grosser_Wollschweber_Bombylius_major.jpg), Richard Bartz | CC BY-SA 2.5 |
+| dip-hab-physocephala.jpg | *Physocephala rufipes* (Conopidae): petiolate clubbed abdomen, long porrect antennae, broad head | [Physocephala.rufipes.jpg](https://commons.wikimedia.org/wiki/File:Physocephala.rufipes.jpg), James K. Lindsey | CC BY-SA 3.0 |
+| dip-hab-tabanus.jpg | *Tabanus bovinus* (Tabanidae) at rest: wings swept back in a delta over a broad abdomen | [Tabanus.bovinus.female.jpg](https://commons.wikimedia.org/wiki/File:Tabanus.bovinus.female.jpg), James K. Lindsey | CC BY-SA 3.0 |
+| dip-hab-episyrphus.jpg | *Episyrphus balteatus* (Syrphidae), dorsal specimen: flat banded abdomen | [Episyrphus balteatus (10.3897-BDJ.10.e78518) Figure 22a.jpg](https://commons.wikimedia.org/wiki/File:Episyrphus_balteatus_(10.3897-BDJ.10.e78518)_Figure_22a.jpg), Rego et al. (2022) | CC BY 4.0 |

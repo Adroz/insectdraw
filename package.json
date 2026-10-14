@@ -2,7 +2,7 @@
   "name": "insectdraw",
   "version": "0.0.0",
   "private": true,
-  "description": "Procedural Victorian-style insect plates. The engine (index.html) has no dependencies; sharp is only for the e-ink raster gate.",
+  "description": "Procedural Victorian-style insect plates. The engine (index.html) has no dependencies; sharp is only for the test tooling (the e-ink raster gate, the contact sheet's crop).",
   "scripts": {
     "test": "node tests/eink.js",
     "check": "node tests/check.js 3000",

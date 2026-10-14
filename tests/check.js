@@ -41,6 +41,36 @@ const DIP_MIN = 15;   // plates a family needs before its median is asserted
 const DIP_RUNG_FAMS = ['muscid', 'syrphid', 'tabanid'];   // the short-rung plan: r-m always drawn, r-m and bm-cu at most DIP_RUNG_MAX
 const DIP_RUNG_MAX = 0.06;   // per-plate cap on r-m and bm-cu, fraction of the span
 const DIP_BMCU_ALWAYS = ['tabanid', 'asilid'];   // families whose bm cell is always closed by bm-cu
+// #54: the families drawn on another family's venation plan (research-diptera-habitus.md: the tachinid's is the calyptrate
+// muscid plan, the bee fly's R4 / R5 apart with M to the margin as the tabanid's, the conopid's cell r4+5 closed as the syrphid's)
+const DIP_PLAN = { tachinid: 'muscid', bombyliid: 'tabanid', conopid: 'syrphid' };
+// #54 fly wing set (docs/research-diptera-habitus.md, refs dip-hab-*): a set specimen spreads its wings (the angle #9
+// drew, theta the root-to-apex line in degrees below the horizontal), a half-folded fly holds them swept back in a delta
+// (a tabanid or muscid at rest), and the resting pose most fly plates show folds them back over the abdomen scissor-wise,
+// each wing's hind margin over the midline so the pair overlaps there. theta: the wing block's angle per set (meta.wingTheta);
+// cross: on a folded plate the right wing reaches at least this far past the midline (it overlaps its mirror image);
+// side: and at some y beside the abdomen its outer edge stays at least this far inside the abdomen's side (the sides
+// show); share: every set on at least this share of a run's fly plates, asserted once the run has shareMin of them
+const DIP_SET = { theta: { spread: [24, 56], half: [58, 72], folded: [94, 118] }, cross: 4, side: 1.5, share: 0.15, shareMin: 100 };
+// #54 fly families and their abdomens in dorsal view (docs/research-diptera-habitus.md, refs dip-hab-*), read off the drawn
+// outlines: lw is the abdomen's length per its widest width. round (Tachinidae, Bombyliidae): lw at most `round`; long
+// (Asilidae): lw at least `long` and tapering, its half width at t 0.8 at most `taper` of the widest; broad (Tabanidae): at
+// least `broad` x the thorax's widest and widest in its basal half; petiolate (Conopidae): a waist, its half width over t
+// 0.02-0.2 at most `waist` of the widest, and widest behind t `club`; oval (Syrphidae): lw within `oval`, banded or spotted;
+// slender (the nematocerans): at most `slender` x the thorax's widest. Every family on at least `share` of a run's fly plates.
+const DIP_HAB = { fams: ['muscid', 'nemato', 'syrphid', 'tabanid', 'asilid', 'tachinid', 'bombyliid', 'conopid'], share: 0.06,
+  round: 1.45, long: 2.6, taper: 0.65, broad: 1.15, waist: 0.5, club: 0.45, oval: [1.1, 2.3], ovalMarks: ['banded', 'spotted'], slender: 0.85 };
+// #54 abdominal macrochaetae (refs dip-hab-tachina: the stout bristles along the hind margins of the tergites standing out
+// past the abdomen's sides; dip-hab-bombylius: the dense pile all round it): meta.fly.chaetae { kind: 'bristle' | 'fur',
+// marks: [[base, tip]] right side, body coordinates } or null. Every mark's base within `onRim` of the abdomen's outline, its
+// tip outside the outline and behind its base; `always`: the families that always carry them (tachinid bristles, bombyliid
+// fur); a bristle at least `len` x the pile's longest
+const DIP_CHAETAE = { onRim: 1.5, always: { tachinid: 'bristle', bombyliid: 'fur' }, minMarks: 4 };
+// #54 legs per family (refs dip-asilid-photo, dip-hab-tachina): a robber fly's legs are long and raptorial, the hind leg
+// (femur on, as drawn on meta.legs[2].pts) at least `asilidHind` x the body's length (thorax front to abdomen tip) and the
+// fore femur spined; a tachinid's legs bristly, every pair spined
+const DIP_LEGS = { asilidHind: 0.85 };
+const dipSet = { sets: {}, fams: {} };   // over the run, for POST.dipShares
 // #11, stated from the references (hym-apis: marginal + SM1-SM3 + ME1-ME2; Vespidae the same plan; hym-ichneumonidae-diagram:
 // the areolet, the small cell between 2r-m and the first r-m just past the stigma's distal end), not read from the engine's family table
 const HYM_CELLS = { apid: { sub: 3, disc: 2 }, vespid: { sub: 3, disc: 2 } };   // closed submarginal / discoidal cells per family
@@ -481,6 +511,9 @@ const PRE = {
       if (o.wingSet !== undefined && (!o.wingSet || (o.wingSet.sets ? setsBad(o.wingSet) || Object.values(o.wingSet.fams || {}).some(w => (w.sets || w.abdWing) && setsBad(Object.assign({}, o.wingSet, w)))
         : !range2(o.wingSet.fw) || !range2(o.wingSet.hw) || Object.values(o.wingSet.fams || {}).some(w => (w.fw && !range2(w.fw)) || (w.hw && !range2(w.hw))))))
         f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } } nor { abdWing, sets: { set: { w, fw, hw } }, fams? }: ' + JSON.stringify(o.wingSet));
+      if (o.wingPlans !== undefined && Object.values(o.wingPlans).some(f => Object.keys(o.wingPlans).includes(f))) f('wingPlans maps a family onto another mapped family: ' + JSON.stringify(o.wingPlans));
+      if (o.chaetae !== undefined && Object.values(o.chaetae).some(c => !(o.chaetaeKinds || {})[c.kind] || !(c.p > 0 && c.p <= 1))) f('chaetae is not { fam: { kind (a chaetaeKinds key), p in (0, 1] } }: ' + JSON.stringify(o.chaetae));
+      if (o.wingSetFams !== undefined && Object.values(o.wingSetFams).some(w => Object.keys(w).some(k => !(o.wingSets || {})[k]))) f('wingSetFams weighs a set wingSets does not have');
       if (o.antFit !== undefined && !(o.antFit && o.antFit.scale > 0 && o.antFit.width > 0)) f('antFit is not { scale, width } (both > 0): ' + JSON.stringify(o.antFit));
       if (typeof o.wings !== 'function') f('wings is not a function');
       const nb = namesBad(o.names); if (nb) f('names: ' + nb);
@@ -495,7 +528,7 @@ const PRE = {
         for (const k of P_FIELDS) if (!(typeof P[k] === 'number' && P[k] > 0)) f('proportions leaves P.' + k + ' unset: ' + P[k]);
         for (const k of ['thoraxAnchors', 'abdAnchors']) if (!Array.isArray(P[k]) || P[k].length < 3 || P[k].some(a => !Array.isArray(a) || a.length !== 2)) f('proportions leaves P.' + k + ' unset or malformed');
       }
-      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['famScale', o.famScale || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}],
+      for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['famScale', o.famScale || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}], ['wingSetFams', o.wingSetFams || {}], ['wingPlans', o.wingPlans || {}], ['chaetae', o.chaetae || {}],
         ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
@@ -831,17 +864,88 @@ const CHECKS = {
   dipAspect(meta, svg, fail) {
     if (meta.type !== 'fly' && meta.type !== 'cranefly') return;
     if (!meta.fam) return fail('Diptera plate has no meta.fam');
-    const s = meta.wingStats || {}, fam = meta.fam, o = dipStats[fam] ||= { type: meta.type, wl: [], rm: [], bmcu: [] };
+    const s = meta.wingStats || {}, fam = DIP_PLAN[meta.fam] || meta.fam, o = dipStats[fam] ||= { type: meta.type, wl: [], rm: [], bmcu: [] };
     o.wl.push(pcaAspect(meta.wingOutlines[0]));
     if (typeof s.rm !== 'number') return fail('Diptera wingStats has no r-m length');
     if (s.rm > 0) o.rm.push(s.rm);
     if (s.bmcu > 0) o.bmcu.push(s.bmcu);
   },
+  // #54 the fly's wing set (meta.fly.set, rolled with the body, read by wingsDiptera) against DIP_SET: the drawn angle in
+  // the set's band; folded wings overlap their mirror images over the midline and leave the abdomen's sides showing
+  dipWingSet(meta, svg, fail) {
+    if (meta.type !== 'fly') return;
+    const set = meta.fly && meta.fly.set, band = DIP_SET.theta[set];
+    if (!band) return fail('fly plate has no known wing set on meta.fly: ' + set);
+    dipSet.sets[set] = (dipSet.sets[set] || 0) + 1;
+    const th = meta.wingTheta;
+    if (!(th >= band[0] && th <= band[1])) fail('fly wing angle ' + (+th).toFixed(1) + ' outside the ' + set + ' band ' + band.join('-'));
+    if (set !== 'folded') return;
+    const w = meta.wingOutlines[0], xMin = Math.min(...w.map(p => p[0]));
+    if (xMin > -DIP_SET.cross) fail('folded fly wing does not cross the midline: reaches x ' + xMin.toFixed(1) + ' (want <= -' + DIP_SET.cross + ')');
+    const ab = meta.abdomen.profile.filter(([y, hw]) => y > meta.thorax.yBot + 2 && hw > 3);
+    if (!ab.some(([y, hw]) => { const x = rightmostAt(w, y); return x === null || x < hw - DIP_SET.side; })) fail('folded fly wings cover the abdomen\'s sides along its whole length');
+  },
+  // #54 the fly family's abdomen (meta.fly.fam) against DIP_HAB, on the drawn abdomen and thorax outlines
+  dipHabitus(meta, svg, fail) {
+    if (meta.type !== 'fly') return;
+    const fam = meta.fly && meta.fly.fam, H = DIP_HAB;
+    if (!H.fams.includes(fam)) return fail('fly plate has no known family on meta.fly: ' + fam);
+    dipSet.fams[fam] = (dipSet.fams[fam] || 0) + 1;
+    const ab = meta.abdomen, abW = maxHw(ab.profile), thW = maxHw(meta.thorax.profile), lw = (ab.yBot - ab.yTop) / (2 * abW);
+    const hw = t => profHw(ab.profile, ab.yTop + t * (ab.yBot - ab.yTop));
+    const widestT = () => { let b = 0; for (let t = 0; t <= 1.0001; t += 0.01) if (hw(t) > hw(b)) b = t; return b; };
+    const r = (v, d = 2) => (+v).toFixed(d);
+    if ((fam === 'tachinid' || fam === 'bombyliid') && lw > H.round) fail(fam + ' abdomen not round: ' + r(lw) + ' times as long as wide (max ' + H.round + ')');
+    if (fam === 'asilid') {
+      if (lw < H.long) fail('asilid abdomen not long: ' + r(lw) + ' times as long as wide (min ' + H.long + ')');
+      if (hw(0.8) > H.taper * abW) fail('asilid abdomen does not taper: ' + r(hw(0.8) / abW) + ' of its width at t 0.8 (max ' + H.taper + ')');
+    }
+    if (fam === 'tabanid') {
+      if (abW < H.broad * thW) fail('tabanid abdomen not broad: ' + r(abW / thW) + 'x the thorax (min ' + H.broad + ')');
+      if (widestT() > 0.5) fail('tabanid abdomen not widest in its basal half (t ' + r(widestT()) + ')');
+    }
+    if (fam === 'conopid') {
+      let w = Infinity; for (let t = 0.02; t <= 0.2; t += 0.01) w = Math.min(w, hw(t));
+      if (w > H.waist * abW) fail('conopid abdomen not petiolate: ' + r(w / abW) + ' of its width at the base (max ' + H.waist + ')');
+      if (widestT() < H.club) fail('conopid abdomen widest at t ' + r(widestT()) + ', not behind ' + H.club);
+    }
+    if (fam === 'syrphid') {
+      if (lw < H.oval[0] || lw > H.oval[1]) fail('syrphid abdomen not a flat oval: ' + r(lw) + ' times as long as wide (want ' + H.oval.join('-') + ')');
+      const mark = meta.bodyGenes.abd.mark; if (!H.ovalMarks.includes(mark)) fail('syrphid abdomen ' + mark + ', not ' + H.ovalMarks.join(' / '));
+    }
+    if (fam === 'nemato' && abW > H.slender * thW) fail('nematoceran abdomen not slender: ' + r(abW / thW) + 'x the thorax (max ' + H.slender + ')');
+  },
+  // #54 abdominal macrochaetae and pile (meta.fly.chaetae) against DIP_CHAETAE
+  dipChaetae(meta, svg, fail) {
+    if (meta.type !== 'fly') return;
+    const c = meta.fly && meta.fly.chaetae, want = DIP_CHAETAE.always[meta.fly && meta.fly.fam];
+    if (want && (!c || c.kind !== want)) return fail(meta.fly.fam + ' abdomen has no ' + want + ' (meta.fly.chaetae ' + (c && c.kind) + ')');
+    if (!c) return;
+    if (c.marks.length < DIP_CHAETAE.minMarks) return fail('fly abdominal ' + c.kind + ' has only ' + c.marks.length + ' marks');
+    const prof = meta.abdomen.profile;
+    for (const [b, t] of c.marks) {
+      if (Math.abs(b[0] - profHw(prof, b[1], 2)) > DIP_CHAETAE.onRim) return fail('fly abdominal ' + c.kind + ' base off the rim at ' + b.map(v => v.toFixed(1)));
+      if (t[0] <= profHw(prof, t[1], 2)) return fail('fly abdominal ' + c.kind + ' tip inside the abdomen at ' + t.map(v => v.toFixed(1)));
+      if (t[1] < b[1] - 0.01) return fail('fly abdominal ' + c.kind + ' points forward');
+    }
+  },
+  // #54 the family's legs against DIP_LEGS
+  dipLegs(meta, svg, fail) {
+    if (meta.type !== 'fly') return;
+    const fam = meta.fly && meta.fly.fam, G = meta.bodyGenes.legs;
+    if (fam === 'asilid') {
+      const pts = meta.legs[2].pts, body = meta.abdomen.yBot - meta.thorax.yTop;
+      let d = 0; for (let i = 2; i + 1 < pts.length; i++) d += dist(pts[i], pts[i + 1]);
+      if (d < DIP_LEGS.asilidHind * body) fail('asilid hind leg not long: ' + (d / body).toFixed(2) + 'x the body (min ' + DIP_LEGS.asilidHind + ')');
+      if (!(G[0].spines && G[0].spines.femur)) fail('asilid fore femur not spined (raptorial)');
+    }
+    if (fam === 'tachinid' && !G.every(g => g.spines)) fail('tachinid legs not bristly on every pair');
+  },
   // Diptera short rungs (#10): Tabanidae and Asilidae always close bm with bm-cu, and on the muscid / syrphid / tabanid
   // plan r-m and bm-cu are short rungs on every plate, never a long oblique (dip-eristalis: ~5.5% of the span)
   dipRungs(meta, svg, fail, { dev }) {
     if (meta.type !== 'fly' || !meta.fam) return;
-    const fam = meta.fam, rungs = DIP_RUNG_FAMS.includes(fam);
+    const fam = DIP_PLAN[meta.fam] || meta.fam, rungs = DIP_RUNG_FAMS.includes(fam);
     const one = (s, what) => {
       if (!s) return fail(what + 'Diptera ' + fam + ' wing has no wingStats');
       if (rungs && !(s.rm > 0)) fail(what + 'Diptera ' + fam + ' wing has no r-m (br left open)');
@@ -1926,6 +2030,17 @@ const POST = {
       console.log('#49 cicada ' + what + ':', JSON.stringify(counts) + (n < CIC_SET.shareMin ? ' (too few to assert, < ' + CIC_SET.shareMin + ')' : ''));
     }
   },
+  // #54 every fly wing set and every family on at least DIP_SET.share of the run's fly plates (a run too short to hold the
+  // share is reported, never passed by silence)
+  dipShares(fail) {
+    for (const [what, counts, kinds] of [['wing sets', dipSet.sets, Object.keys(DIP_SET.theta)], ['families', dipSet.fams, DIP_HAB.fams]]) {
+      const n = Object.values(counts).reduce((a, b) => a + b, 0);
+      if (!n) continue;   // its check was not selected
+      const thin = kinds.filter(k => (counts[k] || 0) < (what === 'families' ? DIP_HAB.share : DIP_SET.share) * n);
+      if (n >= DIP_SET.shareMin && thin.length) fail('fly ' + what + ' under their share of the plates: ' + thin.join(', ') + ' ' + JSON.stringify(counts), 'fly');
+      console.log('#54 fly ' + what + ':', JSON.stringify(counts) + (n < DIP_SET.shareMin ? ' (too few to assert, < ' + DIP_SET.shareMin + ')' : ''));
+    }
+  },
   // the #26 checks assert only on cicada plates: once the run has CIC_MIN of them every selected one must have run
   cicSeen(fail) {
     const n = cicSeenPlates, idle = Object.keys(cicSeen).filter(k => ran.has(k) && !cicSeen[k]);
@@ -1977,7 +2092,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
