@@ -360,9 +360,9 @@ const odoHab = { fam: {}, pose: {}, mark: {}, plates: 0 };   // over the run, fo
 //   straight run on the midline at least ODO_EYE.seam of the eye's length, and the eye's lattice or stipple
 //   (meta.head.eyes[i].marks, the tone's centres) runs to within ODO_EYE.reach pitches of that seam; only the gomphid
 //   holds its eyes apart (research-head-eyes.md), its inner margins at least ODO_EYE.apart head widths off the midline;
-// - an odonate's antenna socket (meta.antennae.sr) is at most ODO_EYE.socket of its smallest ocellus's radius, so the
-//   dorsal head reads as three ocelli between the eyes, not five equal rings (head-odo-damselfly; the dragonfly's the same,
-//   head-odo-tillyard1917 A and D: a slender antenna from a small socket);
+// - a damselfly's antenna socket (meta.antennae.sr) is at most ODO_EYE.socket of its smallest ocellus's radius, so the
+//   dorsal head reads as three ocelli between the eyes, not five equal rings (head-odo-damselfly; the dragonfly keeps its
+//   socket ring: its antennae are fine strokes that need the ring to survive at device size, tests/eink.js);
 // - a butterfly's club is never hooked (ant-butterfly-tips-bingham: the hooked apiculus is the skippers', k Tagiades; the
 //   plate draws no skipper family) and its head draws no proboscis (meta.head.mouth: the mouthparts drawn), which
 //   lies coiled under the head where a dorsal view cannot see it.
@@ -1469,9 +1469,9 @@ const CHECKS = {
       if (reach > ODO_EYE.reach * e.pitch) return fail(meta.fam + ' eye tone stops ' + (reach / e.pitch).toFixed(2) + ' pitches short of the seam (max ' + ODO_EYE.reach + ')');
     }
   },
-  // #27 the odonate antenna sockets stay small beside the ocelli (ODO_EYE.socket)
+  // #27 the damselfly's antenna sockets stay small beside the ocelli (ODO_EYE.socket)
   odoSockets(meta, svg, fail) {
-    if (meta.type !== 'damselfly' && meta.type !== 'dragonfly') return;
+    if (meta.type !== 'damselfly') return;
     headSeen.odoSockets++;
     const oc = meta.head.ocelli, sr = meta.antennae.sr;
     if (!oc.length) return fail(meta.type + ' draws no ocelli');
