@@ -497,6 +497,8 @@ const rotAbout = (p, c, deg) => { const a = deg * Math.PI / 180, dx = p[0] - c[0
 const skewedPts = leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew));   // the left leg before mirroring: the right leg rotated about its coxa by its skew (plan step 7)
 const LEG_WING_CLEAR = 1.5;   // legWings: a joint's disc beyond its half width, the engine's WING_LEG_CLEAR (the same 16 rim points, and the same body: both read meta's sampled thorax and abdomen profiles)
 const legRun = {};   // type -> { n, reroll, repaired, placed } over the run (CHECKS.legWings, for POST.legWings): plates whose body-only pose roll re-rolled, whose rolled pose broke against the wings and was repaired, and where a pair was placed first
+const sweptRun = {};   // type -> { n, scale, under } over the run's swept-antenna beetle and grasshopper plates (CHECKS.sweptForelegs, for POST.sweptReport)
+const SWEPT_SCALE = 0.7;   // #47: the plate scale a swept plate is counted under in POST.sweptReport
 const ANT_LEG_CLEAR = 2.5;   // antLegs: asserted clearance beyond the leg's half width (engine: 3 + the antenna's half width, at least 3.65)
 const ptSegDist = (p, u, v) => { const wx = v[0] - u[0], wy = v[1] - u[1], l2 = wx * wx + wy * wy, t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * wx + (p[1] - u[1]) * wy) / l2)) : 0; return Math.hypot(p[0] - u[0] - wx * t, p[1] - u[1] - wy * t); };
 const segDist = (a, b, c, d) => segsCross(a, b, c, d) ? 0 : Math.min(ptSegDist(a, c, d), ptSegDist(b, c, d), ptSegDist(c, a, b), ptSegDist(d, a, b));   // shortest distance between segments ab and cd
@@ -872,6 +874,20 @@ const CHECKS = {
       for (let i = 1; i < pl.length; i++) len += Math.hypot(pl[i][0] - pl[i - 1][0], pl[i][1] - pl[i - 1][1]);
       if (len < GRASS_ANT.tetrigid * an.headW) fail('tetrigid antenna under ' + GRASS_ANT.tetrigid + ' head widths long');
     }
+  },
+  // #47 a long-horned plate (beetle or grasshopper) whose antennae are rolled swept folds its forelegs beside the head, so
+  // the sweep clears them under #7's rule as rolled: the antenna is never re-rolled for a leg (meta.antennae.reasons) nor
+  // laid forward in a fallback pose (meta.antennae.why with its tip ahead of the head's front, meta.head.top: #7's forward
+  // V; a longhorn's back sweep that finds no room between its elytra and ANT_BACK_OUT (#25) keeps its own, backward,
+  // fallback), and the fore femur and tibia stay behind the head's front
+  sweptForelegs(meta, svg, fail) {
+    if ((meta.type !== 'beetle' && meta.type !== 'grasshopper') || !meta.antennae || meta.antennae.pose !== 'swept') return;
+    const an = meta.antennae, fore = meta.legs[0];
+    const R = sweptRun[meta.type] ||= { n: 0, scale: 0, under: 0 };
+    R.n++; R.scale += meta.scale; if (meta.scale < SWEPT_SCALE) R.under++;
+    if (an.reasons.includes('legs')) fail('swept antenna re-rolled for a leg (' + meta.fam + ', legs ' + meta.legRoll.pose + '; reasons ' + an.reasons.join(',') + ')');
+    if (an.why && an.tip[1] < meta.head.top) fail('swept antenna laid forward in its fallback pose after ' + an.why + ' (' + meta.fam + ')');
+    if (fore.pts.slice(2, 5).some(p => p[1] < meta.head.top)) fail('swept plate with the fore femur or tibia ahead of the head (' + meta.fam + ', legs ' + meta.legRoll.pose + ')');
   },
   // #12 the caption and the drawing agree: type bee draws bee families only and type wasp none of them
   hymFamilies(meta, svg, fail) {
@@ -2510,6 +2526,11 @@ const POST = {
       console.log('#53 beetle ' + g + ':', fmt(T)); }
     console.log('#53 beetle families (of ' + n + ' beetle plates):', fmt(colFams) + (n < COL_MIN ? '; too few beetle plates (' + n + ' < ' + COL_MIN + ') to require each' : ''));
   },
+  // #47 the run's swept-antenna beetle and grasshopper plates: none under SWEPT_SCALE, and their mean plate scale (reported)
+  sweptReport(fail) {
+    for (const t in sweptRun) if (sweptRun[t].under) fail(sweptRun[t].under + ' swept-antenna ' + t + ' plates under scale ' + SWEPT_SCALE, t);
+    console.log('#47 swept-antenna plates:', Object.keys(sweptRun).sort().map(t => t + ' ' + sweptRun[t].n + ' (mean scale ' + (sweptRun[t].scale / sweptRun[t].n).toFixed(3) + ')').join(', ') || 'none');
+  },
   // #26 the run's cicadas: the median plate scale at least CIC.scale (0.81 before #26), once the run has CIC_MIN of them
   cicScale(fail) {
     const n = cicRun.scales.length, m = median(cicRun.scales);
@@ -2642,7 +2663,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 

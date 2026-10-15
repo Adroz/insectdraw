@@ -2189,6 +2189,7 @@ function insectName(seed, type, variant, fam, genes) {
 //   head: outline, W/H ratio, eye cx / rx / ry / cy (off centre), ocelli count and arrangement, mouthparts, eye
 //     styles and face markings (docs/research-head-eyes.md); headFams: family / variant overrides of the same keys.
 //   legs: leg family ranges over the LD defaults in rollBodyGenes (base, then the wing / body family).
+//     sweptFore (optional, #47): the family's fore and mid leg angles when its antennae are rolled swept (LEGS_SWEPT).
 //   pronotum (optional): bands the pronotum's width / length (wl) and width / the elytra's (ely) are soft-clipped into in
 //     rollBodyGenes, fams: per-family bands (the beetle, #24). elytra (optional): the puncture style gene's table and the
 //     families' own elytra (B.elytra; wingsElytra).
@@ -2218,6 +2219,12 @@ function insectName(seed, type, variant, fam, genes) {
 //     and base (adj overrides the shared COMMON_ADJ list, qual the NAME_QUAL qualifiers); famNouns / famBase: the nouns
 //     (and base) per drawn family, required when the order rolls two or more families, the lists disjoint (#28;
 //     tests/check.js nameFamilies); variantNames: the same tables per variant.
+// #47 the forelegs of a family whose antennae are rolled swept (the longhorn beetle, the bush-cricket), as `sweptFore` on
+// its leg table: the fore femur held out from the prothorax, square or a little back (never ahead of the head), its tibia
+// turned out and back, and the mid leg's femur a little further back so the pairs stay in order and apart; the angles
+// are LEG_POSES' (0 outward, + toward the tail), safe the pair's fallback dirs. A swept antenna's hoop (#7) then clears
+// them as rolled; a forward foreleg left it no pose (#7's re-roll to a forward V, the fit rule shrinking the plate)
+const LEGS_SWEPT = { fore: { F: [0, 15], tib: [15, 45], T: [5, 20], safe: [5, 8, 30, 40] }, mid: { F: [0, 22], tib: [50, 80], T: [10, 25] } };
 // the odonate leg plan, shared by dragonfly and damselfly: the prey basket (all legs forward, spread wide) or, #48, tucked:
 // every pair folded forward close against the thorax and the back of the head, as at rest (poseAng: the order's own angles
 // for that pose, per pair, over LEG_POSES'; legs folded under the thorax out of sight would leave only half-hidden tarsi)
@@ -2273,7 +2280,8 @@ const ORDERS = {
       ground: { lenK: [1.0, 1.2], wk: [1.0, 1.15], poses: { spread: 3, walking: 3, tucked: 0.5 }, fossorial: 0.2 },
       rove: { lenK: [0.75, 0.9], poses: { walking: 3, spread: 2, tucked: 1 } },
       scarab: { fossorial: 0.85, lenK: [0.8, 1.0], wk: [1.2, 1.4], flare: [1.3, 1.6], spines: 0.85, spineLen: [0.7, 1.1], spineSp: [7, 11], poses: { tucked: 2, spread: 2, walking: 1 } },
-      longhorn: { lenK: [1.2, 1.45], wk: [0.8, 0.95], tibR: [1.0, 1.2], tarR: [0.5, 0.7], spines: 0.15, poses: { spread: 3, walking: 2, raised: 0.5 } },
+      longhorn: { lenK: [1.2, 1.45], wk: [0.8, 0.95], tibR: [1.0, 1.2], tarR: [0.5, 0.7], spines: 0.15, poses: { spread: 3, walking: 2, raised: 0.5 },
+        sweptFore: LEGS_SWEPT },
       weevil: { lenK: [0.75, 0.95], wk: [1.0, 1.2], swell: [1.35, 1.7], tibR: [0.8, 0.95], poses: { tucked: 3, spread: 2 } },
       coccinellid: { lenK: [0.6, 0.75], wk: [0.9, 1.05], tarsomeres: [3, 4], poses: { tucked: 2, spread: 2, walking: 1 } },
       chrysomelid: { lenK: [0.75, 0.9], tarsomeres: [4, 4], poses: { spread: 2, walking: 2, tucked: 1 } },
@@ -2571,7 +2579,8 @@ const ORDERS = {
     thorax: { front: [0.85, 1.1], peak: [0.72, 0.84], hump: [0, 0], waist: [0, 0], lenK: [0.9, 1.2] },   // peak: the saddle is widest over the metazona (#22)
     head: { outline: 'triangular', ratio: [0.8, 1.0], fast: [0.35, 0.55], cx: [0.3, 0.34], rx: [0.1, 0.13], ry: [0.24, 0.32], cy: [0.06, 0.16], tilt: [-15, 0], ocelli: 2, oc: 'lateral', palps: 0.5, furrow: 1, styles: { lattice: 3, stipple: 2 } },
     legs: { base: { tarsomeres: [3, 4], spines: 0.5, spurs: [1, 2], poses: { spread: 3, walking: 2, tucked: 2 } },
-      acridid: { hindK: [1.75, 2.1] }, tettigoniid: { lenK: [1.15, 1.4], wk: [0.8, 0.9], hindK: [1.6, 1.9] }, tetrigid: { lenK: [0.8, 0.95], wk: [1.0, 1.1], hindK: [1.6, 1.9] } },
+      acridid: { hindK: [1.75, 2.1] }, tettigoniid: { lenK: [1.15, 1.4], wk: [0.8, 0.9], hindK: [1.6, 1.9],
+        sweptFore: LEGS_SWEPT }, tetrigid: { lenK: [0.8, 0.95], wk: [1.0, 1.1], hindK: [1.6, 1.9] } },
     ant: { base: { ref: 'bl', len: [0.35, 0.55], seg: [20, 26], socket: [0.13, 0.24], kinds: { filiform: 5, clubbed: 1 }, club: 'gradual' },
       tettigoniid: { kinds: { filiform: 1 }, len: [1.0, 1.8], seg: [30, 45] },
       tetrigid: { kinds: { filiform: 1 }, ref: 'hw', len: [0.9, 1.4], seg: [11, 16] } },   // #23: short, but a head width or more, never two hairs
@@ -3344,6 +3353,11 @@ function rollBodyGenes(type, P) {
     if (corbicula && i === 2) { g.corbicula = true; g.basitarsus = true; g.spurs = 0; g.ang = F.corbAng; g.safe = F.corbSafe; }   // corbicula + flat basitarsus, posed from the family entry
     if (i === 2 && F.hindSafe) g.safe = F.hindSafe;   // the order's own hind-leg fallback (beetle: splayed wide of a broad abdomen, #24)
     if (i === 0 && F.foreAng) { g.poseAng = F.foreAng; g.safe = F.foreSafe; }   // the order's own foreleg angles for every pose it rolls, and its fallback (lacewing, #19)
+    // #47 sweptFore: a family whose antennae are rolled swept holds its forelegs beside the head in every pose it rolls (the
+    // femur out from the prothorax, the tibia folded back), so the sweep clears them under #7's rule, and its mid legs a little
+    // back in the rolled pose only (the spread and safe re-rolls keep the order's own, or a close-set mid coxa crowds the big
+    // hind femur); no rng (the same draws, from these ranges)
+    if (F.sweptFore && B.ant.pose === 'swept' && i < 2) { const S = F.sweptFore[i ? 'mid' : 'fore']; if (S) { g.poseAng = i ? { [B.pose]: S } : { [B.pose]: S, spread: S }; if (S.safe) g.safe = S.safe; g.ang = null; } }
     if (F.poseAng) g.poseAng = Object.assign({}, g.poseAng, ...Object.keys(F.poseAng).map(k => ({ [k]: F.poseAng[k][i] })));   // the order's own angles for a pose, per pair (the odonate tucked pose, #48)
     if (F.tibFlat && i > 0) g.tibFlat = rr(F.tibFlat);   // platycnemidid: flattened, leaf-like mid and hind tibiae (#48)
     if (type === 'mayfly' && i === 0 && B.pose === 'raised') g.ang = { F: [-88, -68], tib: [-100, -70], T: [-10, 10] };   // forelegs held straight out ahead
