@@ -1,0 +1,6 @@
+perceptual: plate, 60 plates per type from seed 61, 100 px thumbnails, blur 3, ink difference (%), floor 10.0 (cranefly 12.5, fly 12.5)
+type                min     p5  median  sheet9   closest pair
+cranefly          13.67  26.53   43.66   21.92   66,104
+                                              90,109  14.24
+                                              100,101  15.01
+perceptual: every type above its floor (report only, not a gate)
