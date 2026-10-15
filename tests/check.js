@@ -141,6 +141,43 @@ const DIP_CHAETAE = { onRim: 1.5, always: { tachinid: 'bristle', bombyliid: 'fur
 // fore femur spined; a tachinid's legs bristly, every pair spined
 const DIP_LEGS = { asilidHind: 0.85 };
 const dipSet = { sets: {}, fams: {} };   // over the run, for POST.dipShares
+// #52 Lepidoptera wing set (docs/research-lepidoptera-habitus.md "Wing set", refs lep-hab-*): the forewing's hind (inner)
+// margin, the line from its basal inner-margin point to the tornus (meta.lep.fore: inner and tornus, body coordinates), in
+// degrees below the horizontal (+ toward the tail): square to the body on a setting board (the pose #13 drew), swept back
+// into a delta, the hindwing tucked forward under the forewing (a moth at rest), or pushed forward past square (the
+// hindwing showing whole behind), within tol of the band (the delta's is the rolled 26-46 less what the wing turns off the
+// midline, below).
+// midline: no forewing within this of the midline (its inner margin and its mirror image's would close into a seam over
+// the body or cross in an X) and no hindwing within hindMidline (it never crosses its pair). covered: the overlap follows
+// the set: over a run, the median share of the hindwing's area under the forewing is highest under a delta and lowest under
+// a forward set (asserted once each set has coveredMin plates). share: every set on at least this share of a run's moths
+// and of its butterflies once the run has shareMin of each; fams: the families that mostly rest in a delta draw it on at
+// least deltaFam of their plates
+const LEP_SET = { margin: { square: [-8, 12], delta: [14, 46], forward: [-20, -10] }, tol: 0.5, midline: 6, hindMidline: 1, coveredMin: 10,
+  share: 0.12, shareMin: 100, deltaFams: ['sphingid', 'noctuid'], deltaFam: 0.4 };
+const lepSet = { sets: {}, fams: {}, cov: { square: [], delta: [], forward: [] }, poses: {}, hidden: [0, 0] };   // over the run, for POST.lepShares; hidden: [hidden plates, of them with LEP_LEGS.hiddenPairs pairs hidden]
+// #52 lepidopteran abdomen families (docs/research-lepidoptera-habitus.md), read off the drawn outlines:
+// lw the abdomen's length per its widest width, aw its widest over the thorax's widest, fw its length over the forewing's
+// (root to its farthest outline point). sphingid: long and fusiform (lw >= long, fw >= longFw), widest ahead of `fusiT` and
+// tapering to a point (half width at t 0.9 at most `point` of the widest), a lateral spot row (at least `spots` spots,
+// each centred at least `lateral` of the half width out); saturniid: short and stout (lw <= stout, aw >= stoutAw), hairy;
+// geometrid: slender (aw <= slender, lw >= long); arctiid: a dorsal spot row (at least `spots` spots on the midline, within
+// `dorsal` of the half width) or banded; noctuid: medium (lw within medium) with dorsal crests on crest plates (tufts on the
+// midline of the basal segments, at least `crests`); papilionid: long and slender (lw >= papilio, aw <= slender); lycaenid:
+// small and short (fw <= small). Every spot and crest inside the abdomen outline.
+// #52 lepidopteran legs (docs/research-lepidoptera-habitus.md): the pose families (meta.legRoll.pose): raised (the
+// forelegs held forward in a V, as every plate drew them), spread (out to the sides: a fore femur that is not a brush at least `spreadFemur`
+// degrees from straight ahead, 0 straight out, -90 straight ahead), walking, hidden (out under the wings and foreshortened: at least one pair fully
+// hidden, no sample of it outside a wing or the body, and `hiddenPairs` pairs on at least `hiddenShare` of the run's hidden
+// plates; #8's placement may turn a pair that cannot stay under a small hindwing out to show cleanly); brush: the nymphalids' (Nymphalidae,
+// with the satyrines) forelegs reduced to short hairy brushes, the fore leg (femur on) at most `brush` x the mid leg, with
+// the mid pair showing ahead of the wings where the forelegs would stand, unless the forewings are pushed forward over that
+// room (the hind pair shows where the hindwing leaves it
+// room; a butterfly's hindwing usually covers it, as on set specimens). share: every pose on at least this share of the run's moths (the
+// moth variant) once it has shareMin
+const LEP_LEGS = { poses: ['raised', 'spread', 'walking', 'hidden'], spreadFemur: -45, hiddenPairs: 2, hiddenShare: 0.85, brushFams: ['nymphalid', 'satyrine'], brush: 0.5, share: 0.12, shareMin: 100 };
+const LEP_ABD = { long: 3.6, longFw: 0.8, fusiT: 0.45, point: 0.45, spots: 3, lateral: 0.5, stout: 2.8, stoutAw: 0.85, slender: 0.7, dorsal: 0.2,
+  medium: [2.4, 3.9], crests: 2, papilio: 5.0, small: 0.62, arctiid: ['dorsal', 'banded'] };
 // #11, stated from the references (hym-apis: marginal + SM1-SM3 + ME1-ME2; Vespidae the same plan; hym-ichneumonidae-diagram:
 // the areolet, the small cell between 2r-m and the first r-m just past the stigma's distal end), not read from the engine's family table
 const HYM_CELLS = { apid: { sub: 3, disc: 2 }, vespid: { sub: 3, disc: 2 } };   // closed submarginal / discoidal cells per family
@@ -578,11 +615,11 @@ const PRE = {
       if (o.pronotum !== undefined && (!o.pronotum || !range2(o.pronotum.wl) || !range2(o.pronotum.ely))) f('pronotum is not { wl: [min, max], ely: [min, max] }: ' + JSON.stringify(o.pronotum));
       if (o.foreCoxa !== undefined && !(o.foreCoxa && o.foreCoxa.clear >= 0 && typeof o.foreCoxa.dir === 'number')) f('foreCoxa is not { clear >= 0, dir (degrees) }: ' + JSON.stringify(o.foreCoxa));
       if (o.laneFloor !== undefined && typeof o.laneFloor !== 'boolean') f('laneFloor is not a boolean: ' + o.laneFloor);
-      // #51: or named sets { name: { w, fw, hw } } with abdWing, the family's sets replacing the order's
-      const setsBad = w => !w.sets || !range2(w.abdWing) || Object.values(w.sets).some(v => !(v.w > 0) || !range2(v.fw) || !range2(v.hw));
+      // #51: or named sets { name: { w, fw, hw } } with abdWing (optional since #52: the moth's wing length is its span gene), the family's sets replacing the order's
+      const setsBad = w => !w.sets || (w.abdWing !== undefined && !range2(w.abdWing)) || Object.values(w.sets).some(v => !(v.w > 0) || !range2(v.fw) || !range2(v.hw));
       if (o.wingSet !== undefined && (!o.wingSet || (o.wingSet.sets ? setsBad(o.wingSet) || Object.values(o.wingSet.fams || {}).some(w => (w.sets || w.abdWing) && setsBad(Object.assign({}, o.wingSet, w)))
         : !range2(o.wingSet.fw) || !range2(o.wingSet.hw) || Object.values(o.wingSet.fams || {}).some(w => (w.fw && !range2(w.fw)) || (w.hw && !range2(w.hw))))))
-        f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } } nor { abdWing, sets: { set: { w, fw, hw } }, fams? }: ' + JSON.stringify(o.wingSet));
+        f('wingSet is not { fw: [min, max], hw: [min, max], fams?: { fam: { fw?, hw? } } } nor { abdWing?, sets: { set: { w, fw, hw } }, fams? }: ' + JSON.stringify(o.wingSet));
       if (o.wingPlans !== undefined && Object.values(o.wingPlans).some(f => Object.keys(o.wingPlans).includes(f))) f('wingPlans maps a family onto another mapped family: ' + JSON.stringify(o.wingPlans));
       if (o.chaetae !== undefined && Object.values(o.chaetae).some(c => !(o.chaetaeKinds || {})[c.kind] || !(c.p > 0 && c.p <= 1))) f('chaetae is not { fam: { kind (a chaetaeKinds key), p in (0, 1] } }: ' + JSON.stringify(o.chaetae));
       if (o.wingSetFams !== undefined && Object.values(o.wingSetFams).some(w => Object.keys(w).some(k => !(o.wingSets || {})[k]))) f('wingSetFams weighs a set wingSets does not have');
@@ -1004,6 +1041,82 @@ const CHECKS = {
     if (xMin > -DIP_SET.cross) fail('folded fly wing does not cross the midline: reaches x ' + xMin.toFixed(1) + ' (want <= -' + DIP_SET.cross + ')');
     const ab = meta.abdomen.profile.filter(([y, hw]) => y > meta.thorax.yBot + 2 && hw > 3);
     if (!ab.some(([y, hw]) => { const x = rightmostAt(w, y); return x === null || x < hw - DIP_SET.side; })) fail('folded fly wings cover the abdomen\'s sides along its whole length');
+  },
+  // #52 the lepidopteran wing set (meta.lep.set, rolled with the body, read by wingsLepidoptera): the forewing's inner margin
+  // in the set's band, and the hindwing's share under the forewing following it
+  lepWingSet(meta, svg, fail) {
+    if (meta.type !== 'moth') return;
+    const m = meta.lep || {}, band = LEP_SET.margin[m.set], v = meta.variant;
+    if (!band) return fail('lepidopteran plate has no known wing set on meta.lep: ' + m.set);
+    const S = lepSet.sets[v] ||= {}; S[m.set] = (S[m.set] || 0) + 1;
+    const F = lepSet.fams[meta.fam] ||= { n: 0, delta: 0 }; F.n++; if (m.set === 'delta') F.delta++;
+    const ang = Math.atan2(m.fore.tornus[1] - m.fore.inner[1], m.fore.tornus[0] - m.fore.inner[0]) * 180 / Math.PI;
+    if (ang < band[0] - LEP_SET.tol || ang > band[1] + LEP_SET.tol) fail('lepidopteran forewing inner margin outside its set: ' + ang.toFixed(1) + ' degrees (' + m.set + ': ' + band.join('-') + ')');
+    const minX = Math.min(...meta.wingOutlines[0].map(p => p[0]));
+    if (Math.abs(minX) < LEP_SET.midline - 0.05) fail('lepidopteran forewing ends ' + minX.toFixed(1) + ' from the midline (a seam with its pair; want >= ' + LEP_SET.midline + ' either side)');
+    const hMinX = Math.min(...meta.wingOutlines[1].map(p => p[0]));
+    if (hMinX < LEP_SET.hindMidline - 0.05) fail('lepidopteran hindwing reaches ' + hMinX.toFixed(1) + ' from the midline (crosses its pair; want >= ' + LEP_SET.hindMidline + ')');
+    const [fw, hw] = meta.wingOutlines, xs = hw.map(p => p[0]), ys = hw.map(p => p[1]);
+    let n = 0, under = 0;
+    for (let x = Math.min(...xs); x <= Math.max(...xs); x += 2) for (let y = Math.min(...ys); y <= Math.max(...ys); y += 2) if (inPoly([x, y], hw)) { n++; if (inPoly([x, y], fw)) under++; }
+    lepSet.cov[m.set].push(n ? under / n : 0);
+  },
+  // #52 the lepidopteran leg pose families and the nymphalid brush forelegs, on the drawn legs (meta.legs[i].pts) against
+  // meta.wingOutlines and the body profiles (a sample is hidden inside a wing or the body, as legWings reads it)
+  lepLegs(meta, svg, fail) {
+    if (meta.type !== 'moth') return;
+    const pose = meta.legRoll.pose, wings = meta.wingOutlines;
+    if (!LEP_LEGS.poses.includes(pose)) return fail('lepidopteran leg pose not a known family: ' + pose);
+    if (meta.variant === 'moth') lepSet.poses[pose] = (lepSet.poses[pose] || 0) + 1;
+    const bodyHw = y => Math.max(profHw(meta.thorax.profile, y, 0.11), profHw(meta.abdomen.profile, y));
+    const shows = pts => { for (let k = 2; k + 1 < pts.length; k++) { const a = pts[k], b = pts[k + 1], n = Math.max(1, Math.ceil(dist(a, b) / 2));
+      for (let q = 0; q <= n; q++) { const p = [a[0] + (b[0] - a[0]) * q / n, a[1] + (b[1] - a[1]) * q / n]; if (!wings.some(w => inPoly(p, w)) && Math.abs(p[0]) >= bodyHw(p[1])) return true; } } return false; };
+    const len = pts => { let L = 0; for (let k = 2; k + 1 < pts.length; k++) L += dist(pts[k], pts[k + 1]); return L; };
+    const [fore, mid, hind] = meta.legs;
+    if (pose === 'hidden') {
+      const h = meta.legs.filter(l => !shows(l.pts)).length;
+      lepSet.hidden[0]++; if (h >= LEP_LEGS.hiddenPairs) lepSet.hidden[1]++;
+      if (h < 1) fail('lepidopteran legs posed hidden show every pair');
+    }
+    if (pose === 'spread' && !fore.brush) { const a = Math.atan2(fore.pts[3][1] - fore.pts[2][1], fore.pts[3][0] - fore.pts[2][0]) * 180 / Math.PI; if (a < LEP_LEGS.spreadFemur) fail('lepidopteran forelegs posed spread are raised: femur at ' + a.toFixed(1) + ' degrees (min ' + LEP_LEGS.spreadFemur + ')'); }
+    if (LEP_LEGS.brushFams.includes(meta.fam)) {
+      if (!fore.brush) fail(meta.fam + ' foreleg not a brush');
+      if (len(fore.pts) > LEP_LEGS.brush * len(mid.pts)) fail(meta.fam + ' foreleg not reduced: ' + (len(fore.pts) / len(mid.pts)).toFixed(2) + 'x the mid leg (max ' + LEP_LEGS.brush + ')');
+      if (meta.lep.set !== 'forward' && !shows(mid.pts)) fail(meta.fam + ' mid (walking) legs hidden');   // forewings pushed forward cover the room ahead of them
+    }
+  },
+  // #52 the lepidopteran family's abdomen (meta.fam) against LEP_ABD, on the drawn outlines and meta.lep.abd's marks
+  lepAbdomen(meta, svg, fail) {
+    if (meta.type !== 'moth') return;
+    const fam = meta.fam, H = LEP_ABD, la = meta.lep && meta.lep.abd;
+    if (!la) return fail('lepidopteran plate has no abdomen record on meta.lep.abd');
+    const ab = meta.abdomen, abW = maxHw(ab.profile), thW = maxHw(meta.thorax.profile), len = ab.yBot - ab.yTop, lw = len / (2 * abW), aw = abW / thW;
+    const fwo = meta.wingOutlines[0], fl = Math.max(...fwo.map(p => dist(p, fwo[0]))), fw = len / fl;
+    const hw = t => profHw(ab.profile, ab.yTop + t * len), r = v => (+v).toFixed(2);
+    const widestT = () => { let b = 0; for (let t = 0; t <= 1.0001; t += 0.01) if (hw(t) > hw(b)) b = t; return b; };
+    for (const sp of la.spots.concat(la.crests)) if (Math.abs(sp[0]) + (sp[2] || 0) > profHw(ab.profile, sp[1])) return fail(fam + ' abdomen mark outside the outline at y ' + r(sp[1]));
+    const along = (pts, lo, hi) => pts.filter(p => { const h = profHw(ab.profile, p[1]); return h > 0 && Math.abs(p[0]) >= lo * h && Math.abs(p[0]) <= hi * h; }).length;
+    if (fam === 'sphingid') {
+      if (lw < H.long || fw < H.longFw) fail('sphingid abdomen not long: ' + r(lw) + 'x its width, ' + r(fw) + ' of the forewing (min ' + H.long + ', ' + H.longFw + ')');
+      if (widestT() > H.fusiT) fail('sphingid abdomen widest at t ' + r(widestT()) + ' (max ' + H.fusiT + ')');
+      if (hw(0.9) > H.point * abW) fail('sphingid abdomen not pointed: ' + r(hw(0.9) / abW) + ' of its width at t 0.9 (max ' + H.point + ')');
+      if (along(la.spots, H.lateral, 1) < H.spots) fail('sphingid abdomen has ' + along(la.spots, H.lateral, 1) + ' lateral spots (min ' + H.spots + ')');
+    }
+    if (fam === 'saturniid') {
+      if (lw > H.stout || aw < H.stoutAw) fail('saturniid abdomen not short and stout: ' + r(lw) + 'x its width, ' + r(aw) + 'x the thorax (max ' + H.stout + ', min ' + H.stoutAw + ')');
+      if (la.mark !== 'hairy') fail('saturniid abdomen not hairy: ' + la.mark);
+    }
+    if (fam === 'geometrid' && (aw > H.slender || lw < H.long)) fail('geometrid abdomen not slender: ' + r(aw) + 'x the thorax, ' + r(lw) + 'x its width (max ' + H.slender + ', min ' + H.long + ')');
+    if (fam === 'arctiid') {
+      if (!H.arctiid.includes(la.mark)) fail('arctiid abdomen neither spotted nor banded: ' + la.mark);
+      if (la.mark === 'dorsal' && along(la.spots, 0, H.dorsal) < H.spots) fail('arctiid dorsal spot row has ' + along(la.spots, 0, H.dorsal) + ' spots (min ' + H.spots + ')');
+    }
+    if (fam === 'noctuid') {
+      if (lw < H.medium[0] || lw > H.medium[1]) fail('noctuid abdomen not medium: ' + r(lw) + 'x its width (' + H.medium.join('-') + ')');
+      if (la.crest && along(la.crests, 0, H.dorsal) < H.crests) fail('noctuid dorsal crests: ' + la.crests.length + ' (min ' + H.crests + ')');
+    }
+    if (fam === 'papilionid' && (lw < H.papilio || aw > H.slender)) fail('papilionid abdomen not long and slender: ' + r(lw) + 'x its width, ' + r(aw) + 'x the thorax (min ' + H.papilio + ', max ' + H.slender + ')');
+    if (fam === 'lycaenid' && fw > H.small) fail('lycaenid abdomen not short: ' + r(fw) + ' of the forewing (max ' + H.small + ')');
   },
   // #54 the fly family's abdomen (meta.fly.fam) against DIP_HAB, on the drawn abdomen and thorax outlines
   dipHabitus(meta, svg, fail) {
@@ -2455,6 +2568,30 @@ const POST = {
       console.log('#49 cicada ' + what + ':', JSON.stringify(counts) + (n < CIC_SET.shareMin ? ' (too few to assert, < ' + CIC_SET.shareMin + ')' : ''));
     }
   },
+  // #52 every lepidopteran wing set on at least LEP_SET.share of the run's moths and of its butterflies, and the families that
+  // rest in a delta drawing it on at least LEP_SET.deltaFam of their plates (a run too short is reported, never passed by silence)
+  lepShares(fail) {
+    for (const v of Object.keys(lepSet.sets)) {   // the wing sets
+      const counts = lepSet.sets[v], n = Object.values(counts).reduce((a, b) => a + b, 0);
+      const thin = Object.keys(LEP_SET.margin).filter(k => (counts[k] || 0) < LEP_SET.share * n);
+      if (n >= LEP_SET.shareMin && thin.length) fail(v + ' wing sets under ' + LEP_SET.share + ' of the plates: ' + thin.join(', ') + ' ' + JSON.stringify(counts), v);
+      console.log('#52 ' + v + ' wing sets:', JSON.stringify(counts) + (n < LEP_SET.shareMin ? ' (too few to assert, < ' + LEP_SET.shareMin + ')' : ''));
+    }
+    { const counts = lepSet.poses, n = Object.values(counts).reduce((a, b) => a + b, 0), thin = LEP_LEGS.poses.filter(k => (counts[k] || 0) < LEP_LEGS.share * n);
+      if (n && n >= LEP_LEGS.shareMin && thin.length) fail('moth leg poses under ' + LEP_LEGS.share + ' of the plates: ' + thin.join(', ') + ' ' + JSON.stringify(counts), 'moth');
+      const [hn, hk] = lepSet.hidden;
+      if (hn >= 20 && hk < LEP_LEGS.hiddenShare * hn) fail('lepidopteran hidden poses hide ' + LEP_LEGS.hiddenPairs + ' pairs on ' + hk + ' of ' + hn + ' plates (want >= ' + LEP_LEGS.hiddenShare + ')', 'moth');
+      if (hn) console.log('#52 hidden leg poses with ' + LEP_LEGS.hiddenPairs + ' pairs hidden:', hk + ' of ' + hn);
+      if (n) console.log('#52 moth leg poses:', JSON.stringify(counts) + (n < LEP_LEGS.shareMin ? ' (too few to assert, < ' + LEP_LEGS.shareMin + ')' : '')); }
+    { const med = a => a.slice().sort((x, y) => x - y)[a.length >> 1], C = lepSet.cov;
+      if (Object.values(C).every(a => a.length >= LEP_SET.coveredMin) && !(med(C.delta) > med(C.square) && med(C.square) > med(C.forward)))
+        fail('lepidopteran hindwing overlap does not follow the set: median share under the forewing delta ' + med(C.delta).toFixed(2) + ', square ' + med(C.square).toFixed(2) + ', forward ' + med(C.forward).toFixed(2), 'moth');
+      if (C.square.length) console.log('#52 hindwing share under the forewing (median):', Object.keys(C).map(k => k + ' ' + (C[k].length ? med(C[k]).toFixed(2) : '-')).join(', ')); }
+    for (const f of LEP_SET.deltaFams) {
+      const F = lepSet.fams[f];
+      if (F && F.n >= 20 && F.delta < LEP_SET.deltaFam * F.n) fail(f + ' rests in a delta on ' + F.delta + ' of ' + F.n + ' plates (want >= ' + LEP_SET.deltaFam + ')', 'moth');
+    }
+  },
   // #54 every fly wing set and every family on at least DIP_SET.share of the run's fly plates (a run too short to hold the
   // share is reported, never passed by silence)
   dipShares(fail) {
@@ -2536,7 +2673,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 

@@ -117,3 +117,15 @@ References for `../research-ephemeroptera-habitus.md` (#50). From Wikimedia Comm
 | eph-hab-baetis-male.jpg | *Baetis tricaudatus* (Baetidae) male imago: turbinate eyes, two tails, no hindwing showing | [Baetis tricaudatus male imago.jpg](https://commons.wikimedia.org/wiki/File:Baetis_tricaudatus_male_imago.jpg), JerryFriedman | CC BY-SA 3.0 |
 | eph-hab-caenis-stephens.jpg | *Caenis macrura*, Stephens 1835, dorsal: broad rounded forewings, no hindwing, short stout abdomen, three long tails | [Caenis macrura.jpg](https://commons.wikimedia.org/wiki/File:Caenis_macrura.jpg), Stephens vol. VI via L. Watson and M. J. Dallwitz | Public domain |
 | eph-hab-caenis-imago.jpg | *Caenis* sp. (Caenidae) imago: broad forewings, three tails | [Caenis spec. (Caenidae) - (imago), Arnhem, the Netherlands.jpg](https://commons.wikimedia.org/wiki/File:Caenis_spec._(Caenidae)_-_(imago),_Arnhem,_the_Netherlands.jpg), B. Schoenmakers (Waarneming.nl) | CC BY 3.0 |
+
+## Moth and butterfly habitus (`lep-hab-` prefix)
+
+References for `../research-lepidoptera-habitus.md` (#52). From Wikimedia Commons, downscaled to 960 px where larger.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| lep-hab-sphinx.jpg | *Sphinx ligustri* (Sphingidae) male, set, dorsal: forewing hind margin square to the body, long fusiform abdomen tapering to a point with lateral flank patches | [Sphinx ligustri MHNT dos male.jpg](https://commons.wikimedia.org/wiki/File:Sphinx_ligustri_MHNT_dos_male.jpg), Didier Descouens | CC BY-SA 4.0 |
+| lep-hab-saturnia.jpg | *Saturnia pavonia* (Saturniidae) male, set, dorsal: short, stout, hairy abdomen, forewings set forward of square | [Saturnia pavonia MHNT CUT 2011 0 439 male Les piles - Cornille (Dordogne) dos.jpg](https://commons.wikimedia.org/wiki/File:Saturnia_pavonia_MHNT_CUT_2011_0_439_male_Les_piles_-_Cornille_(Dordogne)_dos.jpg), Didier Descouens | CC BY-SA 4.0 |
+| lep-hab-biston.jpg | *Biston betularia* (Geometridae) male, set, dorsal: forewings pushed forward, the hindwing showing whole behind them | [(MHNT) Biston betularia - Lustenice Czech Republic - Male dorsal.jpg](https://commons.wikimedia.org/wiki/File:(MHNT)_Biston_betularia_-_Lustenice_Czech_Republic_-_Male_dorsal.jpg), Didier Descouens | CC BY-SA 4.0 |
+| lep-hab-laothoe.jpg | *Laothoe populi* (Sphingidae) at rest, from below: forewings swept back in a delta | [Laothoe populi, the poplar hawk-moth.jpg](https://commons.wikimedia.org/wiki/File:Laothoe_populi,_the_poplar_hawk-moth.jpg), Retro Lenses | CC BY 4.0 |
+| lep-hab-brushfoot.jpg | *Idea leuconoe* (Nymphalidae): standing on four legs, the reduced forelegs folded against the thorax | [Brush-footed.jpg](https://commons.wikimedia.org/wiki/File:Brush-footed.jpg), suneko, derivative AshLin | CC BY-SA 3.0 |

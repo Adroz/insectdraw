@@ -4,7 +4,7 @@ Status: two plans in one file. The first, the per-seed genes for legs, body, hea
 steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07); it follows the wing-genes work (see
 README "Venation" and `meta.wingSig`). The second, "Nine plates, nine insects (#30)" at the end, is open: the
 perceptual criterion (`tests/perceptual.js`) and nine steps, one ticket per order (#48–#55, and #72 for the
-grasshopper, added by #57); step 2 (cicada, #49) and step 7 (fly, #54) are done.
+grasshopper, added by #57); step 2 (cicada, #49), step 5 (Lepidoptera, #52) and step 7 (fly, #54) are done.
 
 ### Status detail
 
@@ -463,6 +463,27 @@ rules for all of them:
    pose, as now), swept back into a delta (sphingid, noctuid at rest) or pushed forward, with the hindwing overlap
    following. Grounded in `research-lepidoptera-wings.md` and `research-thorax.md` (Lepidoptera); #13 and #27 cover
    the pattern bands and the head.
+
+   **Done (#52, 2026-10-15), floor not reached on seeds 1-60.** Implemented as specified, grounded in
+   `research-lepidoptera-habitus.md` (refs `docs/ref/lep-hab-*`): the wing set square / delta / forward (`B.wingSet`, the
+   forewing's hind margin turned to the rolled angle, kept off the midline, the hindwing tucked forward under a delta and
+   bare behind a forward set), the abdomen by family (`abdFams`, `famScale`: the hawk-moth's long acute abdomen with a
+   lateral spot row, the emperor's short stout hairy one, the slender geometrid, the tiger moth's dorsal spot row or
+   bands, the noctuid's dorsal crests, the long papilionid, the short lycaenid), leg pose families raised / spread /
+   walking / hidden and the nymphalids' brush forelegs; `lepWingSet`, `lepAbdomen`, `lepLegs` and the `lepShares` audit in
+   `tests/check.js`. `node tests/perceptual.js 60 --pairs 3`, backlog before (648ae9e) -> after:
+
+   | type | min 1-60 | min 61-120 | sheet9 1-60 | sheet9 61-120 | body min 1-60 | body min 61-120 |
+   |---|---|---|---|---|---|---|
+   | moth (both) | 7.71 -> 9.89 | 6.43 -> 12.66 | 14.64 -> 17.04 | 14.85 -> 17.06 | 10.03 -> 9.56 | 9.35 -> 11.82 |
+   | moth variant | 9.25 -> 9.89 | 7.71 -> 9.12 | 14.03 -> 17.00 | 13.04 -> 15.86 | 9.87 -> 9.56 | 9.21 -> 10.72 |
+   | butterfly | 6.43 -> 9.16 | 6.43 -> 10.03 | 12.51 -> 15.47 | 12.89 -> 15.74 | 9.30 -> 9.56 | 7.34 -> 8.74 |
+
+   The minimum rises on both blocks for every variant and lands within 1 of the floor everywhere (above it on 61-120 for
+   the moth type and the butterfly), and `sheet9` rises by 2.5-3 on both blocks; a 1-9 sheet and a random:9 sheet read as
+   7-8 insects (was 2-4). What still repeats is two plates of one family in one set at near angles (two noctuids resting
+   in a delta, 24/36; two nymphalids set square, 23/124): the wing ink dominates the thumbnail, so the levers left are the
+   wing outline and the pattern tone (#13).
 6. **Beetle: within-family genes, #53** (8.93). Families differ already; inside one family it is the same beetle. Genes:
    elytral outline (parallel, oval, rounded, tapering apex; square or rounded shoulders), elytral sculpture families
    (striae, puncture rows, costae, smooth, tubercles; #24 does the texture rendering) and pattern families (spots,
