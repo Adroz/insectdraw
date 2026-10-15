@@ -2189,6 +2189,7 @@ function insectName(seed, type, variant, fam, genes) {
 //   head: outline, W/H ratio, eye cx / rx / ry / cy (off centre), ocelli count and arrangement, mouthparts, eye
 //     styles and face markings (docs/research-head-eyes.md); headFams: family / variant overrides of the same keys.
 //   legs: leg family ranges over the LD defaults in rollBodyGenes (base, then the wing / body family).
+//     sweptFore (optional, #47): the family's fore and mid leg angles when its antennae are rolled swept (LEGS_SWEPT).
 //   pronotum (optional): bands the pronotum's width / length (wl) and width / the elytra's (ely) are soft-clipped into in
 //     rollBodyGenes, fams: per-family bands (the beetle, #24). elytra (optional): the puncture style gene's table and the
 //     families' own elytra (B.elytra; wingsElytra).
@@ -2218,15 +2219,15 @@ function insectName(seed, type, variant, fam, genes) {
 //     and base (adj overrides the shared COMMON_ADJ list, qual the NAME_QUAL qualifiers); famNouns / famBase: the nouns
 //     (and base) per drawn family, required when the order rolls two or more families, the lists disjoint (#28;
 //     tests/check.js nameFamilies); variantNames: the same tables per variant.
-// the odonate leg plan, shared by dragonfly and damselfly: the prey basket (all legs forward, spread wide) or, #48, tucked:
-// every pair folded forward close against the thorax and the back of the head, as at rest (poseAng: the order's own angles
-// for that pose, per pair, over LEG_POSES'; legs folded under the thorax out of sight would leave only half-hidden tarsi)
 // #47 the forelegs of a family whose antennae are rolled swept (the longhorn beetle, the bush-cricket), as `sweptFore` on
 // its leg table: the fore femur held out from the prothorax, square or a little back (never ahead of the head), its tibia
 // turned out and back, and the mid leg's femur a little further back so the pairs stay in order and apart; the angles
 // are LEG_POSES' (0 outward, + toward the tail), safe the pair's fallback dirs. A swept antenna's hoop (#7) then clears
 // them as rolled; a forward foreleg left it no pose (#7's re-roll to a forward V, the fit rule shrinking the plate)
 const LEGS_SWEPT = { fore: { F: [0, 15], tib: [15, 45], T: [5, 20], safe: [5, 8, 30, 40] }, mid: { F: [0, 22], tib: [50, 80], T: [10, 25] } };
+// the odonate leg plan, shared by dragonfly and damselfly: the prey basket (all legs forward, spread wide) or, #48, tucked:
+// every pair folded forward close against the thorax and the back of the head, as at rest (poseAng: the order's own angles
+// for that pose, per pair, over LEG_POSES'; legs folded under the thorax out of sight would leave only half-hidden tarsi)
 const LEGS_ODONATA = { spines: 1, spineSeg: 'both', spineSide: 'inner', spineLen: [0.8, 1.2], spineSp: [3.5, 5.5], spurs: [0, 0], tarsomeres: [3, 3], tibR: [0.92, 1.08], hindK: [1.2, 1.4], poses: { basket: 2, tucked: 1 },
   poseAng: { tucked: [{ F: [-72, -58], tib: [-112, -92], T: [-15, -5] }, { F: [-55, -40], tib: [-110, -90], T: [-15, -5] }, { F: [-30, -15], tib: [-100, -80], T: [-15, -5] }] } };
 // #48 abdomen width profiles (docs/research-odonata-habitus.md): anchors [t, half width / the widest] up to the tip, which
@@ -3295,7 +3296,9 @@ function rollBodyGenes(type, P) {
     if (i === 2 && F.hindSafe) g.safe = F.hindSafe;   // the order's own hind-leg fallback (beetle: splayed wide of a broad abdomen, #24)
     if (i === 0 && F.foreAng) { g.poseAng = F.foreAng; g.safe = F.foreSafe; }   // the order's own foreleg angles for every pose it rolls, and its fallback (lacewing, #19)
     // #47 sweptFore: a family whose antennae are rolled swept holds its forelegs beside the head in every pose it rolls (the
-    // femur out from the prothorax, the tibia folded back), so the sweep clears them under #7's rule; no rng (the same draws, from these ranges)
+    // femur out from the prothorax, the tibia folded back), so the sweep clears them under #7's rule, and its mid legs a little
+    // back in the rolled pose only (the spread and safe re-rolls keep the order's own, or a close-set mid coxa crowds the big
+    // hind femur); no rng (the same draws, from these ranges)
     if (F.sweptFore && B.ant.pose === 'swept' && i < 2) { const S = F.sweptFore[i ? 'mid' : 'fore']; if (S) { g.poseAng = i ? { [B.pose]: S } : { [B.pose]: S, spread: S }; if (S.safe) g.safe = S.safe; g.ang = null; } }
     if (F.poseAng) g.poseAng = Object.assign({}, g.poseAng, ...Object.keys(F.poseAng).map(k => ({ [k]: F.poseAng[k][i] })));   // the order's own angles for a pose, per pair (the odonate tucked pose, #48)
     if (F.tibFlat && i > 0) g.tibFlat = rr(F.tibFlat);   // platycnemidid: flattened, leaf-like mid and hind tibiae (#48)
