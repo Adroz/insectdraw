@@ -2596,13 +2596,65 @@ const ORDERS = {
         thoraxAnchors: [[0, 0.5], [0.35, 1], [0.8, 0.9], [1, 0.55]],
         abdAnchors: [[0, 0.8], [0.15, 1], [0.6, 0.9], [0.9, 0.75], [0.98, 0.5], [1, 0]],
         antenna: 'moniliform', antLen: 36 * jitter(0.2) });
-      P.fam = 'tipulid';
+      // #55 the Tipulomorpha families (docs/research-tipulomorpha-habitus.md): the tipulid as before, twice as likely as each
+      // other family; famScale then scales the rolled sizes (rollProportions)
+      P.fam = pick(['tipulid', 'tipulid', 'limoniid', 'ctenophorine', 'pediciid']);
+      const H = ORDERS.cranefly.habitus[P.fam];
+      if (H.abdK) P.abdW = P.thoraxW * randRange(H.abdK[0], H.abdK[1]);   // a family whose abdomen is set against the thorax's width (Ctenophora's)
     },
+    // famScale (#55): the limoniid is the small crane fly with relatively shorter legs (refs crane-hab-limonia); Ctenophora a
+    // stout, wasp-like tipulid, its abdomen about as broad as the thorax and shorter (crane-hab-ctenophora); Pedicia a large one
+    famScale: {
+      tipulid: {},
+      limoniid: { headW: 0.8, headH: 0.8, thoraxW: 0.75, thoraxLen: 0.75, abdW: 0.8, abdLen: 0.72, legScale: 0.78 },
+      ctenophorine: { headW: 1.15, headH: 1.1, thoraxW: 1.15, thoraxLen: 1.05, abdW: 1.15, abdLen: 0.8, legScale: 0.8 },
+      pediciid: { headW: 1.05, thoraxW: 1.08, thoraxLen: 1.08, abdW: 1.05, abdLen: 1.1 },
+    },
+    // wingPlans (#55): every crane fly family is drawn on the tipulid venation (#9; dip-limonia is a limoniid)
+    wingPlans: { limoniid: 'tipulid', ctenophorine: 'tipulid', pediciid: 'tipulid' },
     abd: { tips: { pointed: 2, clubbed: 2, rounded: 1 }, marks: { plain: 3, banded: 1, striped: 1 }, peak: [0.15, 0.4], wK: [0.85, 1.2], start: [0.05, 0.12], seg: [7, 9], ticks: 0.5 },
+    // #55 Ctenophora's black-and-yellow banded, wasp-like abdomen, tapering to the ovipositor (crane-hab-ctenophora)
+    abdFams: { ctenophorine: { marks: { banded: 1 }, tips: { pointed: 3, rounded: 1 }, peak: [0.25, 0.4], wK: [1.0, 1.1] } },
     thorax: { front: [0.8, 1.1], peak: [0.35, 0.5], hump: [0.03, 0.12], waist: [0, 0], lenK: [0.9, 1.2] },
     head: { outline: 'round', ratio: [1.0, 1.2], cx: [0.32, 0.36], rx: [0.13, 0.16], ry: [0.3, 0.36], cy: [-0.04, 0.04], ocelli: 0, snout: [0.1, 0.3], styles: { stipple: 2, plain: 2, lattice: 1 } },
-    legs: { base: { spurs: [1, 1], spines: 0.1, swell: [1, 1.1], poses: { spread: 3, walking: 2 } } },
-    ant: { base: { ref: 'hw', len: [0.6, 1.0], seg: [13, 16], socket: [0.1, 0.22], kinds: { moniliform: 4, pectinate: 0.6 }, whorls: true, rami: 'short' } },
+    // #55 leg pose families for very long legs (docs/research-tipulomorpha-habitus.md): spread as before; trailing, the mid and
+    // hind pairs swept back, the hind past the abdomen's tip; forward, the fore pair reaching straight ahead past the
+    // antennae; pinned, the set-specimen X: the mid legs held straight out, the fore legs straight forward and out, the hind
+    // straight back and out. poseAng: per pair [fore, mid, hind], femur F and tibia tib absolute (0 out, - toward the head),
+    // tarsus T relative to the tibia; pastTip: the pair's claw must lie behind the abdomen's tip (re-rolled until it does). ratios: which pair is the longest, front or hind (the fore and hind femur factors);
+    // ratioPoses: a pose's own weights (the trailing pose's hind legs run past the abdomen's tip, so they are the longest)
+    legs: { base: { spurs: [1, 1], spines: 0.1, swell: [1, 1.1], poses: { spread: 1, trailing: 1, forward: 1, pinned: 1 },
+      poseAng: {
+        trailing: [{ F: [-58, -28], tib: [-108, -78], T: [-18, -5] }, { F: [14, 38], tib: [68, 92], T: [2, 12] }, { F: [44, 64], tib: [84, 96], T: [0, 8], pastTip: true }],
+        forward: [{ F: [-84, -66], tib: [-100, -84], T: [-8, 6] }, { F: [-16, 8], tib: [16, 55], T: [8, 22] }, { F: [24, 48], tib: [66, 96], T: [4, 18] }],
+        pinned: [{ F: [-60, -34], tib: [-74, -44], T: [-10, 6] }, { F: [-12, 10], tib: [-12, 20], T: [0, 14] }, { F: [34, 60], tib: [46, 76], T: [0, 12] }],
+      },
+      ratios: { front: 1, hind: 1 }, ratioPoses: { trailing: { hind: 1 } }, ratioK: { front: { frontK: [1.12, 1.28], hindK: [0.86, 0.98] }, hind: { frontK: [0.8, 0.95], hindK: [1.08, 1.25] } } },
+      // the limoniid's legs are too short against its abdomen to trail past the tip, so it does not roll that pose
+      limoniid: { poses: { spread: 1, forward: 1, pinned: 1 } } },
+    ant: { base: { ref: 'hw', len: [0.6, 1.0], seg: [13, 16], socket: [0.1, 0.22], kinds: { moniliform: 4, pectinate: 0.6 }, whorls: true, rami: 'short' },
+      // #55 the ctenophorine male's comb antenna, two pairs of rami per segment (bipectinate) or one, longer than a tipulid's;
+      // the limoniid's short, whorled (14-16 segments)
+      ctenophorine: { kinds: { bipectinate: 1, pectinate: 1 }, rami: 'long', len: [1.8, 2.6], whorls: false },
+      limoniid: { len: [0.5, 0.8], seg: [14, 16], kinds: { moniliform: 1 } } },
+    // #55 wing set (B.wing.set, read by wingsDiptera; the fly's mechanism, #54): spread, the wings held out from the body
+    // (tipulids rest with them out at near right angles); folded scissor-wise over the abdomen, the limoniid resting pose
+    wingSets: { spread: { w: 1, theta: [36, 68] }, folded: { w: 1, theta: [94, 106], reach: [0.85, 1.0] } },
+    wingSetFams: { tipulid: { spread: 4, folded: 1 }, limoniid: { spread: 1, folded: 4 }, ctenophorine: { spread: 2, folded: 1 }, pediciid: { spread: 3, folded: 1 } },
+    // #55 a folded wing's reach per family (times the set's reach): a tipulid's long abdomen runs on well past its folded wings,
+    // Ctenophora's banded tip shows past them, a limoniid's wings reach the abdomen's tip or beyond (crane-hab-limonia).
+    // abdK: the abdomen's width per the thorax's, rolled in the proportions (Ctenophora's about as broad as its thorax)
+    habitus: { tipulid: { foldReach: 0.72 }, limoniid: { foldReach: 1.12 }, ctenophorine: { foldReach: 0.8, abdK: [0.98, 1.15] }, pediciid: { foldReach: 0.9 } },
+    // #55 the pediciid's patterned wing (crane-hab-pedicia-wing), stippled: a brown costal stripe from the base to the apex,
+    // a band along the cord (the oblique line of the apical crossveins and m-cu) and a stripe along Cu from the base to the
+    // cord, closing the brown triangle of Pedicia rivosa. Each a run of stippled spots from (u, s) to (u, s): u along the
+    // span, s across the chord (0 the costa, 1 the hind margin); r the spot radius, span fractions; each end moved up to j and
+    // the radius by up to a quarter per plate, and a run with p drawn on that share of the plates (the costal stripe always;
+    // Pediciidae vary from the full triangle to a costal stripe with a clouded cord). The limoniid's wing is
+    // plain or punctate (Limoniidae: "monochromatic or punctate"; crane-hab-limonia, Limonia nubeculosa's clouded spots): on
+    // `p` of its plates, `spots` [min, max] stippled spots along the costa and one clouding the cord
+    wingPatterns: { pediciid: { p: 1, runs: [{ from: [0.12, 0.1], to: [0.9, 0.1], r: 0.035, j: 0.05 }, { from: [0.66, 0.12], to: [0.55, 0.72], r: 0.03, j: 0.06, p: 0.8 }, { from: [0.16, 0.6], to: [0.55, 0.66], r: 0.028, j: 0.06, p: 0.6 }] },
+      limoniid: { p: 0.5, spots: [3, 5], r: [0.045, 0.065] } },
     headScaleP5: 0.87,
     wingRoots: [0.42],
     wingRootX: 0.72,
@@ -2610,7 +2662,9 @@ const ORDERS = {
     wings: wingsDiptera,
     names: {
       tails: [['tipula', 'f'], ['limnobia', 'f'], ['ptera', 'f'], ['phlebia', 'f'], ['cera', 'f'], ['myia', 'f'], ['peza', 'f'], ['nephria', 'f'], ['pus', 'm']],
-      common: { nouns: ['Meadow', 'Tiger', 'Phantom', 'Winter', 'Fen', 'Bog', 'Marbled', 'Short-palped', 'Hairy-eyed', 'Cabbage', 'Leatherjacket'], base: 'Crane Fly' },
+      common: { nouns: ['Meadow', 'Tiger', 'Phantom', 'Winter', 'Fen', 'Bog', 'Marbled', 'Short-palped', 'Hairy-eyed', 'Cabbage', 'Leatherjacket'], base: 'Crane Fly',
+        famNouns: { tipulid: ['Meadow', 'Tiger', 'Cabbage', 'Marbled', 'Leatherjacket'], limoniid: ['Short-palped', 'Winter', 'Bog', 'Cave', 'Fen'],
+          ctenophorine: ['Wasp', 'Hornet', 'Deadwood', 'Ornate'], pediciid: ['Hairy-eyed', 'Stream', 'Rivulet', 'Brook'] } },   // #55
     },
   },
   lacewing: {
@@ -3250,6 +3304,10 @@ function rollBodyGenes(type, P) {
   const poseNames = Object.keys(F.poses), poseW = poseNames.map(k => F.poses[k]), wTot = poseW.reduce((a, b) => a + b, 0);
   let x = rng() * wTot; B.pose = poseNames[poseNames.length - 1];
   for (let k = 0; k < poseNames.length; k++) { x -= poseW[k]; if (x < 0) { B.pose = poseNames[k]; break; } }
+  // #55 which pair is longest (the crane fly's ratios: front or hind), its femur factors over the family's; only an order
+  // with the table draws it
+  B.legRatio = null;
+  if (F.ratios) { B.legRatio = weighted((F.ratioPoses && F.ratioPoses[B.pose]) || F.ratios); Object.assign(F, F.ratioK[B.legRatio]); }
   const u = P.legScale * (P.thoraxLen * pteroK(B.thorax) / 60);
   const lenK = rr(F.lenK), wkF = rr(F.wk), tarsomeres = randInt(F.tarsomeres[0], F.tarsomeres[1]);
   const midFem = (isOdo ? 42 : 48) * u * lenK;
@@ -3309,6 +3367,7 @@ function rollBodyGenes(type, P) {
     ...(F.habitus ? ['p' + Math.round(P.headW / P.thoraxW * 10) + '/' + Math.round(P.abdW / P.thoraxW * 10)] : []),   // #12 (bee): head and abdomen to thorax width, tenths
     ...(F.legCap ? ['k' + (B.legCapped ? 1 : 0)] : []),   // whether the leg cap scaled this insect's legs down
     ...(F.foreRaptor ? ['rt' + B.legs[0].femurTeeth + '/' + Math.round(B.legs[0].femStout * 4)] : []),   // #51 the raptorial foreleg's teeth and stoutness
+    ...(B.legRatio ? ['lr' + B.legRatio[0]] : []),   // #55 the longest pair
     ...B.legs.map(g => [Math.round(g.t * 20), g.spines ? (g.spines.femur ? 'f' : '') + (g.spines.tibia ? 't' : '') : '-', g.spurs, g.fringe ? 1 : 0, Math.round(g.swell * 4), Math.round(g.curl / 4), Math.round(g.skew), g.tibFlat ? 'T' : ''].join('')));
   // ---- wing set (#48): the order's wingSet ranges (a family's over them), the forewing's sweep at its root and the hindwing's
   // further sweep, in degrees, + toward the tail; the wing block reads it and draws the venation unchanged. #51: an entry
@@ -3492,6 +3551,7 @@ function layoutBody(C) {
   meta.bodyGenes = B;
   if (B.wing && B.wing.shape) meta.cicada = { set: B.wing.set, shape: B.wing.shape, fam: P.fam, abdShape: P.abdShape, marks: null, collarY: null, tymbals: null };   // #49, filled in by the thorax and abdomen sections
   if (type === 'fly') meta.fly = { set: B.wing.set, fam: P.fam, chaetae: null };
+  if (type === 'cranefly') meta.cranefly = { set: B.wing.set, fam: P.fam, ratio: B.legRatio };   // #55
   if (order.hindwing) meta.mayfly = { fam: P.fam, sex: P.sex, set: B.wing.set, hindClass: B.hindClass, tails: null, tergites: null, fore: null, hind: null };   // #50, the tails and tergites filled in by the abdomen section, the wings by the wing block
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   if (B.habitus && B.habitus.abdCap) P.abdW = Math.min(P.abdW, B.habitus.abdCap * P.thoraxW);   // a slender family (#49): the abdomen held under this share of the thorax's width
@@ -4222,6 +4282,9 @@ function drawLegs(C) {
       }
       const W = 2 * Math.max(maxX + 6, P.abdW / 2, P.thoraxW / 2, P.headW / 2) + 2 * 24, H = Math.max(maxY + 6, abdomen.yBot + 10) - Math.min(minY - 6, -10) + 2 * 24;
       if (Math.min(552 / W, 507 / H) < 0.62) return 'fit';
+      // a pose whose pair must reach past the abdomen's tip (the entry's poseAng `pastTip`: the crane fly's trailing hind legs,
+      // #55) is re-rolled on the body-only roll until its claw lies behind the tip; the wing repair after it may still turn it
+      for (const i of idx) { const R = B.legs[i].poseAng && B.legs[i].poseAng[pose], j = joints[i]; if (!wings && R && R.pastTip && j[j.length - 1][1] <= abdomen.yBot) return 'past-tip'; }
       if (!wings) return null;
       // the wing-aware rules (placeLegs only, so the body-only roll and its draws are untouched) also hold a repaired pose
       // to the pose limits the order's own leg angles stand for, which the roll keeps by drawing within them: a pair with
@@ -5023,9 +5086,9 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   const E = { sc: rr(F.sc), r1: rr(F.r1), fork: rr(F.fork), r23: rr(F.r23), bmcu: rr(F.bmcu), dmcu: rr(F.dmcu), cu2: rr(F.cu2), mEnd: rr(F.mEnd), a: randRange(0.14, 0.24), h: randRange(0.1, 0.17), r4: randRange(0.66, 0.74) };
   E.rm = Math.max(0.4, E.fork - randRange(0.03, 0.1));                      // r-m sits just basal of the Rs fork (dip-eristalis)
   E.cu1 = E.dmcu + rr(F.cu1);                                              // CuA1 turns down to the margin right after dm-cu
-  E.mf = Math.max(E.dmcu + 0.08, fam === 'tipulid' ? randRange(0.78, 0.84) : lerp(E.dmcu, 0.94, randRange(0.3, 0.45)));   // where M forks into M1 / M2
+  E.mf = Math.max(E.dmcu + 0.08, plan === 'tipulid' ? randRange(0.78, 0.84) : lerp(E.dmcu, 0.94, randRange(0.3, 0.45)));   // where M forks into M1 / M2
   const G = {
-    fam, ky: rr(F.ky), len: rr(F.len), theta: order.wingSets ? rr(order.wingSets[B.wing.set].theta) : randRange(44, 68),   // the fly's wing set (#54): spread, half-folded or folded over the abdomen; the crane fly's one spread
+    fam, ky: rr(F.ky), len: rr(F.len), theta: rr(order.wingSets[B.wing.set].theta),   // the wing set (#54 the fly's: spread, half-folded or folded over the abdomen; #55 the crane fly's: spread or folded)
     tipY: randRange(-0.08, 0.1), sharp: randRange(0, 1), lobe: randRange(0.82, 1.18), stalk: type === 'cranefly' ? randRange(0.5, 0.8) : randRange(0.7, 1.15),
     spines: rng() < 0.65, spurious: fam === 'syrphid' || (fam === 'muscid' && rng() < 0.1),
     r45closed: F.m1 === 'bend' && rng() < F.r45, r4: rng() < F.r4, m2: F.m1 === 'three' || (F.m1 === 'fork' && rng() < 0.75), m3: F.m1 !== 'bend' && rng() < F.m3, a2: rng() < F.a2, h: rng() < F.h, bmcu: rng() < F.bmcuP,
@@ -5036,7 +5099,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   const by = thorax.yAt(order.wingRoots[0]), bx = thorax.hwAt(by) * order.wingRootX;
   let theta = G.theta;
   const WS = order.wingSets ? order.wingSets[B.wing.set] : null;
-  const fold = WS && WS.reach ? rr(WS.reach) * (order.habitus[fam].foldReach || 1) : 1;   // folded: the family's reach (a long asilid, conopid or nematoceran abdomen runs on past the tips)
+  const fold = WS && WS.reach ? rr(WS.reach) * (((order.habitus || {})[fam] || {}).foldReach || 1) : 1;   // folded: the family's reach (a long asilid, conopid or nematoceran abdomen runs on past the tips)
   const Lw = Math.min((abdomen.yBot - by) / Math.sin(theta * D2R) * G.len, (abdomen.yBot - by) * DIP_SPAN_MAX) * fold;   // a folded fly's wings end about the abdomen's tip (#54; a long asilid abdomen reaches past them); a shallow spread is capped so a long abdomen cannot push the plate scale under its floor
   const ky = G.ky * randRange(0.9, 1.1);
   const X = f => f * Lw, Y = f => f * Lw * ky;
@@ -5074,7 +5137,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   if (F.m1 === 'bend' && !G.r45closed) g.margin('r45E', 0.98, 'top'); else g.margin('r45E', 1, 'tip');   // R4+5's end. An open r4+5 (muscid elbow): R4+5 meets the costa just before the apex and M1 the margin just behind it (dip-eristalis), so the two never cross at an apex set toward the hind margin
   g.margin('cu1E', E.cu1, 'bot'); g.margin('cu2E', E.cu2 + (F.cupOpen ? 0 : 0.05), 'bot'); g.margin('a1E', E.cu2 - 0.16, 'bot'); g.margin('a2E', E.a, 'bot');
   const bend = F.m1 === 'bend', three = F.m1 === 'three', forked = F.m1 === 'fork';
-  const uM1 = fam === 'tipulid' ? 0.96 : 0.95;
+  const uM1 = plan === 'tipulid' ? 0.96 : 0.95;
   g.margin('m1E', bend ? 0.99 : uM1, 'bot'); g.margin('m2E', uM1 - 0.07, 'bot'); g.margin('m3E', uM1 - 0.14, 'bot');   // a bent M1 ends just behind the apex
   const closed45 = G.r45closed;
   g.node('r45J', E.mEnd + randRange(0.12, 0.16), 0.3);                    // where the long oblique M1 meets R4+5 when r4+5 closes (dip-eristalis)
@@ -5115,7 +5178,7 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   if (G.bmcu) { bmcuNv.bow = randRange(-0.02, 0.02); named.push(bmcuNv); }                                         // bm-cu: closes bm
   named.push({ a: 'M', ua: E.dmcu, b: 'CuA1', reach: 0.08, sw: SW.D, bow: G.dmBow });                             // dm-cu: closes dm, bowed toward the apex
   if (G.h) named.push({ a: 'Sc', ua: E.h, b: 'R1', reach: 0.04, sw: SW.D, bow: 0 });                               // h: the humeral crossvein
-  const noPair = [['CuA2', 'A1'], ['A1', 'A2'], ['Sc', 'R1'], ['R23', 'Rs'], ['R23', 'R4'], ['R4', 'Rs']].concat(fam === 'tipulid' ? [] : [['R1', 'Rs']]);   // cup, the anal field, the subcostal strip and r2+3 never carry rungs; the strip under R1 only in crane flies
+  const noPair = [['CuA2', 'A1'], ['A1', 'A2'], ['Sc', 'R1'], ['R23', 'Rs'], ['R23', 'R4'], ['R4', 'Rs']].concat(plan === 'tipulid' ? [] : [['R1', 'Rs']]);   // cup, the anal field, the subcostal strip and r2+3 never carry rungs; the strip under R1 only in crane flies
   const grown = growVeins(g, { lanes, named, forks: 0, uOpen: G.uOpen, k: G.k, minSepAbs: F.sepAbs, angle: G.angle, lean: G.lean, bowAmt: G.bow, grad: G.grad, stubProb: 0, stubLen: 0.08, noPair });
   if (G.spurious) g.chain([g.node('sv0', 0.2, 0.34), g.node('sv1', 0.44, 0.42), g.node('sv2', 0.66, 0.47)], { vein: 'sv', sw: SW.F, bows: [0.01, -0.01] });   // vena spuria: a fold, joins nothing
   L.wings.push(...g.emit());
@@ -5124,6 +5187,35 @@ function wingsDiptera(C) {   // (type === 'fly' || type === 'cranefly')
   meta.wingStats = Object.assign({}, grown.stats, { rm: plLen(rmNv.pl), bmcu: plLen(bmcuNv.pl) }); meta.wingTheta = theta;   // r-m and bm-cu as drawn, fractions of the span (0 when not drawn)
   meta.wingSig = ['dip', fam, grown.lanes.length, grown.joins.length, grown.forks, G.heavy ? 1 : 0, G.spurious ? 1 : 0, G.spines ? 1 : 0, closed45 ? 1 : 0, G.r4 ? 1 : 0, G.m2 ? 1 : 0, G.m3 ? 1 : 0, G.a2 ? 1 : 0, G.stig, G.bmcu ? 1 : 0, G.h ? 1 : 0,
     Math.round(G.uOpen * 10), Math.round(G.tipY * 10), Math.round(G.sharp * 2), Math.round(G.lobe * 10), Math.round(G.stalk * 5), Math.round(E.fork * 10), Math.round(E.r1 * 10), Math.round(E.dmcu * 10)].join(',');
+  // #55 a stippled wing pattern (the entry's wingPatterns per family: the pediciid's brown triangle): each run a capsule from
+  // `from` to `to` (u along the span, s across the chord at that u) of radius r span fractions; stipple dots on a grid at the
+  // floored pitch inside the union of the capsules, jittered, every dot inside the wing and clear of its margin
+  const WP = order.wingPatterns && order.wingPatterns[fam];
+  const patterned = !!WP && (WP.p >= 1 || rng() < WP.p);
+  let runs = null;
+  if (patterned && WP.runs) runs = WP.runs.map(R => { const j = () => randRange(-R.j, R.j), on = rng() < (R.p || 1), k = randRange(0.75, 1.25); return on ? { from: [R.from[0] + j(), R.from[1]], to: [R.to[0] + j(), R.to[1] + j() * 0.5], r: R.r * k } : null; }).filter(Boolean);
+  if (patterned && WP.spots) {   // punctate: n spots spread along the costa (s 0.12-0.2), and one on the cord
+    const n = randInt(WP.spots[0], WP.spots[1]);
+    runs = [];
+    for (let q = 0; q < n; q++) { const c = [lerp(0.18, 0.9, (q + randRange(0.2, 0.8)) / n), randRange(0.12, 0.2)]; runs.push({ from: c, to: c, r: rr(WP.r) }); }
+    const cord = [randRange(0.56, 0.66), randRange(0.35, 0.55)]; runs.push({ from: cord, to: cord, r: rr(WP.r) });
+  }
+  G.pattern = runs ? (WP.runs ? 'runs' + runs.length : 'spots' + runs.length) : 'plain';
+  if (runs) {
+    const pitch = floorPitch(2.4), at = ([u, sv]) => { const yr = wing.yRange(X(u)); return yr ? [X(u), lerp(yr[0], yr[1], sv)] : null; };
+    const caps = runs.map(R => ({ a: at(R.from), b: at(R.to), r: X(R.r) })).filter(c => c.a && c.b), dots = [];
+    let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+    for (const c of caps) for (const p of [c.a, c.b]) { x0 = Math.min(x0, p[0] - c.r); x1 = Math.max(x1, p[0] + c.r); y0 = Math.min(y0, p[1] - c.r); y1 = Math.max(y1, p[1] + c.r); }
+    for (let gy = y0, row = 0; gy <= y1; gy += pitch * 0.87, row++) for (let gx = x0 + (row % 2) * pitch / 2; gx <= x1; gx += pitch) {
+      const q = [gx + randRange(-0.3, 0.3), gy + randRange(-0.3, 0.3)];
+      if (!caps.some(c => ptSeg([gx, gy], c.a, c.b) <= c.r) || !wing.inside(q)) continue;
+      const yq = wing.yRange(q[0]); if (!yq || q[1] - yq[0] < 1 || yq[1] - q[1] < 1) continue;
+      const pt = wing.T(q); dots.push(pt); L.wings.push(circleEl(pt, 0.4, SW.F, '#000'));
+    }
+    meta.wingStats.pattern = { dots };
+    rngSync();   // each dot draws its jitter, and a device plate's coarser pitch draws fewer
+  }
+  if (WP) meta.wingSig += ',' + G.pattern;   // #55 the wing pattern (plain, the pediciid's runs, n punctate spots)
   // halteres
   const hy = thorax.yAt(0.8), hx = thorax.hwAt(hy) * 0.8;
   const hd = dirv(theta + 20), halt = [lineEl([hx, hy], add([hx, hy], mul(hd, 11)), SW.D), circleEl(add([hx, hy], mul(hd, 13)), 2.4, SW.D, '#fff')];

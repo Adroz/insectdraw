@@ -32,7 +32,7 @@ contract for changes.
   `head` (+ `headFams`) / `legs` / `ant` gene tables, `headScaleP5`, `wingRoots` + `wingRootX` (the root's
   x as a fraction of the thorax half-width), the `tegula`, `legThick`, `antFit` and `foreCoxa` (the mayfly's fore coxa behind the head, #21) opt-ins (and the lacewing's #51
   `famScale`, `prothorax`, `wingSet` sets and `wingFams` family tables; the mayfly's #50 `legSexes`, `tails`, `hindwing`, `foreFams`
-  and `wingSets`), its `wings` function
+  and `wingSets`; the crane fly's #55 leg `ratios` / `ratioK` and stippled `wingPatterns`), its `wings` function
   and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
   first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
   re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs
