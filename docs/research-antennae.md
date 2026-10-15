@@ -210,9 +210,9 @@ headH + thoraxLen + abdLen, or forewing `fw` = wingSpan × family len)
 | moth saturniid | bipectinate-long 5, pectinate 1 | 0.3–0.45 fw | 30–40 |
 | moth sphingid | hooked slim club 3, filiform 1 | 0.4–0.55 fw | 40–50 |
 | moth plain | filiform 2, bipectinate 2, pectinate 1 | 0.33–0.5 fw | 30–50 |
-| butterfly nymphalid / satyrine | clubbed gradual 4, abrupt 1, hooked 1 | 0.42–0.55 fw | 30–45 |
+| butterfly nymphalid / satyrine | clubbed gradual 4, abrupt 1 (no hook, #27: the apiculus is the skippers', ant-butterfly-tips-bingham k; no skipper family is drawn) | 0.42–0.55 fw | 30–45 |
 | butterfly pierid | clubbed abrupt 3, gradual 1 | 0.38–0.5 fw | 30–40 |
-| butterfly lycaenid | clubbed abrupt 3, hooked 1 (banded) | 0.4–0.5 fw | 30–40 |
+| butterfly lycaenid | clubbed abrupt 3, gradual 1 (banded; #27 no hook) | 0.4–0.5 fw | 30–40 |
 | butterfly papilionid | clubbed upcurved 3, gradual 1 | 0.3–0.42 fw | 35–45 |
 | fly muscid | aristate (plumose arista) 1 | 0.25–0.4 hw | 3 |
 | fly syrphid | aristate (bare 3, pubescent 1) | 0.25–0.38 hw | 3 |

@@ -315,15 +315,17 @@ hoverfly vittae, pile ticks, humeral calli, bristle rows, patagia, crest) and a
 tegula of rolled size and tilt centred on the forewing root the wing block uses. **Head**: an outline per order (round, transverse
 with the odonate frons bump or the cicada postclypeus, triangular with a
 fastigium, elongate with ground-beetle jaws or a weevil rostrum), eyes rolled
-as ranges with holoptic or dichoptic flies, meeting or separated odonate eyes
+as ranges with holoptic or dichoptic flies, odonate eyes meeting along a seam
+on the midline (or separated on a gomphid)
 and three engraving styles (hexagonal lattice, stipple, plain with a
 highlight), ocelli 0–3 by order, and the mouthparts that show from above
-(sickle mandibles, mandible tips, palps, a coiled proboscis, clypeus bow),
+(sickle mandibles, mandible tips, palps, clypeus bow; a moth's coiled
+proboscis lies under the head and is not drawn),
 from `docs/research-head-eyes.md`. **Antennae**: a kind rolled from the order's and
 family's weighted list (a ground beetle filiform or moniliform, a scarab
 lamellate, a weevil elbowed and clubbed, a longhorn filiform at up to 1.6 body
 lengths swept back beside the body; male-moth bipectinate with long or short
-rami, butterfly clubs gradual, abrupt, upcurved or hooked; bee and wasp
+rami, butterfly clubs gradual, abrupt or upcurved (a hawk-moth's hooked); bee and wasp
 geniculate 12–13 segments, ichneumonid long filiform, chalcid clubbed; fly
 aristate with a plumose or bare arista or stylate; bristle antennae on
 dragonflies, cicadas and mayflies), with length, segment count, club, rami,

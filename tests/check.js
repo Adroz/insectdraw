@@ -354,6 +354,20 @@ const ODO_PROFILE = { aeshnid: ['rod', 'waisted'], libellulid: ['broad'], gomphi
 const ODO_HAB = { broad: 6, taper: 0.7, club: 1.3, waist: 0.75, rod: 1.4, lestid: 15, tibia: 1.8, fw: [-10, 15], fwLestid: [20, 35], hw: [0, 12], poseShare: 0.15 };
 const ODO_PATTERNS = ['plain', 'banded', 'spotted', 'rings', 'tipdark'];   // the dorsal pattern families every odonate run must show
 const odoHab = { fam: {}, pose: {}, mark: {}, plates: 0 };   // over the run, for POST.odoHabitus
+// #27 odonate and butterfly heads, from the references and the ticket, stated here rather than read from the engine:
+// - a dragonfly's eyes meet along a seam on top of the head (head-odo-tillyard1917 A, 'me'): each eye's outline
+//   (meta.head.eyes[i].pl, body units) stays on its own side of the midline (within ODO_EYE.cross), the two share a
+//   straight run on the midline at least ODO_EYE.seam of the eye's length, and the eye's lattice or stipple
+//   (meta.head.eyes[i].marks, the tone's centres) runs to within ODO_EYE.reach pitches of that seam; only the gomphid
+//   holds its eyes apart (research-head-eyes.md), its inner margins at least ODO_EYE.apart head widths off the midline;
+// - an odonate's antenna socket (meta.antennae.sr) is at most ODO_EYE.socket of its smallest ocellus's radius, so the
+//   dorsal head reads as three ocelli between the eyes, not five equal rings (head-odo-damselfly; the dragonfly's the same,
+//   head-odo-tillyard1917 A and D: a slender antenna from a small socket);
+// - a butterfly's club is never hooked (ant-butterfly-tips-bingham: the hooked apiculus is the skippers', k Tagiades; the
+//   plate draws no skipper family) and its head draws no proboscis (meta.head.mouth: the mouthparts drawn), which
+//   lies coiled under the head where a dorsal view cannot see it.
+const ODO_EYE = { cross: 0.05, seam: 0.25, reach: 1.5, apart: 0.04, socket: 0.5 };
+const headSeen = { odoEyes: 0, odoSockets: 0, lepHead: 0 };   // plates each #27 check asserted on, for POST.headSeen
 const ODO_MIN = 40;   // damselfly plates a run needs before a family with no plate fails rather than being reported
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
@@ -1430,6 +1444,49 @@ const CHECKS = {
       if (!tw.every(w => w > 0)) return fail('platycnemidid legs have no tibia widths on meta.legs[i].tib');
       if (Math.min(tw[1], tw[2]) < ODO_HAB.tibia * tw[0]) fail('platycnemidid mid / hind tibiae not broad: ' + (Math.min(tw[1], tw[2]) / tw[0]).toFixed(2) + 'x the fore tibia (min ' + ODO_HAB.tibia + ')');
     }
+  },
+  // #27 the dragonfly's eyes meet along a seam (or stand apart on a gomphid); ODO_EYE above
+  odoEyes(meta, svg, fail) {
+    if (meta.type !== 'dragonfly') return;
+    headSeen.odoEyes++;
+    const h = meta.head, eyes = h.eyes;
+    if (eyes.length !== 2) return fail('dragonfly head draws ' + eyes.length + ' eyes');
+    if (meta.fam === 'gomphid') {
+      const inner = Math.min(...eyes.map(e => Math.abs(e.cx) - e.rx));
+      if (inner < ODO_EYE.apart * h.W) fail('gomphid eyes not apart: inner margins ' + (inner / h.W).toFixed(3) + ' head widths off the midline (min ' + ODO_EYE.apart + ')');
+      return;
+    }
+    for (const e of eyes) {
+      const s = Math.sign(e.cx);
+      if (!e.pl || e.pl.length < 8) return fail(meta.fam + ' eye has no seam outline on meta.head.eyes[i].pl (eyes not cut at the midline)');
+      const over = Math.max(...e.pl.map(p => -s * p[0]));
+      if (over > ODO_EYE.cross) return fail(meta.fam + ' eye crosses the midline by ' + over.toFixed(2));
+      const on = e.pl.filter(p => Math.abs(p[0]) <= ODO_EYE.cross), ys = on.map(p => p[1]);
+      const seam = on.length ? Math.max(...ys) - Math.min(...ys) : 0, len = 2 * e.ry;
+      if (seam < ODO_EYE.seam * len) return fail(meta.fam + ' eyes meet along ' + (seam / len).toFixed(2) + ' of the eye length (min ' + ODO_EYE.seam + ')');
+      if (!e.marks || !e.marks.length) return fail('dragonfly eye has no lattice or stipple centres on meta.head.eyes[i].marks');
+      const reach = Math.min(...e.marks.map(p => Math.abs(p[0])));
+      if (reach > ODO_EYE.reach * e.pitch) return fail(meta.fam + ' eye tone stops ' + (reach / e.pitch).toFixed(2) + ' pitches short of the seam (max ' + ODO_EYE.reach + ')');
+    }
+  },
+  // #27 the odonate antenna sockets stay small beside the ocelli (ODO_EYE.socket)
+  odoSockets(meta, svg, fail) {
+    if (meta.type !== 'damselfly' && meta.type !== 'dragonfly') return;
+    headSeen.odoSockets++;
+    const oc = meta.head.ocelli, sr = meta.antennae.sr;
+    if (!oc.length) return fail(meta.type + ' draws no ocelli');
+    if (!(sr > 0)) return fail('no antenna socket radius on meta.antennae.sr');
+    const r = Math.min(...oc.map(o => o[2]));
+    if (sr > ODO_EYE.socket * r + 1e-9) fail(meta.type + ' antenna socket ' + sr.toFixed(2) + ' against ocellus ' + r.toFixed(2) + ' (max ' + ODO_EYE.socket + 'x)');
+  },
+  // #27 the butterfly's antenna club is never a skipper's hook, and its dorsal head draws no proboscis
+  lepHead(meta, svg, fail) {
+    if (meta.type !== 'moth') return;
+    headSeen.lepHead++;
+    const mouth = meta.head.mouth;
+    if (!Array.isArray(mouth)) return fail('no mouthparts list on meta.head.mouth');
+    if (mouth.includes('proboscis')) fail(meta.variant + ' draws a proboscis in dorsal view (' + meta.fam + ')');
+    if (meta.variant === 'butterfly' && meta.antennae.club === 'hooked') fail('butterfly antenna club hooked (' + meta.fam + '): a skipper feature');
   },
   // #19 lacewing (neu-nothochrysa): the strip under R1 (R1-Rs) carries a few rungs, 2-5 on the reference, never none (Sc,
   // R1 and Rs would read as three ruled parallels) and never the costal ladder's density; the engine reports the
@@ -2630,6 +2687,12 @@ const POST = {
     console.log('#25 beetle checks asserted on (of ' + n + ' beetle plates):', Object.keys(colSeen).filter(k => ran.has(k)).map(k => k + ' ' + colSeen[k]).join(', ') +
       (n < COL_MIN ? '; too few beetle plates (' + n + ' < ' + COL_MIN + ') to require every check' : ''));
   },
+  // the #27 head checks each assert on one order's plates: every selected one must have run on some plate
+  headSeen(fail) {
+    const idle = Object.keys(headSeen).filter(k => ran.has(k) && !headSeen[k]);
+    if (idle.length) fail('#27 head checks that never ran: ' + idle.join(', '));
+    console.log('#27 head checks asserted on:', Object.keys(headSeen).filter(k => ran.has(k)).map(k => k + ' ' + headSeen[k]).join(', '));
+  },
   // #53 the run's beetles: once it has COL_MIN beetle plates every family of COL_FAMS has been drawn
   colGenes(fail) {
     const n = beetlePlates, fmt = o => Object.keys(o).sort().map(k => k + ' ' + o[k]).join(', ');
@@ -2804,7 +2867,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), headSeen: Object.keys(headSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
