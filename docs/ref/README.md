@@ -105,6 +105,17 @@ References for `../research-diptera-habitus.md` (#54). From Wikimedia Commons, d
 | dip-hab-tabanus.jpg | *Tabanus bovinus* (Tabanidae) at rest: wings swept back in a delta over a broad abdomen | [Tabanus.bovinus.female.jpg](https://commons.wikimedia.org/wiki/File:Tabanus.bovinus.female.jpg), James K. Lindsey | CC BY-SA 3.0 |
 | dip-hab-episyrphus.jpg | *Episyrphus balteatus* (Syrphidae), dorsal specimen: flat banded abdomen | [Episyrphus balteatus (10.3897-BDJ.10.e78518) Figure 22a.jpg](https://commons.wikimedia.org/wiki/File:Episyrphus_balteatus_(10.3897-BDJ.10.e78518)_Figure_22a.jpg), Rego et al. (2022) | CC BY 4.0 |
 
+## Crane fly habitus (`crane-hab-` prefix)
+
+References for `../research-tipulomorpha-habitus.md` (#55). From Wikimedia Commons, downscaled to 800 px.
+
+| file | subject | source | licence |
+|---|---|---|---|
+| crane-hab-pedicia.jpg | *Pedicia rivosa* (Pediciidae) at rest: long slender legs, the wings held out, the brown costal stripe and triangle | [Pedicia.rivosa.-.lindsey.jpg](https://commons.wikimedia.org/wiki/File:Pedicia.rivosa.-.lindsey.jpg), James K. Lindsey | CC BY-SA 3.0 |
+| crane-hab-pedicia-wing.jpg | *Pedicia rivosa* wing: brown stripe along the costa, a band along the cord, a stripe along Cu closing the triangle | [Pedicia.rivosa.wing.detail.jpg](https://commons.wikimedia.org/wiki/File:Pedicia.rivosa.wing.detail.jpg), James K. Lindsey | CC BY-SA 3.0 |
+| crane-hab-ctenophora.jpg | *Ctenophora pectinicornis* (Tipulidae, Ctenophorinae): stout black-and-yellow banded abdomen tapering to a point, comb antennae, legs shorter than a *Tipula*'s | [Ctenophora pectinicornis bl.jpg](https://commons.wikimedia.org/wiki/File:Ctenophora_pectinicornis_bl.jpg), Siga | CC BY-SA 3.0 |
+| crane-hab-limonia.jpg | *Limonia nubeculosa* (Limoniidae) at rest: the wings folded flat along the back over the abdomen, clouded spots on the wing | [Gemeine Höhlenstelzmücke Limonia nubeculosa.jpg](https://commons.wikimedia.org/wiki/File:Gemeine_H%C3%B6hlenstelzm%C3%BCcke_Limonia_nubeculosa.jpg), Holger Krisp | CC BY 4.0 |
+
 ## Mayfly habitus (`eph-hab-` prefix)
 
 References for `../research-ephemeroptera-habitus.md` (#50). From Wikimedia Commons, downscaled to 1000 px where larger.

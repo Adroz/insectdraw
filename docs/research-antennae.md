@@ -280,6 +280,18 @@ shaft (`legsOk` reason `socket`, odonates exempt like the midline rule), or no a
 clear it. Over 300 seeds per type the fallback fires on 0.7% of moths (bipectinate plumes between
 tucked or walking forelegs) and 0.3% of damselflies, and nowhere else.
 
+A swept antenna (the bush-cricket's, longer than the body, and the longhorn's back sweep) cannot
+clear a foreleg held ahead of the head: its hoop takes the whole space beside the head, so under
+the rule above it was always re-rolled to a forward V and then shortened to a stub by the fit rule
+(#47: 63 of 63 swept bush-crickets in 300 forced grasshopper seeds hit a leg, mean plate scale
+1.03, the antenna drawn at 0.3 of its length). The legs block gives way instead: a family whose
+antennae are rolled swept (`sweptFore: LEGS_SWEPT` on its leg table, read only when `B.ant.pose`
+is `swept`) holds the fore femur out from the prothorax, square or a little back (0–15°, never
+ahead of the head), its tibia turned out and back (15–45°), and the mid femur a little further
+back (10–28°) so the pairs stay in order and apart. Over the same 300 seeds no swept antenna hits
+a leg (bush-cricket plate scale 1.29, the antenna at nearly its full length; longhorns 27 of 27
+clear); `sweptForelegs` in `tests/check.js` asserts it.
+
 ### R-E Socket
 
 Socket centre = table value ± 0.03 hw in x, ± 0.04 headH in y; radius 1–2.5 px (headW × 0.03–0.045,

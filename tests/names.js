@@ -119,6 +119,7 @@ const FAM_NOUN_SPEC = {
   damselfly: { coenagrionid: ['Bluet', 'Damsel'], calopterygid: ['Demoiselle', 'Jewelwing'] },
   lacewing: { chrysopid: ['Green'], hemerobiid: ['Brown'], myrmeleontid: ['Pit'] },   // #51
   fly: { tachinid: ['Tachinid'], bombyliid: ['Bee'], conopid: ['Thick-headed'] },   // #54
+  cranefly: { limoniid: ['Short-palped'], pediciid: ['Hairy-eyed'], ctenophorine: ['Wasp'] },   // #55
 };
 // a phrase (one or more words) appears in the common name as whole words
 const hasPhrase = (common, w) => (' ' + common + ' ').includes(' ' + w + ' ');

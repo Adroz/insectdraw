@@ -542,6 +542,23 @@ rules for all of them:
    shorter legs, wings folded), ctenophorine (pectinate antennae, banded wasp-like abdomen), pediciid (patterned
    wings, which the wing block may only stipple). Acceptance adds a pose count: at least three leg-pose families
    each on ≥ 15% of 300 seeds.
+   **Done (#55, 2026-10-15)**, grounded in `research-tipulomorpha-habitus.md` (refs `docs/ref/crane-hab-*`): `P.fam`
+   tipulid ×2 / limoniid / ctenophorine / pediciid with family scales (the limoniid small with shorter legs, Ctenophora
+   stout with a broad banded abdomen and comb antennae), the leg pose families spread / trailing / forward / pinned (the
+   entry's `poseAng`; over crane fly seeds 1-300 drawn 77 / 81 / 72 / 70, 23-27 % each), the longest pair front or hind
+   (`B.legRatio`), the wing set spread / folded (the fly's #54 mechanism, per-family weights and fold reach), and stippled
+   wing patterns (the pediciid's brown triangle, varied per plate; a limoniid's punctate spots on half its plates);
+   `cranePose`, `craneHabitus`, `craneWingSet` and the `craneShares` audit in `tests/check.js`.
+   `node tests/perceptual.js 60 --type cranefly`, main (c0e86fe) / backlog before (648ae9e, after #8) -> after:
+
+   | view | min 1–60 | min 61–120 | sheet9 1–60 | sheet9 61–120 |
+   |---|---|---|---|---|
+   | plate | 11.39 / 9.10 → 13.66 | 10.56 / 9.28 → 13.67 | 16.13 / 14.76 → 22.90 | 14.83 / 14.44 → 21.30 |
+   | body | 13.43 / 11.59 → 13.91 | 13.71 / 13.14 → 14.53 | 19.71 / 17.39 → 25.83 | 19.78 / 18.14 → 25.52 |
+
+   The floor (12.5) is cleared on both blocks; on seeds 121–180 (not a criterion) the minimum is 12.27 (main 9.91,
+   backlog 8.81), two pediciids with the forward pose. A seeds 1–9 sheet reads as about 8 insects (main 2–3), and a
+   `random:9` sheet as 8.
 
 9. **Grasshopper: tegmen length, tetrigid pronotum, ovipositor and wing set, #72** (9.44 after #22 and #23). Appended
    after steps 1–8 rather than ranked among them (their numbers are already in their tickets). Added by #57, which

@@ -114,6 +114,9 @@ const DIP_BMCU_ALWAYS = ['tabanid', 'asilid'];   // families whose bm cell is al
 // #54: the families drawn on another family's venation plan (research-diptera-habitus.md: the tachinid's is the calyptrate
 // muscid plan, the bee fly's R4 / R5 apart with M to the margin as the tabanid's, the conopid's cell r4+5 closed as the syrphid's)
 const DIP_PLAN = { tachinid: 'muscid', bombyliid: 'tabanid', conopid: 'syrphid' };
+// #55: the crane fly families other than Tipulidae are drawn on the tipulid venation plan (dip-limonia is a limoniid; the
+// venation stays as #9 drew it), so their W/L joins the tipulid median
+Object.assign(DIP_PLAN, { limoniid: 'tipulid', ctenophorine: 'tipulid', pediciid: 'tipulid' });
 // #54 fly wing set (docs/research-diptera-habitus.md, refs dip-hab-*): a set specimen spreads its wings (the angle #9
 // drew, theta the root-to-apex line in degrees below the horizontal), a half-folded fly holds them swept back in a delta
 // (a tabanid or muscid at rest), and the resting pose most fly plates show folds them back over the abdomen scissor-wise,
@@ -178,6 +181,26 @@ const lepSet = { sets: {}, fams: {}, cov: { square: [], delta: [], forward: [] }
 const LEP_LEGS = { poses: ['raised', 'spread', 'walking', 'hidden'], spreadFemur: -45, hiddenPairs: 2, hiddenShare: 0.85, brushFams: ['nymphalid', 'satyrine'], brush: 0.5, brushMid: 0.85, share: 0.12, shareMin: 100 };
 const LEP_ABD = { long: 3.4, longFw: 0.75, fusiT: 0.45, point: 0.45, spots: 3, lateral: 0.5, stout: 2.8, stoutAw: 0.8, slender: 0.7, dorsal: 0.2,
   medium: [2.2, 4.0], crests: 2, papilio: 5.0, small: 0.68, arctiid: ['dorsal', 'banded'] };
+// #55 crane fly habitus (docs/research-tipulomorpha-habitus.md, refs crane-hab-*), read off the drawn plate (meta.cranefly,
+// meta.legs, the outlines). fams: the Tipulomorpha families the crane fly draws. poses: the leg pose families; a pose that is
+// drawn as rolled (meta.legRoll.pose) and a pair the wing rule (#8) did not repair must look like its pose: trailing, the
+// hind leg's claw past the abdomen's tip and the mid tibia pointing back at least `trailBack` degrees from straight out;
+// forward, the fore claw ahead of every antenna point (reaching past the antennae); pinned, the mid leg held straight out,
+// femur base to tibia end within `pinnedOut` degrees of square to the body. ratio: the longer of the fore and hind leg (femur
+// to claw, as drawn) is the one the gene names. sets: the wing angle (meta.wingTheta) per wing set; a folded wing reaches
+// `cross` past the midline (scissor-wise over the abdomen, as a limoniid rests: Limoniidae "fold the wings along the back").
+// ctenophorine (Ctenophora): comb antennae, a banded abdomen at least `ctenoBroad` x the thorax's widest; pediciid (Pedicia):
+// a stippled wing pattern of at least `patternDots` dots, every one inside a wing; a `punctate` family (Limoniidae: wings
+// "monochromatic or punctate") may stipple spots, on some plates and not others; no other family stipples its wings.
+// Over a run: at least `posesMin` pose families each on `poseShare` of the crane fly plates, every family on `famShare`,
+// every wing set on `setShare` (asserted once the run has shareMin crane flies), and the limoniid smaller with shorter legs
+// than the tipulid: its median body length (head top to abdomen tip) at most `limSmall` of the tipulid's and its median
+// longest leg per body length at most `limLeg` of the tipulid's.
+const CRANE = { fams: ['tipulid', 'limoniid', 'ctenophorine', 'pediciid'], poses: ['spread', 'trailing', 'forward', 'pinned'], ratios: ['front', 'hind'],
+  sets: { spread: [36, 68], folded: [94, 118] }, cross: 4, trailBack: 60, pinnedOut: 25, ctenoBroad: 0.9, ctenoAnt: ['pectinate', 'bipectinate'], patternDots: 30, punctate: ['limoniid'], punctShare: 0.2,
+  poseShare: 0.15, posesMin: 3, famShare: 0.1, setShare: 0.15, shareMin: 100, limSmall: 0.85, limLeg: 0.9 };
+const craneRun = { fams: {}, poses: {}, sets: {}, body: {}, leg: {}, punct: {} };   // over the run, for POST.craneShares
+const legReach = pts => { let d = 0; for (let i = 2; i + 1 < pts.length; i++) d += dist(pts[i], pts[i + 1]); return d; };   // femur base to claw tip, as drawn
 // #11, stated from the references (hym-apis: marginal + SM1-SM3 + ME1-ME2; Vespidae the same plan; hym-ichneumonidae-diagram:
 // the areolet, the small cell between 2r-m and the first r-m just past the stigma's distal end), not read from the engine's family table
 const HYM_CELLS = { apid: { sub: 3, disc: 2 }, vespid: { sub: 3, disc: 2 } };   // closed submarginal / discoidal cells per family
@@ -511,6 +534,8 @@ const rotAbout = (p, c, deg) => { const a = deg * Math.PI / 180, dx = p[0] - c[0
 const skewedPts = leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew));   // the left leg before mirroring: the right leg rotated about its coxa by its skew (plan step 7)
 const LEG_WING_CLEAR = 1.5;   // legWings: a joint's disc beyond its half width, the engine's WING_LEG_CLEAR (the same 16 rim points, and the same body: both read meta's sampled thorax and abdomen profiles)
 const legRun = {};   // type -> { n, reroll, repaired, placed } over the run (CHECKS.legWings, for POST.legWings): plates whose body-only pose roll re-rolled, whose rolled pose broke against the wings and was repaired, and where a pair was placed first
+const sweptRun = {};   // type -> { n, scale, under } over the run's swept-antenna beetle and grasshopper plates (CHECKS.sweptForelegs, for POST.sweptReport)
+const SWEPT_SCALE = 0.7;   // #47: the plate scale a swept plate is counted under in POST.sweptReport
 const ANT_LEG_CLEAR = 2.5;   // antLegs: asserted clearance beyond the leg's half width (engine: 3 + the antenna's half width, at least 3.65)
 const ptSegDist = (p, u, v) => { const wx = v[0] - u[0], wy = v[1] - u[1], l2 = wx * wx + wy * wy, t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * wx + (p[1] - u[1]) * wy) / l2)) : 0; return Math.hypot(p[0] - u[0] - wx * t, p[1] - u[1] - wy * t); };
 const segDist = (a, b, c, d) => segsCross(a, b, c, d) ? 0 : Math.min(ptSegDist(a, c, d), ptSegDist(b, c, d), ptSegDist(c, a, b), ptSegDist(d, a, b));   // shortest distance between segments ab and cd
@@ -887,6 +912,20 @@ const CHECKS = {
       if (len < GRASS_ANT.tetrigid * an.headW) fail('tetrigid antenna under ' + GRASS_ANT.tetrigid + ' head widths long');
     }
   },
+  // #47 a long-horned plate (beetle or grasshopper) whose antennae are rolled swept folds its forelegs beside the head, so
+  // the sweep clears them under #7's rule as rolled: the antenna is never re-rolled for a leg (meta.antennae.reasons) nor
+  // laid forward in a fallback pose (meta.antennae.why with its tip ahead of the head's front, meta.head.top: #7's forward
+  // V; a longhorn's back sweep that finds no room between its elytra and ANT_BACK_OUT (#25) keeps its own, backward,
+  // fallback), and the fore femur and tibia stay behind the head's front
+  sweptForelegs(meta, svg, fail) {
+    if ((meta.type !== 'beetle' && meta.type !== 'grasshopper') || !meta.antennae || meta.antennae.pose !== 'swept') return;
+    const an = meta.antennae, fore = meta.legs[0];
+    const R = sweptRun[meta.type] ||= { n: 0, scale: 0, under: 0 };
+    R.n++; R.scale += meta.scale; if (meta.scale < SWEPT_SCALE) R.under++;
+    if (an.reasons.includes('legs')) fail('swept antenna re-rolled for a leg (' + meta.fam + ', legs ' + meta.legRoll.pose + '; reasons ' + an.reasons.join(',') + ')');
+    if (an.why && an.tip[1] < meta.head.top) fail('swept antenna laid forward in its fallback pose after ' + an.why + ' (' + meta.fam + ')');
+    if (fore.pts.slice(2, 5).some(p => p[1] < meta.head.top)) fail('swept plate with the fore femur or tibia ahead of the head (' + meta.fam + ', legs ' + meta.legRoll.pose + ')');
+  },
   // #12 the caption and the drawing agree: type bee draws bee families only and type wasp none of them
   hymFamilies(meta, svg, fail) {
     if (meta.type !== 'bee' && meta.type !== 'wasp') return;
@@ -1174,6 +1213,61 @@ const CHECKS = {
       if (!(G[0].spines && G[0].spines.femur)) fail('asilid fore femur not spined (raptorial)');
     }
     if (fam === 'tachinid' && !G.every(g => g.spines)) fail('tachinid legs not bristly on every pair');
+  },
+  // #55 the crane fly's leg pose family and fore / hind length ratio (CRANE), on the right legs as drawn
+  cranePose(meta, svg, fail) {
+    if (meta.type !== 'cranefly') return;
+    const c = meta.cranefly, roll = meta.legRoll, pose = roll && roll.pose;
+    if (!c || !CRANE.ratios.includes(c.ratio)) return fail('crane fly plate has no known leg ratio on meta.cranefly: ' + (c && c.ratio));
+    if (!CRANE.poses.includes(pose) && pose !== 'safe') return fail('crane fly leg pose ' + pose + ' is not a crane fly pose family');
+    craneRun.poses[pose] = (craneRun.poses[pose] || 0) + 1;
+    const fixed = new Set((roll.repaired || []).map(s => s.split(' ')[0])), J = meta.legs.map(l => l.pts), deg = (a, b) => Math.atan2(b[1] - a[1], b[0] - a[0]) * 180 / Math.PI;
+    const r = v => (+v).toFixed(1);
+    if (pose === 'trailing') {
+      if (!fixed.has('hind') && J[2][J[2].length - 1][1] <= meta.abdomen.yBot) fail('trailing crane fly hind leg ends at y ' + r(J[2][J[2].length - 1][1]) + ', not past the abdomen tip ' + r(meta.abdomen.yBot));
+      if (!fixed.has('mid') && deg(J[1][3], J[1][4]) < CRANE.trailBack) fail('trailing crane fly mid tibia at ' + r(deg(J[1][3], J[1][4])) + ' degrees, not swept back (min ' + CRANE.trailBack + ')');
+    }
+    if (pose === 'forward' && !fixed.has('front')) {
+      const antY = Math.min(...meta.antennae.pts.map(p => p[1])), tip = J[0][J[0].length - 1][1];
+      if (tip >= antY) fail('forward crane fly foreleg ends at y ' + r(tip) + ', not ahead of the antennae (' + r(antY) + ')');
+    }
+    if (pose === 'pinned' && !fixed.has('mid')) {
+      const a = deg(J[1][2], J[1][4]);
+      if (Math.abs(a) > CRANE.pinnedOut) fail('pinned crane fly mid leg at ' + r(a) + ' degrees, not held straight out (max ' + CRANE.pinnedOut + ')');
+    }
+    const fore = legReach(J[0]), hind = legReach(J[2]);
+    if (c.ratio === 'front' && !(fore > hind)) fail('crane fly fore leg ' + r(fore) + ' not longer than the hind ' + r(hind) + ' (ratio front)');
+    if (c.ratio === 'hind' && !(hind > fore)) fail('crane fly hind leg ' + r(hind) + ' not longer than the fore ' + r(fore) + ' (ratio hind)');
+  },
+  // #55 the crane fly family's habitus (CRANE) on the drawn plate
+  craneHabitus(meta, svg, fail) {
+    if (meta.type !== 'cranefly') return;
+    const fam = meta.cranefly && meta.cranefly.fam;
+    if (!CRANE.fams.includes(fam)) return fail('crane fly plate has no known family on meta.cranefly: ' + fam);
+    craneRun.fams[fam] = (craneRun.fams[fam] || 0) + 1;
+    const body = meta.abdomen.yBot, leg = Math.max(...meta.legs.map(l => legReach(l.pts))) / body;
+    (craneRun.body[fam] ||= []).push(body); (craneRun.leg[fam] ||= []).push(leg);
+    const pat = meta.wingStats && meta.wingStats.pattern;
+    if (fam === 'ctenophorine') {
+      if (!CRANE.ctenoAnt.includes(meta.antenna)) fail('ctenophorine antenna ' + meta.antenna + ', not ' + CRANE.ctenoAnt.join(' / '));
+      if (meta.bodyGenes.abd.mark !== 'banded') fail('ctenophorine abdomen ' + meta.bodyGenes.abd.mark + ', not banded');
+      const k = maxHw(meta.abdomen.profile) / maxHw(meta.thorax.profile);
+      if (k < CRANE.ctenoBroad) fail('ctenophorine abdomen ' + k.toFixed(2) + 'x the thorax, not broad (min ' + CRANE.ctenoBroad + ')');
+    }
+    if (CRANE.punctate.includes(fam)) (craneRun.punct[fam] ||= []).push(!!(pat && pat.dots.length));
+    if (fam !== 'pediciid' && !CRANE.punctate.includes(fam)) { if (pat && pat.dots.length) fail(fam + ' wing carries a stippled pattern'); return; }
+    if (fam === 'pediciid' && (!pat || pat.dots.length < CRANE.patternDots)) return fail('pediciid wing pattern has ' + (pat ? pat.dots.length : 0) + ' dots, want ' + CRANE.patternDots + '+');
+    if (pat && pat.dots.some(p => !meta.wingOutlines.some(o => inPoly(p, o)))) fail(fam + ' wing pattern dot outside the wings');
+  },
+  // #55 the crane fly's wing set (meta.cranefly.set) against CRANE.sets; a folded wing crosses the midline
+  craneWingSet(meta, svg, fail) {
+    if (meta.type !== 'cranefly') return;
+    const set = meta.cranefly && meta.cranefly.set, band = CRANE.sets[set];
+    if (!band) return fail('crane fly plate has no known wing set on meta.cranefly: ' + set);
+    craneRun.sets[set] = (craneRun.sets[set] || 0) + 1;
+    const th = meta.wingTheta;
+    if (!(th >= band[0] && th <= band[1])) fail('crane fly wing angle ' + (+th).toFixed(1) + ' outside the ' + set + ' band ' + band.join('-'));
+    if (set === 'folded' && Math.min(...meta.wingOutlines[0].map(p => p[0])) > -CRANE.cross) fail('folded crane fly wing does not cross the midline');
   },
   // Diptera short rungs (#10): Tabanidae and Asilidae always close bm with bm-cu, and on the muscid / syrphid / tabanid
   // plan r-m and bm-cu are short rungs on every plate, never a long oblique (dip-eristalis: ~5.5% of the span)
@@ -2546,6 +2640,11 @@ const POST = {
       console.log('#53 beetle ' + g + ':', fmt(T)); }
     console.log('#53 beetle families (of ' + n + ' beetle plates):', fmt(colFams) + (n < COL_MIN ? '; too few beetle plates (' + n + ' < ' + COL_MIN + ') to require each' : ''));
   },
+  // #47 the run's swept-antenna beetle and grasshopper plates: none under SWEPT_SCALE, and their mean plate scale (reported)
+  sweptReport(fail) {
+    for (const t in sweptRun) if (sweptRun[t].under) fail(sweptRun[t].under + ' swept-antenna ' + t + ' plates under scale ' + SWEPT_SCALE, t);
+    console.log('#47 swept-antenna plates:', Object.keys(sweptRun).sort().map(t => t + ' ' + sweptRun[t].n + ' (mean scale ' + (sweptRun[t].scale / sweptRun[t].n).toFixed(3) + ')').join(', ') || 'none');
+  },
   // #26 the run's cicadas: the median plate scale at least CIC.scale (0.81 before #26), once the run has CIC_MIN of them
   cicScale(fail) {
     const n = cicRun.scales.length, m = median(cicRun.scales);
@@ -2606,6 +2705,34 @@ const POST = {
       if (n >= DIP_SET.shareMin && thin.length) fail('fly ' + what + ' under their share of the plates: ' + thin.join(', ') + ' ' + JSON.stringify(counts), 'fly');
       console.log('#54 fly ' + what + ':', JSON.stringify(counts) + (n < DIP_SET.shareMin ? ' (too few to assert, < ' + DIP_SET.shareMin + ')' : ''));
     }
+  },
+  // #55 the run's crane flies (CRANE): pose families, families and wing sets on their shares, the limoniid smaller with
+  // shorter legs than the tipulid; a run with too few crane flies reports the counts, never passes them by silence
+  craneShares(fail) {
+    const n = Object.values(craneRun.poses).reduce((a, b) => a + b, 0) || Object.values(craneRun.fams).reduce((a, b) => a + b, 0) || Object.values(craneRun.sets).reduce((a, b) => a + b, 0);
+    if (!n) return;   // none of its checks was selected
+    const enough = n >= CRANE.shareMin, share = c => Object.values(c).reduce((a, b) => a + b, 0);
+    if (share(craneRun.poses)) {
+      const big = CRANE.poses.filter(k => (craneRun.poses[k] || 0) >= CRANE.poseShare * share(craneRun.poses));
+      if (enough && big.length < CRANE.posesMin) fail('crane fly leg poses: only ' + big.length + ' families on ' + CRANE.poseShare * 100 + '% of the plates (want ' + CRANE.posesMin + ') ' + JSON.stringify(craneRun.poses), 'cranefly');
+    }
+    for (const [what, counts, kinds, min] of [['families', craneRun.fams, CRANE.fams, CRANE.famShare], ['wing sets', craneRun.sets, Object.keys(CRANE.sets), CRANE.setShare]]) {
+      const m = share(counts);
+      if (!m) continue;
+      const thin = kinds.filter(k => (counts[k] || 0) < min * m);
+      if (enough && thin.length) fail('crane fly ' + what + ' under their share of the plates: ' + thin.join(', ') + ' ' + JSON.stringify(counts), 'cranefly');
+    }
+    for (const fam of CRANE.punctate) {   // a punctate family draws both plain and spotted wings
+      const v = craneRun.punct[fam] || [], k = v.filter(Boolean).length;
+      if (v.length >= CRANE.shareMin * CRANE.famShare && (k < CRANE.punctShare * v.length || k > (1 - CRANE.punctShare) * v.length)) fail(fam + ' wings punctate on ' + k + ' of ' + v.length + ' plates (want both plain and punctate, each ' + CRANE.punctShare * 100 + '%+)', 'cranefly');
+    }
+    const B = craneRun.body, Lg = craneRun.leg;
+    if (enough && B.limoniid && B.tipulid) {
+      if (median(B.limoniid) > CRANE.limSmall * median(B.tipulid)) fail('limoniid median body ' + median(B.limoniid).toFixed(0) + ' not under ' + CRANE.limSmall + ' of the tipulid\'s ' + median(B.tipulid).toFixed(0), 'cranefly');
+      if (median(Lg.limoniid) > CRANE.limLeg * median(Lg.tipulid)) fail('limoniid median leg / body ' + median(Lg.limoniid).toFixed(2) + ' not under ' + CRANE.limLeg + ' of the tipulid\'s ' + median(Lg.tipulid).toFixed(2), 'cranefly');
+    }
+    console.log('#55 crane fly (n ' + n + (enough ? '' : ', too few to assert, < ' + CRANE.shareMin) + '): poses ' + JSON.stringify(craneRun.poses) + ', families ' + JSON.stringify(craneRun.fams) + ', wing sets ' + JSON.stringify(craneRun.sets) +
+      (B.limoniid && B.tipulid ? ', body limoniid / tipulid ' + median(B.limoniid).toFixed(0) + ' / ' + median(B.tipulid).toFixed(0) + ', leg / body ' + median(Lg.limoniid).toFixed(2) + ' / ' + median(Lg.tipulid).toFixed(2) : ''));
   },
   // #50 the run's mayflies: every family, hindwing class, tail count, sex, splay class and wing set on at least EPH_HAB.share of
   // them, once the run has EPH_HAB.shareMin
@@ -2677,7 +2804,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
