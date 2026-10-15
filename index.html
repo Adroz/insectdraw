@@ -1131,7 +1131,7 @@ const LEP_HAIR = 2.5, LEP_HAIR_DARK = 3.2;
 const LEP_CLEAR = LEP_HAIR_DARK + 0.8;   // body units: the band beside another wing's edge kept clear, its longest hair plus a gap
 const LEP_HUG = 1.0;     // body units: the hatch's gap either side of a vein, band edge or cross-line (the engraver's hatch stops short of the line)
 const LEP_LINE_CLEAR = 1.6;   // body units: a band edge or cross-line stops this short of the costa and the veins (#67)
-const LEP_RING_VEIN = 5;   // body units: a spot ring this small is not drawn across a vein (#52: ring, pupil and vein fill in)
+const LEP_RING_VEIN = 5;   // body units: a spot ring this small is not drawn across a vein, nor a pupil ring inside it (#52: they fill in at 1 bit)
 const LEP_RUN_MIN = 6;   // body units: the shortest run of a hindwing vein outside the forewing that is drawn (#67)
 const LEP_TOOTH = 3;     // hatch pitches: the narrowest cross-line tooth (half wave) a cell takes (#67)
 const LEP_HUG_X = 2.0;   // body units: the cross set's gap either side of a vein (where veins converge, a lattice between them fuses)
@@ -2247,12 +2247,12 @@ const LEP_POSE_ANG = {
 };
 // a leg folded under the wings is foreshortened from above: its segments drawn at this share of their length, per pose
 const LEP_POSE_LEN = { hidden: 0.68 };
-const LEP_BRUSH = { ang: { F: [-85, -65], tib: [-100, -75], T: [-10, 10] }, tarK: 0.18 };
+const LEP_BRUSH = { ang: { F: [-90, -74], tib: [-100, -80], T: [-10, 10] }, tarK: 0.18 };
 // the nymphalids' four walking legs (#52): the mid pair reaching forward past the forewing's costa where the forelegs would
 // stand, the hind pair back beside the abdomen behind the hindwing (pair 0 is the brush's own, LEP_BRUSH.ang)
 const LEP_POSE_ANG_NYM = {
-  spread: [LEP_BRUSH.ang, { F: [-40, -20], tib: [-85, -55], T: [-15, 0] }, { F: [35, 55], tib: [60, 85], T: [5, 18] }],
-  walking: [LEP_BRUSH.ang, { F: [-55, -35], tib: [-110, -85], T: [-15, 0] }, { F: [50, 68], tib: [80, 100], T: [5, 15] }],
+  spread: [LEP_BRUSH.ang, { F: [-55, -40], tib: [-105, -85], T: [-15, 0] }, { F: [35, 55], tib: [60, 85], T: [5, 18] }],
+  walking: [LEP_BRUSH.ang, { F: [-62, -48], tib: [-118, -98], T: [-15, 0] }, { F: [50, 68], tib: [80, 100], T: [5, 15] }],
 };
 // #52 how near the midline a lepidopteran wing may come (body units): the pair never closes into a seam over the body
 const LEP_MID_CLEAR = 6, LEP_HIND_CLEAR = 1;   // the hindwing only never crosses (its inner margin may hug the abdomen, as on a set specimen)
@@ -2264,6 +2264,7 @@ const lepSets = w => Object.fromEntries(Object.keys(w).map(k => [k, Object.assig
 const LEP_WING_SETS = { sets: lepSets({ square: 2, delta: 1, forward: 1 }), fams: {
   pierid: { sets: lepSets({ square: 2, delta: 1.3, forward: 1.5 }) },
   sphingid: { sets: Object.assign(lepSets({ square: 1, delta: 3, forward: 0.5 }), { delta: Object.assign({}, LEP_SET_RANGES.delta, { w: 3, hw: [-8, 0] }) }) },   // the hawk-moth's small hindwing tucked less: turned further under its narrow forewing it would run along the inner margin noctuid: { sets: lepSets({ square: 1, delta: 2, forward: 0.7 }) },
+  noctuid: { sets: lepSets({ square: 1, delta: 2, forward: 0.7 }) },
   nymphalid: { sets: lepSets({ square: 2, delta: 1.2, forward: 1 }) }, satyrine: { sets: lepSets({ square: 2, delta: 1.2, forward: 1 }) },
   lycaenid: { sets: lepSets({ square: 2, delta: 1.3, forward: 1.5 }) }, papilionid: { sets: lepSets({ square: 2, delta: 1.3, forward: 1.5 }) } } };
 const ORDERS = {
@@ -2402,16 +2403,16 @@ const ORDERS = {
     // odds of the crests, rolled last in rollBodyGenes); the swallowtail's long slender one; the blue's small short one.
     // spotPos: where the spot row stands, as a fraction of the half width (0: one spot on the midline). With famScale below.
     abdFams: {
-      sphingid: { tips: { acute: 1 }, marks: { lateral: 1 }, seg: [6, 8], peak: [0.22, 0.36], wK: [0.95, 1.1], spotPos: [0.6, 0.7] },
+      sphingid: { tips: { acute: 1 }, marks: { lateral: 1 }, seg: [6, 8], peak: [0.22, 0.36], wK: [0.85, 1.0], spotPos: [0.6, 0.7] },
       saturniid: { tips: { rounded: 1 }, marks: { hairy: 1 }, wK: [1.05, 1.2] },
-      geometrid: { marks: { plain: 2, banded: 1, hairy: 1 }, wK: [0.85, 1.0] },
+      geometrid: { marks: { plain: 2, banded: 1, hairy: 1 }, wK: [0.8, 0.95] },
       arctiid: { marks: { dorsal: 3, banded: 2 }, wK: [0.9, 1.1], spotPos: [0, 0] },
-      noctuid: { marks: { plain: 2, hairy: 2, banded: 1 }, wK: [0.9, 1.05], crests: 0.75 },
+      noctuid: { marks: { plain: 2, hairy: 2, banded: 1 }, wK: [0.95, 1.1], crests: 0.75 },
       papilionid: { tips: { pointed: 2, rounded: 1 }, wK: [0.85, 1.0] },
       lycaenid: { wK: [0.9, 1.05] },
     },
-    famScale: { sphingid: { abdLen: 1.3, thoraxW: 1.08 }, saturniid: { abdLen: 0.72, abdW: 1.12, wingSpan: 1.08 }, geometrid: { abdW: 0.72, abdLen: 1.08, wingSpan: 1.06 },
-      noctuid: { abdLen: 0.95 }, satyrine: { abdLen: 0.88 }, nymphalid: { abdW: 1.1 }, papilionid: { abdLen: 1.1, abdW: 0.85 }, lycaenid: { abdLen: 0.72, abdW: 0.95 } },
+    famScale: { sphingid: { abdLen: 1.4, thoraxW: 1.08 }, saturniid: { abdLen: 0.72, abdW: 1.12, wingSpan: 1.08 }, geometrid: { abdW: 0.72, abdLen: 1.08, wingSpan: 1.06 },
+      noctuid: { abdLen: 0.95 }, satyrine: { abdLen: 0.88 }, nymphalid: { abdW: 1.1 }, papilionid: { abdLen: 1.1, abdW: 0.85 }, lycaenid: { abdLen: 0.62, abdW: 0.95 } },
     thorax: { front: [0.9, 1.3], peak: [0.3, 0.4], hump: [0.02, 0.1], waist: [0, 0], lenK: [0.85, 1.1] },
     head: { outline: 'round', ratio: [0.95, 1.2], cx: [0.3, 0.35], rx: [0.14, 0.18], ry: [0.24, 0.3], cy: [-0.06, 0.02], ocelli: [0, 2], oc: 'behind', ocR: [0.8, 1.1], palps: 0.8, coil: 0.35, styles: { lattice: 3, stipple: 2 }, hair: 0.7 },
     // #52 leg pose families (docs/research-lepidoptera-habitus.md; the order's own angles per pair, LEP_POSE_ANG): raised,
@@ -4906,7 +4907,7 @@ function wingsLepidoptera(C) {   // (type === 'moth')
       o.spots.push(lepSpot({ P, r, ry: opt.ry, rot: opt.rot, rings }));
       const deg = (opt.rot || 0) / D2R, ry = opt.ry || r;
       if (opt.outline) ring(P, r, ry, deg);
-      if (opt.pupil) ring(P, r * opt.pupil, ry * opt.pupil, deg);
+      if (opt.pupil && Math.max(r, ry) >= LEP_RING_VEIN) ring(P, r * opt.pupil, ry * opt.pupil, deg);   // #52 a small spot keeps its pupil as tone: a ring inside a small ring fills in at 1 bit
     };
     const cellSpot = (c, u, rWant, rings, opt) => {
       if (c < 0 || c > last) return;

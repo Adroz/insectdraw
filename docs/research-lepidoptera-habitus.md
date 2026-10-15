@@ -54,11 +54,11 @@ patterns stay as `research-lepidoptera-wings.md` has them (#13 the pattern bands
   it no longer crosses its pair (`LEP_HIND_CLEAR`). Over a run the hindwing's share under the forewing is highest under a
   delta and lowest under a forward set (medians about 0.7, 0.45, 0.25). Weights by family: sphingid and noctuid rest
   mostly in a delta, the butterflies mostly square.
-- Abdomen by family (`abdFams`, `famScale`): sphingid abdomen 1.3x long with an acute tip, 6-8 segments and a lateral
+- Abdomen by family (`abdFams`, `famScale`): sphingid abdomen 1.4x long with an acute tip, 6-8 segments and a lateral
   spot row (`lateral`, at 0.6-0.7 of the half width); saturniid 0.72x long and 1.12x broad, hairy, rounded tip;
   geometrid 0.72x broad and 1.08x long; arctiid a dorsal spot row on the midline (`dorsal`) or bands; noctuid 0.95x long
   with dorsal crests on 2-3 basal segments on 75 % of plates (`A.crest`, a white-masked tuft on the midline drawn in the
-  abdomen's pitch element); papilionid 1.1x long, 0.85x broad; lycaenid 0.72x long; satyrine 0.88x long; nymphalid
+  abdomen's pitch element); papilionid 1.1x long, 0.85x broad; lycaenid 0.62x long; satyrine 0.88x long; nymphalid
   1.1x broad. The wings scale with saturniid and geometrid (broad wings on a light body), and the span's jitter is
   0.18 (was 0.1), so a sheet shows the body-to-wing proportions varying as species do.
 - Legs: pose families raised (the old V), spread (forelegs out to the sides), walking, hidden (out under the wings,
@@ -68,8 +68,9 @@ patterns stay as `research-lepidoptera-wings.md` has them (#13 the pattern bands
   the hind pair back beside the abdomen (`LEP_POSE_ANG_NYM`); a butterfly's broad hindwing usually covers the hind pair,
   as on set specimens.
 
-- Spot rings (#52, a 1-bit fix the reshuffled seeds needed): a ring under `LEP_RING_VEIN` (5 body units) is not drawn
-  across a vein; ring, pupil and vein in one small cell fill in.
+- 1-bit fixes the reshuffled seeds needed (#52): a spot ring under `LEP_RING_VEIN` (5 body units) is not drawn across
+  a vein, and such a small spot keeps its pupil as tone without a pupil ring (ring in ring, or ring and vein, fill in);
+  the stipple dot is .5 long (was .3) so it keeps its ink through the device threshold.
 
 ## Not done here
 

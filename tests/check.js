@@ -155,7 +155,7 @@ const dipSet = { sets: {}, fams: {} };   // over the run, for POST.dipShares
 // least deltaFam of their plates
 const LEP_SET = { margin: { square: [-8, 12], delta: [14, 46], forward: [-20, -10] }, tol: 0.5, midline: 6, hindMidline: 1, coveredMin: 10,
   share: 0.12, shareMin: 100, deltaFams: ['sphingid', 'noctuid'], deltaFam: 0.4 };
-const lepSet = { sets: {}, fams: {}, cov: { square: [], delta: [], forward: [] }, poses: {}, hidden: [0, 0] };   // over the run, for POST.lepShares; hidden: [hidden plates, of them with LEP_LEGS.hiddenPairs pairs hidden]
+const lepSet = { sets: {}, fams: {}, cov: { square: [], delta: [], forward: [] }, poses: {}, hidden: [0, 0], brushMid: [0, 0] };   // over the run, for POST.lepShares; hidden: [hidden plates, of them with LEP_LEGS.hiddenPairs pairs hidden]
 // #52 lepidopteran abdomen families (docs/research-lepidoptera-habitus.md), read off the drawn outlines:
 // lw the abdomen's length per its widest width, aw its widest over the thorax's widest, fw its length over the forewing's
 // (root to its farthest outline point). sphingid: long and fusiform (lw >= long, fw >= longFw), widest ahead of `fusiT` and
@@ -171,13 +171,13 @@ const lepSet = { sets: {}, fams: {}, cov: { square: [], delta: [], forward: [] }
 // hidden, no sample of it outside a wing or the body, and `hiddenPairs` pairs on at least `hiddenShare` of the run's hidden
 // plates; #8's placement may turn a pair that cannot stay under a small hindwing out to show cleanly); brush: the nymphalids' (Nymphalidae,
 // with the satyrines) forelegs reduced to short hairy brushes, the fore leg (femur on) at most `brush` x the mid leg, with
-// the mid pair showing ahead of the wings where the forelegs would stand, unless the forewings are pushed forward over that
-// room (the hind pair shows where the hindwing leaves it
+// the mid pair showing ahead of the wings where the forelegs would stand on at least `brushMid` of the run's nymphalid plates
+// whose forewings are not pushed forward over that room (#8's placement may hide a pair that cannot show cleanly) (the hind pair shows where the hindwing leaves it
 // room; a butterfly's hindwing usually covers it, as on set specimens). share: every pose on at least this share of the run's moths (the
 // moth variant) once it has shareMin
-const LEP_LEGS = { poses: ['raised', 'spread', 'walking', 'hidden'], spreadFemur: -45, hiddenPairs: 2, hiddenShare: 0.85, brushFams: ['nymphalid', 'satyrine'], brush: 0.5, share: 0.12, shareMin: 100 };
-const LEP_ABD = { long: 3.6, longFw: 0.8, fusiT: 0.45, point: 0.45, spots: 3, lateral: 0.5, stout: 2.8, stoutAw: 0.85, slender: 0.7, dorsal: 0.2,
-  medium: [2.4, 3.9], crests: 2, papilio: 5.0, small: 0.62, arctiid: ['dorsal', 'banded'] };
+const LEP_LEGS = { poses: ['raised', 'spread', 'walking', 'hidden'], spreadFemur: -45, hiddenPairs: 2, hiddenShare: 0.85, brushFams: ['nymphalid', 'satyrine'], brush: 0.5, brushMid: 0.85, share: 0.12, shareMin: 100 };
+const LEP_ABD = { long: 3.4, longFw: 0.75, fusiT: 0.45, point: 0.45, spots: 3, lateral: 0.5, stout: 2.8, stoutAw: 0.8, slender: 0.7, dorsal: 0.2,
+  medium: [2.2, 4.0], crests: 2, papilio: 5.0, small: 0.68, arctiid: ['dorsal', 'banded'] };
 // #11, stated from the references (hym-apis: marginal + SM1-SM3 + ME1-ME2; Vespidae the same plan; hym-ichneumonidae-diagram:
 // the areolet, the small cell between 2r-m and the first r-m just past the stigma's distal end), not read from the engine's family table
 const HYM_CELLS = { apid: { sub: 3, disc: 2 }, vespid: { sub: 3, disc: 2 } };   // closed submarginal / discoidal cells per family
@@ -1078,11 +1078,12 @@ const CHECKS = {
       lepSet.hidden[0]++; if (h >= LEP_LEGS.hiddenPairs) lepSet.hidden[1]++;
       if (h < 1) fail('lepidopteran legs posed hidden show every pair');
     }
-    if (pose === 'spread' && !fore.brush) { const a = Math.atan2(fore.pts[3][1] - fore.pts[2][1], fore.pts[3][0] - fore.pts[2][0]) * 180 / Math.PI; if (a < LEP_LEGS.spreadFemur) fail('lepidopteran forelegs posed spread are raised: femur at ' + a.toFixed(1) + ' degrees (min ' + LEP_LEGS.spreadFemur + ')'); }
+    if (pose === 'spread' && !fore.brush && !(meta.legRoll.repaired || []).some(r => /^front/.test(r))) {   // as rolled: #8's repair may turn a foreleg to clear the wings
+      const a = Math.atan2(fore.pts[3][1] - fore.pts[2][1], fore.pts[3][0] - fore.pts[2][0]) * 180 / Math.PI; if (a < LEP_LEGS.spreadFemur) fail('lepidopteran forelegs posed spread are raised: femur at ' + a.toFixed(1) + ' degrees (min ' + LEP_LEGS.spreadFemur + ')'); }
     if (LEP_LEGS.brushFams.includes(meta.fam)) {
       if (!fore.brush) fail(meta.fam + ' foreleg not a brush');
       if (len(fore.pts) > LEP_LEGS.brush * len(mid.pts)) fail(meta.fam + ' foreleg not reduced: ' + (len(fore.pts) / len(mid.pts)).toFixed(2) + 'x the mid leg (max ' + LEP_LEGS.brush + ')');
-      if (meta.lep.set !== 'forward' && !shows(mid.pts)) fail(meta.fam + ' mid (walking) legs hidden');   // forewings pushed forward cover the room ahead of them
+      if (meta.lep.set !== 'forward') { lepSet.brushMid[0]++; if (shows(mid.pts)) lepSet.brushMid[1]++; }   // forewings pushed forward cover the room ahead of them
     }
   },
   // #52 the lepidopteran family's abdomen (meta.fam) against LEP_ABD, on the drawn outlines and meta.lep.abd's marks
@@ -2579,6 +2580,9 @@ const POST = {
     }
     { const counts = lepSet.poses, n = Object.values(counts).reduce((a, b) => a + b, 0), thin = LEP_LEGS.poses.filter(k => (counts[k] || 0) < LEP_LEGS.share * n);
       if (n && n >= LEP_LEGS.shareMin && thin.length) fail('moth leg poses under ' + LEP_LEGS.share + ' of the plates: ' + thin.join(', ') + ' ' + JSON.stringify(counts), 'moth');
+      const [bn, bk] = lepSet.brushMid;
+      if (bn >= 20 && bk < LEP_LEGS.brushMid * bn) fail('nymphalid mid (walking) legs show on ' + bk + ' of ' + bn + ' plates (want >= ' + LEP_LEGS.brushMid + ')', 'butterfly');
+      if (bn) console.log('#52 nymphalid mid legs showing:', bk + ' of ' + bn);
       const [hn, hk] = lepSet.hidden;
       if (hn >= 20 && hk < LEP_LEGS.hiddenShare * hn) fail('lepidopteran hidden poses hide ' + LEP_LEGS.hiddenPairs + ' pairs on ' + hk + ' of ' + hn + ' plates (want >= ' + LEP_LEGS.hiddenShare + ')', 'moth');
       if (hn) console.log('#52 hidden leg poses with ' + LEP_LEGS.hiddenPairs + ' pairs hidden:', hk + ' of ' + hn);

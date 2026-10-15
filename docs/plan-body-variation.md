@@ -475,15 +475,20 @@ rules for all of them:
 
    | type | min 1-60 | min 61-120 | sheet9 1-60 | sheet9 61-120 | body min 1-60 | body min 61-120 |
    |---|---|---|---|---|---|---|
-   | moth (both) | 7.71 -> 9.89 | 6.43 -> 12.66 | 14.64 -> 17.04 | 14.85 -> 17.06 | 10.03 -> 9.56 | 9.35 -> 11.82 |
-   | moth variant | 9.25 -> 9.89 | 7.71 -> 9.12 | 14.03 -> 17.00 | 13.04 -> 15.86 | 9.87 -> 9.56 | 9.21 -> 10.72 |
-   | butterfly | 6.43 -> 9.16 | 6.43 -> 10.03 | 12.51 -> 15.47 | 12.89 -> 15.74 | 9.30 -> 9.56 | 7.34 -> 8.74 |
+   | moth (both) | 7.71 -> 9.95 | 6.43 -> 11.00 | 14.64 -> 17.79 | 14.85 -> 16.95 | 10.03 -> 10.01 | 9.35 -> 9.34 |
+   | moth variant | 9.25 -> 9.95 | 7.71 -> 9.12 | 14.03 -> 17.29 | 13.04 -> 15.96 | 9.87 -> 10.57 | 9.21 -> 11.25 |
+   | butterfly | 6.43 -> 10.01 | 6.43 -> 9.60 | 12.51 -> 15.52 | 12.89 -> 15.53 | 9.30 -> 9.34 | 7.34 -> 8.13 |
 
-   The minimum rises on both blocks for every variant and lands within 1 of the floor everywhere (above it on 61-120 for
-   the moth type and the butterfly), and `sheet9` rises by 2.5-3 on both blocks; a 1-9 sheet and a random:9 sheet read as
-   7-8 insects (was 2-4). What still repeats is two plates of one family in one set at near angles (two noctuids resting
-   in a delta, 24/36; two nymphalids set square, 23/124): the wing ink dominates the thumbnail, so the levers left are the
-   wing outline and the pattern tone (#13).
+   The minimum rises on both blocks for every variant: on 1-60 the butterfly reaches the floor and both moth rows stop
+   0.05 under it; on 61-120 the moth type clears it and the others land within 1. `sheet9` rises by 2.6-3.2 on both
+   blocks; a 1-9 sheet and a random:9 sheet read as 7-8 insects (was 2-4). What still repeats is two plates of one
+   family in one set at near angles (two noctuids resting in a delta, 24/36; two nymphalids set square, 23/124; an
+   arctiid and a plain moth set square, 112/153): the wing ink dominates the thumbnail, so the levers left are the wing
+   outline and the pattern tone (#13). The reshuffled lep seeds exposed the 1-bit wing gate (`lepInk`) to plates it was
+   never fitted on: four rules keep it (wings off the midline, no small ring over a vein, no pupil ring in a small spot,
+   a .5 stipple dot) and `node tests/check.js 3000` still fails `lepInk` on four seeds (986, 1001, 1341, 1531: the
+   wing roots of a delta hawk-moth and a forward lycaenid) and `laneSep` on one (1410), the same rate the backlog
+   engine shows on forced moth seeds it was not fitted on (7-10 in 300).
 6. **Beetle: within-family genes, #53** (8.93). Families differ already; inside one family it is the same beetle. Genes:
    elytral outline (parallel, oval, rounded, tapering apex; square or rounded shoulders), elytral sculpture families
    (striae, puncture rows, costae, smooth, tubercles; #24 does the texture rendering) and pattern families (spots,
