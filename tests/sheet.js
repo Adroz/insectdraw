@@ -58,7 +58,8 @@ const cell = 600;
 const SLACK = 400;
 const width = cols * cell, height = rows * cell;
 const rawPng = outPng.replace(/\.png$/i, '') + '.raw.png';
-execFileSync(bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', '--window-size=' + width + ',' + (height + SLACK), '--screenshot=' + rawPng, 'file://' + path.resolve(htmlPath)], { stdio: 'ignore' });
+// under CI (ubuntu runners) Chrome's sandbox cannot start, as in tests/pages.js, so it runs with --no-sandbox there
+execFileSync(bin, ['--headless=new', '--disable-gpu', '--hide-scrollbars', ...(process.env.CI ? ['--no-sandbox'] : []), '--window-size=' + width + ',' + (height + SLACK), '--screenshot=' + rawPng, 'file://' + path.resolve(htmlPath)], { stdio: 'ignore' });
 const sharp = require('sharp');
 (async () => {
   const sheet = sharp(rawPng).extract({ left: 0, top: 0, width, height });
