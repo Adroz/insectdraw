@@ -15,6 +15,8 @@ Sources consulted (2026-10-01):
 - Fly eyes: holoptic males (eyes touching), dichoptic females; Musca ~4000 ommatidia: https://en.wikipedia.org/wiki/Holoptic_arrangement , https://www.k-state.edu/parasitology/classes/625arth44.html
 - Bee eye: large kidney-shaped, 5–6k ommatidia: https://www.bumblebee.org/bodyEyehtm.htm ; Tipulidae: 13-segmented antennae, very long slender legs: https://en.wikipedia.org/wiki/Crane_fly
 - Cicada fore femora "armed beneath by two strong spines and frequently a third smaller distal spine": https://groups.csail.mit.edu/mac/projects/psyche/69/69-042.html
+  Drawn (#26) as a swollen femur 2.3–2.9× as long as deep (the drumstick profile of `femurGeom`) with 2–3 closed
+  triangular teeth on one edge; the foreleg has its own angles per pose (reaching forward, tibia out, tibia folded back).
 - Beetle eyes often notched (emarginate) at the antennal insertion; 11 antennomeres typical: https://www.zoology.ubc.ca/bcbeetles/Text%20files/family%20descriptions.htm
 - Engraving tone: stipple/line engraving; shade the far side of cylinders with short parallel lines: https://www.britannica.com/art/stipple-engraving , https://en.wikipedia.org/wiki/Line_engraving
 
@@ -25,7 +27,18 @@ Sources consulted (2026-10-01):
 - Taper: femur widest in the proximal third, narrowing to the "knee"; tibia widens slightly to its apex (spur base). Joints are drawn as overlapping rounded ends (the distal segment's base tucked into the proximal one).
 - Tarsus: 3–5 tarsomeres, basitarsus the longest (~0.35 of tarsus), then shrinking; each a small bead. Pretarsus: two curved claws diverging ~25–35° each side, and between them a small pad (arolium; in flies a pair of pulvilli with a bristle empodium between).
 - Tibial spurs: 1–2 movable spurs at the tibia apex on the inner side (grasshopper hind tibia: two pairs; bee, wasp, cricket: conspicuous). Spines: fixed, in rows along the posterior/outer edge of the tibia (grasshopper hind tibia double row; dragonfly femur AND tibia with long spines forming a prey basket; cicada fore femur with 2–3 ventral teeth).
-- Order specifics: grasshopper hind femur enormous (~2× other femora), with a chevron/herringbone muscle pattern on the outer face; bee hind tibia flattened, widening to a concave corbicula fringed with long hairs, basitarsus broad and flat with comb rows; fly tarsi carry pulvilli; crane fly legs very long and thread-thin with clear joints; beetle legs stout with broad short tarsi.
+- Order specifics: grasshopper hind femur enormous (~2× other femora), with a chevron/herringbone muscle pattern on the outer face; bee hind tibia flattened, widening to a concave corbicula fringed with long hairs, basitarsus broad and flat with comb rows; fly tarsi carry pulvilli; crane fly legs very long and thread-thin with clear joints; beetle legs stout with broad short tarsi. Lacewing (Chrysopidae, #19; refs neu-nothochrysa, neu-chrysoperla): all six legs slender walking legs, the forelegs on the prothorax and held forward and out, never raised beside the head like a mantid's or mantidfly's (the engine rolls walking / spread only, coxa ahead of the pronotal collar).
+- Grasshopper hind femur (#23; refs `ref/leg-orth-femur.jpg`, `ref/leg-orth-psm1891.jpg`). Measured on the lateral
+  micrograph (outer face, femur 990 px from the trochanter to the genicular lobe): deepest 227 px at 0.19 of the
+  length, so **4.4× as long as deep**; depth 0.75 of the maximum at the trochanter, 0.78 at mid-length, 0.5 at 0.7,
+  0.3 just before the knee, then the genicular lobe swells slightly (0.4). The PSM 1891 engraving (oblique outer face)
+  gives 3.6× (deepest at 0.24, 0.46 at the knee); the photo of a live Caelifera (Commons "Grasshopper 5 leg.jpg",
+  seen obliquely, not saved) about 3.8×. A drumstick, not a carrot: the profile swells over the first fifth and
+  narrows over the distal two thirds. The chevron (herringbone, pinnate extensor) pattern covers the whole outer
+  face from the base to about 0.82, the ribs meeting on a longitudinal line a little below the middle and leaning
+  back toward the base at the carinae (chevrons point to the knee); about 14 of them. Engine: `femurGeom` fits one
+  cubic per edge to the measured depths (`FEMUR_PROFILE`), the roll is 3.8–4.6× (`g.femFrac`), the herringbone runs
+  0.03–0.86 at ~L/18; `hindFemur` in `tests/check.js` holds 3.6–4.8×, deepest at 0.12–0.4, chevrons over 0.1–0.8.
 - Engraving: shade the far (outer-lower) side of each femur/tibia with short parallel fine lines (SW.F) running across the segment, denser near the edge, leaving the near side white.
 
 ### Compound eyes
