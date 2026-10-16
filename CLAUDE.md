@@ -75,7 +75,9 @@ contract for changes.
   The line art holds its own (#67): the veins go through the lane floor (`lepVeinFloor`) with the leading edge as a
   wall (on the hindwing only the runs that show outside the forewing, with its outline as a second wall), so Sc and the R branches merge into the costa instead
   of running beside it; a cross-line tooth is at least `LEP_TOOTH` hatch pitches wide and no deeper than wide; band
-  edges and cross-lines stop `LEP_LINE_CLEAR` short of the costa and the veins; spot rings keep that far apart.
+  edges and cross-lines stop `LEP_LINE_CLEAR` short of the costa, the veins and the spot rings, and as far off every edge
+  or line drawn before them (and their own run further back) where the two run alongside; spot rings keep that far apart
+  (#52). The fan hatch thins toward its focus (`LEP_FAN_MIN`) and the hatch keeps `LEP_ROOT_CLEAR` off the wing's root.
 - Lanes never fuse into a bar (#14): on every `growVeins` order the registry does not opt out (`laneFloor: false`: the beetle), and on the moth's veins (#67), lanes and crossveins are drawn by one
   deferred element resolved at the plate scale (`laneFloor`, see the spec's Growth section), which merges a lane into
   its neighbour where they converge under the floor; `meta.wingLanes` carries the drawn lanes and `laneSep` in

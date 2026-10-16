@@ -1069,8 +1069,14 @@ function lepFan(wing, F, spacing) {
   // step x its distance from the focus, smallest at the nearest outline point (the base). The device floor holds there.
   let dA = spacing / (ds / poly.length);
   dA = Math.min(dA, floorPitch(dA * dMin) / dMin);
-  const lines = [];
-  for (let a = a0 + dA / 2, i = 0; a < a1; a += dA, i++) lines.push({ p: F, d: [Math.cos(a), Math.sin(a)], odd: i % 2 === 1 });
+  // #52 the fan thins toward the focus as an engraver's converging hatch does: where the pitch falls under LEP_FAN_MIN of
+  // the rolled mean (near the base on a hindwing, whose focus sits close behind it), every other line stops, then every
+  // other one of those, so the lines never close up into a solid wedge. r0 is the distance from the focus a line starts at
+  const pMin = floorPitch(LEP_FAN_MIN * spacing), lines = [];
+  for (let a = a0 + dA / 2, i = 0; a < a1; a += dA, i++) {
+    let k = 1; if (i) for (let j = i; !(j & 1); j >>= 1) k *= 2;   // line i shows where k x its own pitch holds pMin
+    lines.push({ p: F, d: [Math.cos(a), Math.sin(a)], odd: i % 2 === 1, r0: i ? pMin / (dA * k) : 0 });
+  }
   return lines;
 }
 function lepParallel(wing, deg, spacing) {
@@ -1092,12 +1098,12 @@ function lepParallel(wing, deg, spacing) {
 // A cleared stipple dot still draws its jitter, so the rng stream is the same as without the clearance.
 function lepHatch(wing, lines, tone, cls, step, clip) {
   const poly = wing.localPoly, D = ['', '', '', ''], mask = clip && clip.mask, clear = clip && clip.clear, along = clip && clip.along;
-  const seg = (p, d, t0, t1, c, odd) => {
+  const seg = (p, d, t0, t1, c, odd, r0) => {
     if (c === 3) {   // stipple (its dots draw rng jitter, so the caller closes the hatch with rngSync)
       const step = floorPitch(3);
       for (let t = t0 + (odd ? step / 2 : 0); t <= t1; t += step) {
         const tj = t + randRange(-0.9, 0.9), q = [p[0] + d[0] * tj, p[1] + d[1] * tj];
-        if (clear && clear(q)) continue;
+        if ((clear && clear(q)) || tj < r0) continue;
         const a = wing.T(q); bb(a); D[3] += 'M' + fmt(a[0]) + ',' + fmt(a[1]) + 'l.5,0';   // #52: .5 (was .3), a dot that keeps its ink through the 1-bit threshold
       }
       return;
@@ -1107,7 +1113,7 @@ function lepHatch(wing, lines, tone, cls, step, clip) {
   };
   const cuts = (p, d, pg) => { const ts = []; for (let k = 0, j = pg.length - 1; k < pg.length; j = k++) { const t = lineSegT(p, d, pg[j], pg[k]); if (t !== null) ts.push(t); } return ts.sort((a, b) => a - b); };
   for (const ln of lines) {
-    const p = ln.p, d = ln.d, ts = cuts(p, d, poly);
+    const p = ln.p, d = ln.d, ts = cuts(p, d, poly), r0 = ln.r0 === undefined ? -Infinity : ln.r0;   // r0: a fan line starts that far from its focus (lepFan); a parallel line's t runs negative too
     if (ts.length < 2) continue;
     let iv = [];
     for (let m = 0; m + 1 < ts.length; m += 2) iv.push([ts[m] + 0.9, ts[m + 1] - 0.9]);
@@ -1126,8 +1132,8 @@ function lepHatch(wing, lines, tone, cls, step, clip) {
         const end = t >= t1, tt = end ? t1 : t;
         const q = [p[0] + d[0] * tt, p[1] + d[1] * tt];
         let c = end ? 0 : cls(tone(q), ln.odd);
-        if (c && c !== 3 && ((clear && clear(q)) || (along && along(q, d)))) c = 0;
-        if (c !== cur) { if (cur) seg(p, d, start, tt, cur, ln.odd); cur = c; start = tt; }
+        if (c && c !== 3 && (tt < r0 || (clear && clear(q)) || (along && along(q, d)))) c = 0;
+        if (c !== cur) { if (cur) seg(p, d, start, tt, cur, ln.odd, r0); cur = c; start = tt; }
         if (end) break;
       }
     }
@@ -1141,6 +1147,8 @@ function lepHatch(wing, lines, tone, cls, step, clip) {
 // the scale fringe's hair lengths (body units): a plain hair, and a dark cell's hair on a chequered fringe
 const LEP_HAIR = 2.5, LEP_HAIR_DARK = 3.2;
 const LEP_CLEAR = LEP_HAIR_DARK + 0.8;   // body units: the band beside another wing's edge kept clear, its longest hair plus a gap
+const LEP_FAN_MIN = 0.8;   // the fan hatch's closest pitch, a fraction of its rolled mean pitch (#52: lepFan thins toward the focus)
+const LEP_ROOT_CLEAR = 8;   // body units: the hatch keeps this far from the wing's root, where the outline, costa and vein stems converge (#52)
 const LEP_HUG = 1.0;     // body units: the hatch's gap either side of a vein, band edge or cross-line (the engraver's hatch stops short of the line)
 const LEP_LINE_CLEAR = 1.6;   // body units: a band edge or cross-line stops this short of the costa and the veins (#67)
 const LEP_RING_VEIN = 5;   // body units: a spot ring this small is not drawn across a vein, nor a pupil ring inside it (#52: they fill in at 1 bit)
@@ -2282,7 +2290,7 @@ const LEP_SET_RANGES = { square: { fw: [-8, 12], hw: [-6, 18] }, delta: { fw: [2
 const lepSets = w => Object.fromEntries(Object.keys(w).map(k => [k, Object.assign({ w: w[k] }, LEP_SET_RANGES[k])]));
 const LEP_WING_SETS = { sets: lepSets({ square: 2, delta: 1, forward: 1 }), fams: {
   pierid: { sets: lepSets({ square: 2, delta: 1.3, forward: 1.5 }) },
-  sphingid: { sets: Object.assign(lepSets({ square: 1, delta: 3, forward: 0.5 }), { delta: Object.assign({}, LEP_SET_RANGES.delta, { w: 3, hw: [-8, 0] }) }) },   // the hawk-moth's small hindwing tucked less: turned further under its narrow forewing it would run along the inner margin noctuid: { sets: lepSets({ square: 1, delta: 2, forward: 0.7 }) },
+  sphingid: { sets: Object.assign(lepSets({ square: 1, delta: 3, forward: 0.5 }), { delta: Object.assign({}, LEP_SET_RANGES.delta, { w: 3, hw: [-8, 0] }) }) },   // the hawk-moth's small hindwing tucked less: turned further under its narrow forewing it would run along the inner margin
   noctuid: { sets: lepSets({ square: 1, delta: 2, forward: 0.7 }) },
   nymphalid: { sets: lepSets({ square: 2, delta: 1.2, forward: 1 }) }, satyrine: { sets: lepSets({ square: 2, delta: 1.2, forward: 1 }) },
   lycaenid: { sets: lepSets({ square: 2, delta: 1.3, forward: 1.5 }) }, papilionid: { sets: lepSets({ square: 2, delta: 1.3, forward: 1.5 }) } } };
@@ -2439,10 +2447,12 @@ const ORDERS = {
     // the forelegs held forward in a V as every plate drew them; spread out to the sides; walking; hidden, out under the
     // wings and foreshortened (poseLen, LEP_POSE_LEN), standing as raised under a set not in hiddenSets. brush: the
     // nymphalids' forelegs reduced to short hairy brushes held up against the thorax in every pose (ang), the tarsus a stub
-    // (tarK of the femur), the four walking legs spread or striding (LEP_POSE_ANG_NYM)
+    // (tarK of the femur), the four walking legs spread or striding (LEP_POSE_ANG_NYM). The brush's frontK tops out at 0.42 so
+    // the drawn leg (femur x 1.05 jitter, tibia up to 1.08 of it, the tarsus stub, the claw) stays under half the mid leg's
+    // (tests/check.js LEP_LEGS.brush) at the worst of every roll (#52: 0.5 drew 0.503x on seed 2031)
     legs: { base: { fringe: 0.6, spurs: [1, 2], spines: 0.1, poses: { raised: 2, spread: 2, walking: 1.5, hidden: 2 }, poseAng: LEP_POSE_ANG, poseLen: LEP_POSE_LEN, hiddenSets: ['square', 'forward'] },
-      nymphalid: { frontK: [0.35, 0.5], fringe: 0.2, wk: [0.8, 0.95], poses: { spread: 1, walking: 1 }, poseAng: LEP_POSE_ANG_NYM, brush: LEP_BRUSH },
-      satyrine: { frontK: [0.35, 0.5], fringe: 0.2, wk: [0.8, 0.95], poses: { spread: 1, walking: 1 }, poseAng: LEP_POSE_ANG_NYM, brush: LEP_BRUSH }, pierid: { fringe: 0.2, wk: [0.8, 0.95], lenK: [1.0, 1.2] },
+      nymphalid: { frontK: [0.3, 0.42], fringe: 0.2, wk: [0.8, 0.95], poses: { spread: 1, walking: 1 }, poseAng: LEP_POSE_ANG_NYM, brush: LEP_BRUSH },
+      satyrine: { frontK: [0.3, 0.42], fringe: 0.2, wk: [0.8, 0.95], poses: { spread: 1, walking: 1 }, poseAng: LEP_POSE_ANG_NYM, brush: LEP_BRUSH }, pierid: { fringe: 0.2, wk: [0.8, 0.95], lenK: [1.0, 1.2] },
       lycaenid: { fringe: 0.2, wk: [0.8, 0.95] }, papilionid: { fringe: 0.2, lenK: [1.0, 1.2] }, sphingid: { fringe: 0.4, lenK: [1.0, 1.15] }, saturniid: { fringe: 0.9 } },
     ant: { base: { ref: 'fw', len: [0.33, 0.5], seg: [30, 50], socket: [0.16, 0.3], kinds: { filiform: 2, bipectinate: 2, pectinate: 1 } },
       noctuid: { kinds: { filiform: 4, serrate: 1, bipectinate: 1 }, rami: 'short' },
@@ -3461,6 +3471,8 @@ function rollBodyGenes(type, P) {
     if (i === 0 && F.brush) {   // #52 a nymphalid foreleg reduced to a brush: the tarsus a stub, hair along femur and tibia, held up against the thorax in every pose (no rng)
       g.brush = true; g.lens[3] = fem * F.brush.tarK; g.fringe = { spacing: 2.6, len: 3.5, tibia: true, femur: true };
       g.poseAng = Object.fromEntries(Object.keys(F.poses).concat('spread').map(k => [k, F.brush.ang]));
+      const A = F.brush.ang, F0 = (A.F[0] + A.F[1]) / 2, tb = (A.tib[0] + A.tib[1]) / 2;
+      g.safe = [F0 - 7, F0, tb, tb + (A.T[0] + A.T[1]) / 2];   // the fallback pose and the repair keep the brush up against the thorax too, never the generic foreleg's dirs
     }
     if (type === 'mayfly' && i === 0 && B.pose === 'raised') g.ang = { F: [-88, -68], tib: [-100, -70], T: [-10, 10] };   // forelegs held straight out ahead
     if (type === 'cicada' && i === 0) {   // Cicadidae fore femora: stout (2.3-2.9x as long as deep, #26) and armed beneath with 2-3 strong teeth, on every plate; the old 10% unarmed roll is still drawn so the stream does not move
@@ -4457,9 +4469,16 @@ function drawLegs(C) {
     const reasons = [];
     for (; attempt < 48; attempt++) {
       pose = attempt < 16 ? B.pose : attempt < 32 ? (isOdo ? 'basket' : 'spread') : 'safe';
+      // #52 a brush family's fallback is the order's own spread pose (legs.base.poseAng: LEP_POSE_ANG, the moths' mid legs out to the
+      // side) at the middle of its ranges, with the brush at its most raised (no rng): the generic safe dirs would draw the
+      // brush as a walking foreleg, 'safe' is no lepidopteran pose family, and where the coxae sit close the nymphalid's
+      // own mid legs, reaching forward past the brush, cannot keep the femur tips in order front to back (seed 815)
+      const brushSafe = pose === 'safe' && !!B.legs[0].brush;
+      if (brushSafe) pose = 'spread';
       specs = []; joints = [];
       for (let i = 0; i < 3; i++) {
-        specs[i] = makeSpec(i, pose === 'safe' ? (B.legs[i].safe || safeDirs[i]).slice() : rollDirs(i, pose), lenK);   // a gene's own fallback (bee hind leg, wide of the broad abdomen, #12)
+        const fb = brushSafe ? (R => { const F = i === 0 ? R.F[0] : (R.F[0] + R.F[1]) / 2, tib = (R.tib[0] + R.tib[1]) / 2; return [F - 7, F, tib, tib + (R.T[0] + R.T[1]) / 2]; })(i === 0 ? B.legs[0].poseAng.spread : order.legs.base.poseAng.spread[i]) : null;
+        specs[i] = makeSpec(i, fb || (pose === 'safe' ? (B.legs[i].safe || safeDirs[i]).slice() : rollDirs(i, pose)), lenK);   // a gene's own fallback (bee hind leg, wide of the broad abdomen, #12)
         joints[i] = legJoints(attachOf(B.legs[i]).p, specs[i]);
       }
       why = legsOk(joints, specs);
@@ -4985,7 +5004,7 @@ function wingsLepidoptera(C) {   // (type === 'moth')
   meta.patternSig = [Q.ground, Q.basal ? Q.basal.lv : '-', Q.bands.map(b => b.lv + (b.drop ? 'd' : '') + (b.edge || '')).join(''), Q.lines.map(l => l.teeth + (l.doubled ? 'd' : '')).join(''), Q.discal, Q.ocelli ? 'o' + Q.ocelli.lo + Q.ocelli.hi : '', Q.row ? 'r' : '', Q.submarg ? Q.submarg.kind : '', Q.margin ? 'm' + Q.margin.lv + (Q.margin.white ? 'w' : '') : '', Q.apical ? 'a' + Q.apical.cells : '', Q.streaks ? 's' + Q.streaks.n : '', Q.tips ? 't' : '', Q.dust ? 'u' : '', Q.cheq ? 'c' : '', Q.hind.plain ? 'hp' : 'h'].join('|');
   const disl = (S, amp, m3x) => { const a = []; for (let c = 0; c < S.n; c++) a.push(randRange(-amp, amp) + (c >= S.m3 ? (m3x || 0) : 0)); return a; };
   function lepPattern(S, wing, hindW) {
-    const o = { ground: hindW ? Q.hind.ground : Q.ground, elems: [], spots: [], fine: [], det: [], after: [], chequered: Q.cheq };
+    const o = { ground: hindW ? Q.hind.ground : Q.ground, elems: [], spots: [], fine: [], det: [], after: [], rings: [], chequered: Q.cheq };   // rings: the drawn rings as local polylines
     const n = S.n, last = n - 1, U = hindW ? hU : fU, Dd = hindW ? hD : fD, B = hindW ? hB : fB;
     const sh = hindW ? Q.hind.shift : 0, keep = () => !hindW || P01(Q.hind.keep);
     const curve = (uFn, c0, c1, gap) => lepCurve(wing, S, uFn, c0 === undefined ? 0 : c0, c1 === undefined ? last : c1, gap === undefined ? 0.05 : gap);
@@ -5011,7 +5030,7 @@ function wingsLepidoptera(C) {   // (type === 'moth')
     // #52 and a small ring (under LEP_RING_VEIN) is not drawn over a vein: ring, pupil and vein in one small cell fill in
     const veinD = P => Math.min(...ringVeins.map(v => { let m = Infinity; for (let i = 1; i < v.length; i++) m = Math.min(m, ptSeg(P, v[i - 1], v[i])); return m; }));
     const ringOk = (P, R) => !(R < LEP_RING_VEIN && veinD(P) < R + LEP_LINE_CLEAR) && ringsDrawn.every(([Q, Rq]) => { const d = vlen(sub(P, Q)); return d > R + Rq + LEP_LINE_CLEAR || d + Math.min(R, Rq) < Math.max(R, Rq) - LEP_LINE_CLEAR; });   // apart, or one inside the other
-    const ring = (P, rx, ry, deg) => { const R = Math.max(rx, ry); if (!ringOk(P, R)) return; ringsDrawn.push([P, R]); o.after.push(pathEl(ellipsePath(wing.T(P), rx, ry, deg), SW.D)); };
+    const ring = (P, rx, ry, deg) => { const R = Math.max(rx, ry); if (!ringOk(P, R)) return; ringsDrawn.push([P, R]); o.after.push(pathEl(ellipsePath(wing.T(P), rx, ry, deg), SW.D)); o.rings.push(sampleBezier(ellipseBezier(wing.T(P), rx, ry, deg), 8).map(wing.inv)); };
     const spot = (P, r, rings, opt) => {
       opt = opt || {};
       o.spots.push(lepSpot({ P, r, ry: opt.ry, rot: opt.rot, rings }));
@@ -5176,7 +5195,9 @@ function wingsLepidoptera(C) {   // (type === 'moth')
     const costa = hindW ? [] : [leadingEdge(wing, 0, W * 0.9)], drawn = [...costa, ...veins, ...o.fine, ...o.det];
     const hug = lepNear(drawn, LEP_HUG, false);
     const off = mask ? p => nearFore(p) || wing.T(p)[0] < LEP_CLEAR || inTail(p, TAIL_CLEAR_FROM) : () => false;
-    const clear = p => hug(p) || off(p);
+    // #52 and the hatch stops LEP_ROOT_CLEAR short of the wing's root (local origin), where the outline, the costa and the
+    // veins' stems already converge into one knot of line art; a hatch stroke there closes it into a blot
+    const clear = p => hug(p) || off(p) || vlen(p) < LEP_ROOT_CLEAR;
     const along = lepNear([...drawn, [...wing.localPoly, wing.localPoly[0]]], Q.hatch.spacing / 2, false, LEP_ALONG);
     // the cross set stops LEP_HUG_X short of the veins, and the costal cell (a narrow strip between the heavy costa and
     // Sc / R1) takes the fan, never the cross set
@@ -5186,13 +5207,35 @@ function wingsLepidoptera(C) {   // (type === 'moth')
     rngSync();   // the stipple hatch draws one jitter per dot and a device plate has fewer rows
     // the band edges and cross-lines stop LEP_LINE_CLEAR short of the costa and the veins (#67): one that runs into the costa
     // or alongside a vein at a shallow angle adds a third line where two already crowd; a curve that never comes that
-    // close is drawn as rolled
-    const lineOff = lepNear([...costa, ...veins], LEP_LINE_CLEAR, false);
+    // close is drawn as rolled. #52: they stop as short of the spot rings (an eyespot's ring over a vein junction with a
+    // band edge beside it is three lines in one window), and they keep that far off every edge or line drawn before them,
+    // and off their own run further back, where the two run alongside (LEP_ALONG): next to the costa the pattern space's
+    // curves of constant u bunch up and turn along it, so a narrow band's two edges, a doubled cross-line or a tooth
+    // folded back on itself would stack at sub-pitch spacing into a black smear. A crossing keeps both lines.
+    const lineOff = lepNear([...costa, ...veins, ...o.rings], LEP_LINE_CLEAR, false);
+    const cell = LEP_LINE_CLEAR, grid = new Map(), gk = (i, j) => i * 100003 + j;
+    const addSeg = (a, b) => {
+      const l = vlen(sub(b, a)); if (l < 1e-9) return;
+      const sg = { a, b, d: [(b[0] - a[0]) / l, (b[1] - a[1]) / l] };
+      for (let i = Math.floor(Math.min(a[0], b[0]) / cell) - 1; i <= Math.floor(Math.max(a[0], b[0]) / cell) + 1; i++)
+        for (let j = Math.floor(Math.min(a[1], b[1]) / cell) - 1; j <= Math.floor(Math.max(a[1], b[1]) / cell) + 1; j++) { const k = gk(i, j); (grid.get(k) || grid.set(k, []).get(k)).push(sg); }
+    };
+    const crowded = (q, d) => (grid.get(gk(Math.floor(q[0] / cell), Math.floor(q[1] / cell))) || []).some(sg => Math.abs(sg.d[0] * d[0] + sg.d[1] * d[1]) >= LEP_ALONG && ptSeg(q, sg.a, sg.b) < LEP_LINE_CLEAR);
     const offLines = pls => pls.flatMap(pl => {
       // tested along the drawn curve; a kept run keeps the curve's own knots (every 8th sample) and its two cut ends
       const q = sampleSmooth(pl, false, 1, 8), runs = []; let run = [];   // run: indices into q
-      const flush = () => { if (run.length > 1) runs.push(run.filter((i, k) => k === 0 || k === run.length - 1 || i % 8 === 0).map(i => q[i])); run = []; };
-      q.forEach((p, i) => { if (lineOff(p)) flush(); else run.push(i); });
+      const arc = [0]; for (let i = 1; i < q.length; i++) arc.push(arc[i - 1] + vlen(sub(q[i], q[i - 1])));
+      // a cut-off run shorter than two clearances is dropped: a scatter of dashes reads as noise, not as a line
+      const flush = () => { if (run.length > 1 && arc[run[run.length - 1]] - arc[run[0]] >= 2 * LEP_LINE_CLEAR) runs.push(run.filter((i, k) => k === 0 || k === run.length - 1 || i % 8 === 0).map(i => q[i])); run = []; };
+      const kept = [];
+      let own = 0;   // the curve's own kept segments join the grid once they lie two clearances back along it (a smooth bend never comes back alongside that soon; a fold does)
+      q.forEach((p, i) => {
+        for (; own + 1 < i && arc[i] - arc[own + 1] > 2 * LEP_LINE_CLEAR; own++) if (kept[own] && kept[own + 1]) addSeg(q[own], q[own + 1]);
+        const d = norm(sub(q[Math.min(i + 1, q.length - 1)], q[Math.max(i - 1, 0)]));
+        kept[i] = !lineOff(p) && !crowded(p, d);
+        if (kept[i]) run.push(i); else flush();
+      });
+      for (; own + 1 < q.length; own++) if (kept[own] && kept[own + 1]) addSeg(q[own], q[own + 1]);
       const whole = run.length === q.length; flush();
       return whole ? [pl] : runs;
     });

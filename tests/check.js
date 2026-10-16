@@ -364,8 +364,8 @@ const odoHab = { fam: {}, pose: {}, mark: {}, plates: 0 };   // over the run, fo
 //   dorsal head reads as three ocelli between the eyes, not five equal rings (head-odo-damselfly; the dragonfly keeps its
 //   socket ring: its antennae are fine strokes that need the ring to survive at device size, tests/eink.js);
 // - a butterfly's club is never hooked (ant-butterfly-tips-bingham: the hooked apiculus is the skippers', k Tagiades; the
-//   plate draws no skipper family) and its head draws no proboscis (meta.head.mouth: the mouthparts drawn), which
-//   lies coiled under the head where a dorsal view cannot see it.
+//   plate draws no skipper family). The proboscis, which lies coiled under the head where a dorsal view cannot see it,
+//   is not drawn because the engine has no gene for it (index.html, the head genes), not because a check holds it.
 const ODO_EYE = { cross: 0.05, seam: 0.25, reach: 1.5, apart: 0.04, socket: 0.5 };
 const headSeen = { odoEyes: 0, odoSockets: 0, lepHead: 0 };   // plates each #27 check asserted on, for POST.headSeen
 const ODO_MIN = 40;   // damselfly plates a run needs before a family with no plate fails rather than being reported
@@ -1479,13 +1479,11 @@ const CHECKS = {
     const r = Math.min(...oc.map(o => o[2]));
     if (sr > ODO_EYE.socket * r + 1e-9) fail(meta.type + ' antenna socket ' + sr.toFixed(2) + ' against ocellus ' + r.toFixed(2) + ' (max ' + ODO_EYE.socket + 'x)');
   },
-  // #27 the butterfly's antenna club is never a skipper's hook, and its dorsal head draws no proboscis
+  // #27 the butterfly's antenna club is never a skipper's hook. (#27 also took the proboscis out of the dorsal head; the
+  // engine has no proboscis gene left to roll or record, so there is nothing for a check to assert, and none is kept.)
   lepHead(meta, svg, fail) {
     if (meta.type !== 'moth') return;
     headSeen.lepHead++;
-    const mouth = meta.head.mouth;
-    if (!Array.isArray(mouth)) return fail('no mouthparts list on meta.head.mouth');
-    if (mouth.includes('proboscis')) fail(meta.variant + ' draws a proboscis in dorsal view (' + meta.fam + ')');
     if (meta.variant === 'butterfly' && meta.antennae.club === 'hooked') fail('butterfly antenna club hooked (' + meta.fam + '): a skipper feature');
   },
   // #19 lacewing (neu-nothochrysa): the strip under R1 (R1-Rs) carries a few rungs, 2-5 on the reference, never none (Sc,
