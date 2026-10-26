@@ -2387,7 +2387,7 @@ const ORDERS = {
     // #53: outlines, the elytral outline's weights and square, the odds of square shoulders (a family's own under fams);
     // shapes, each outline's side as 4 [t, half width / the widest] points from the shoulder to the apex, the second the
     // widest (the striae follow it scaled toward the suture, and elytralStriae starts each stria's run there)
-    elytra: { styles: { smooth: 2, punctate: 3, dashed: 2 }, pitch: [2.6, 3.8], dash: [0.5, 0.7],
+    elytra: { styles: { smooth: 2, punctate: 3, dashed: 2 }, pitch: [2.6, 3.8], dash: [0.5, 0.7], layouts: { scatter: 2, margin: 1, suture: 1 },   // #74 the spot layout's weights (elySpotLayout)
       outlines: { parallel: 3, oval: 2, rounded: 1, tapering: 1 }, square: 0.5, patterns: { none: 3, spots: 1, bands: 1, stripe: 1 },
       shapes: { parallel: [[0.1, 0.98], [0.45, 1], [0.82, 0.8], [0.985, 0.3]], oval: [[0.12, 0.84], [0.45, 1], [0.8, 0.7], [0.975, 0.24]],
         rounded: [[0.1, 0.95], [0.4, 1], [0.78, 0.88], [0.97, 0.46]], tapering: [[0.08, 0.99], [0.24, 1], [0.7, 0.6], [0.985, 0.13]] },
@@ -2401,6 +2401,12 @@ const ORDERS = {
         coccinellid: { outlines: { rounded: 1 }, square: 0, patterns: { spots: 3, dark: 2, bands: 1.5, none: 1 }, spotN: [1, 5], spotR: [0.12, 0.3], styles: { glabrous: 4, punctate: 1 } },
         chrysomelid: { outlines: { oval: 2, rounded: 2, parallel: 1 }, square: 0.3, patterns: { stripe: 3, spots: 1, none: 1, bands: 1 }, styles: { punctate: 3, glabrous: 2, smooth: 1, dashed: 2 } },
         lucanid: { outlines: { parallel: 2, oval: 1 }, square: 0.7, patterns: { none: 1 }, styles: { glabrous: 3, smooth: 1, punctate: 1, dashed: 1 } } } },
+    // #74 builds (docs/research-thorax.md, "Inside the round families"): per round family, each build's weight w, its factor
+    // on the elytra's length (len: the abdomen under them; the elytra's width is the family's, so the pronotum ratio holds)
+    // and of, the elytral outlines it may wear (any when absent); rolled in rollBodyGenes after every other beetle gene
+    builds: { weevil: { slender: { w: 1, len: [1.3, 1.42], of: ['oval', 'tapering'] }, stout: { w: 0.7, len: [0.95, 1.05] }, globose: { w: 1, len: [0.68, 0.76], of: ['oval', 'rounded'] } },
+      coccinellid: { broad: { w: 1, len: [0.86, 0.9] }, round: { w: 1, len: [0.98, 1.02] }, oval: { w: 1, len: [1.14, 1.2] } },
+      chrysomelid: { elongate: { w: 1, len: [1.22, 1.3], of: ['oval', 'parallel'] }, oval: { w: 1, len: [0.97, 1.03] }, broad: { w: 1, len: [0.8, 0.85], of: ['oval', 'rounded'] } } },
     // #53 (optional): pronotal armature per family (rollBodyGenes): horns, the horn's weights (none / a cephalic horn rising
     // from the head / a pronotal horn projecting forward over it) and hornLen, its reach in head widths; spines, the odds of
     // a lateral spine on each side of the pronotum and spineLen, its reach as a fraction of the pronotum's half width
@@ -3589,6 +3595,14 @@ function rollBodyGenes(type, P) {
     if (B.legs[0].tibTeeth) { B.legs[0].flare *= 1.35; if (B.legs[0].spines) B.legs[0].spines.tibia = false; }   // the teeth replace the tibial spines
     B.sig.push('ft' + B.legs[0].tibTeeth);
     B.sig.push('ar' + (B.armature.horn ? B.armature.horn[0] : '-') + (B.armature.spines ? 's' : ''), B.armature.horn ? Math.round(B.armature.hornLen * 5) + (B.armature.bifid ? 'b' : '') : '-');
+    // #74 the round families' build (the entry's builds table): the elytra's length over the family's, so a slender, stout or
+    // globose weevil and a broad, round or oval ladybird differ in outline, not only in markings; then the spot layout
+    const BD = (order.builds || {})[fam];
+    B.build = BD ? weighted(Object.fromEntries(Object.entries(BD).filter(([, v]) => !v.of || v.of.includes(B.elytra.outline)).map(([k, v]) => [k, v.w]))) : null;
+    B.buildK = BD ? rr(BD[B.build].len) : 1;
+    P.abdLen *= B.buildK;
+    B.sig.push('bd' + (B.build || '-'));
+    if (pat === 'spots' || pat === 'dark') { B.elytra.pat.layout = weighted((EF.layouts || ET.layouts)); B.sig.push('sl' + B.elytra.pat.layout); }
   }
   // ---- wing set and forewing shape (#49, the cicada): body-plan genes the wing block reads, rolled last so every gene
   // above keeps its draws; the family habitus (tymbal covers, the pronotal flange) is rolled with them ----
@@ -6472,18 +6486,29 @@ function wingsElytra(C) {   // (type === 'beetle')
 // on a fixed layout per count (x as a fraction of the elytron's half width at their height, y of its length), each
 // shrunk to stay inside the elytron and clear of its neighbours; bands and the stripe follow the outline's half width.
 const ELY_SPOTS = { 1: [[0.5, 0.45]], 5: [[0.32, 0.18], [0.7, 0.3], [0.42, 0.5], [0.72, 0.68], [0.42, 0.83]], 2: [[0.5, 0.3], [0.55, 0.68]], 3: [[0.45, 0.24], [0.62, 0.52], [0.42, 0.78]], 4: [[0.36, 0.22], [0.68, 0.38], [0.4, 0.6], [0.62, 0.8]] };
+const ELY_SPOT_RY = 1.15;   // a spot's height over its width
+// #74 the spot layout (no rng): scatter, ELY_SPOTS; margin, a row down the outer margin; suture, a row beside the suture
+function elySpotLayout(n, layout) {
+  const even = (k, a, b) => n === 1 ? (a + b) / 2 : a + (b - a) * k / (n - 1);
+  if (layout === 'margin') return Array.from({ length: n }, (_, k) => [0.72, even(k, 0.16, 0.8)]);
+  if (layout === 'suture') return Array.from({ length: n }, (_, k) => [0.3, even(k, 0.14, 0.8)]);
+  return ELY_SPOTS[n];
+}
 function elytralPattern(G, outline, ew, top, elen) {
   const kind = G.pattern || 'none', P = G.pat, regions = [], edges = [], holes = [];
   const hwAt = y => polyMaxXAt(outline, y);
   if (kind === 'spots' || kind === 'dark') {   // dark: the whole elytron hatched round pale spots on the same layout
     const into = kind === 'dark' ? holes : regions;
-    const cs = ELY_SPOTS[P.n].map(([fx, ft]) => { const y = top + elen * ft; return [fx * hwAt(y), y]; });
+    const cs = elySpotLayout(P.n, P.layout).map(([fx, ft]) => { const y = top + elen * ft; return [fx * hwAt(y), y]; });
     cs.forEach((c, i) => {
       let r = P.r * ew;
       r = Math.min(r, c[0] - 1.5, hwAt(c[1]) - c[0] - 1.5);   // inside the elytron: off the suture and the margin
       for (let j = 0; j < cs.length; j++) if (j !== i) r = Math.min(r, Math.hypot(cs[j][0] - c[0], cs[j][1] - c[1]) / 2 - 1.5);
+      // #74 a spot in a row (margin, suture) also clears the margin over its whole height, so a spot by the shoulder is not
+      // clipped off the row (scatter keeps #53's spots as they were)
+      if (P.layout && P.layout !== 'scatter') for (let it = 0; it < 3; it++) for (let k = -4; k <= 4; k++) r = Math.min(r, hwAt(c[1] + r * ELY_SPOT_RY * k / 4) - c[0] - 1.5);
       if (r < 2) return;
-      const pl = []; for (let k = 0; k <= 24; k++) { const a = k / 24 * Math.PI * 2, q = [c[0] + r * Math.cos(a), c[1] + r * 1.15 * Math.sin(a)]; q[0] = Math.min(q[0], hwAt(q[1]) - 0.5); pl.push(q); }
+      const pl = []; for (let k = 0; k <= 24; k++) { const a = k / 24 * Math.PI * 2, q = [c[0] + r * Math.cos(a), c[1] + r * ELY_SPOT_RY * Math.sin(a)]; q[0] = Math.min(q[0], hwAt(q[1]) - 0.5); pl.push(q); }
       into.push(pl); edges.push(pl);
     });
     if (kind === 'dark') regions.push(outline);
