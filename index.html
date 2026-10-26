@@ -603,6 +603,8 @@ const LEG_REPAIR = (() => {
 // the second lets the middle pair go as far as it must), with at most LEG_PAIR_BUDGET two-pair tests per pass
 // LEG_RAISE_TOL: how far (degrees) a repaired femur may be raised toward the head past its order's own pose angles (legsOk 'raised')
 const LEG_RAISE_TOL = 8;
+// BASKET_VIS (#65): the share of a corbicula's tibia a repaired bee hind leg keeps clear of the wings and the body and behind a wing
+const BASKET_VIS = 0.5;
 const LEG_KEEP = 6, LEG_DFS = [[48, 400, Infinity], [48, Infinity, Infinity]], LEG_PAIR_BUDGET = 40000;
 // After a leg or wing hit the antenna pose is straightened (R-D): per reason, the known-good fallback pose and the bound
 // the re-roll walks toward (straight ahead is -90). A plume or bristle with no clear pose at full length is shortened
@@ -4464,10 +4466,10 @@ function drawLegs(C) {
     // test in tests/check.js see the same body; m: by at least m px
     const underBody = (p, m = 0) => Math.abs(p[0]) < Math.max(profHw(meta.thorax.profile, p[1], 0.11), profHw(meta.abdomen.profile, p[1])) - m;
     let wingBoxes = null, boxesFor = null;
+    // W in a wing, B under the body, V visible (wingBoxes: the outlines wingWhy was last given)
+    const state = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] >= w.y0 && p[1] <= w.y1 && pointInPoly(p, w.poly)) ? 'W' : underBody(p) ? 'B' : 'V';
     const wingWhy = (joints, specs, wings, idx) => {
       if (boxesFor !== wings) { boxesFor = wings; wingBoxes = wings.map(poly => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const q of poly) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); } return { poly, x0, x1, y0, y1 }; }); }
-      // W in a wing, B under the body, V visible
-      const state = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] >= w.y0 && p[1] <= w.y1 && pointInPoly(p, w.poly)) ? 'W' : underBody(p) ? 'B' : 'V';
       const discHas = (p, r, a, b = a) => {   // the disc of radius r round p (its centre and 16 points on its rim) holds a state passing a and one passing b
         let ha = false, hb = false;
         for (let q = -1; q < 16; q++) { const s = state(q < 0 ? p : [p[0] + r * DISC16[q][0], p[1] + r * DISC16[q][1]]); if (a(s)) ha = true; if (b(s)) hb = true; if (ha && hb) return true; }
@@ -4495,6 +4497,26 @@ function drawLegs(C) {
       }
       return null;
     };
+    // #65 the corbicula shows (the bee's hind leg posed back or out, so the tibia lands behind the hindwing's trailing edge;
+    // the layer order unchanged; Nik 2026-10-26: the apid wing set in wingsHymenoptera brings that gap within the legCap's
+    // reach): a corbicula pair keeps at least BASKET_VIS of its tibia (knee
+    // to tibia tip, sampled every ~1 px) clear of the wings and the body and behind a wing (an outline edge crosses the line
+    // from the sample toward the head), so the basket reads and not just the tarsus, and never by reaching forward out past
+    // the costa beside the mid leg. It is a wing-aware rule (placeLegs) held while basketOn: a plate whose repair finds no
+    // pose that shows the basket drops it (emit) and is settled under #8's rule alone.
+    let basketOn = B.legs.some(g => g.corbicula);
+    const behindWing = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] > w.y0 && w.poly.some((a, i) => {
+      const b = w.poly[(i + 1) % w.poly.length];
+      return (a[0] > p[0]) !== (b[0] > p[0]) && a[1] + (b[1] - a[1]) * (p[0] - a[0]) / (b[0] - a[0]) < p[1];
+    }));
+    const basketVis = j => {
+      const a = j[3], b = j[4], n = Math.max(2, Math.ceil(vlen(sub(b, a))));
+      let v = 0;
+      for (let q = 0; q <= n; q++) { const p = lerpP(a, b, q / n); if (state(p) === 'V' && behindWing(p)) v++; }
+      return v / (n + 1);
+    };
+    // basketWhy reads wingBoxes, so it runs only after wingWhy (legsOk's last rule) has set them for these wings
+    const basketWhy = (joints, idx) => idx.some(i => B.legs[i].corbicula && basketVis(joints[i]) < BASKET_VIS) ? 'basket' : null;
     // the pose rules for the pairs in idx (placeLegs repairs pair by pair), the wing rule last as the dearest
     const ALL = [0, 1, 2];
     const exempt = () => isOdo && pose === 'basket';   // the odonate prey basket is exempt from the head rules (tiny beside its wide head); the tucked pose folds against the head, so it keeps clear of the sockets (#48)
@@ -4554,7 +4576,7 @@ function drawLegs(C) {
           if (e && e[1] < headBack) return 'beside-head';
         }
       }
-      return wingWhy(joints, specs, wings, idx);
+      return wingWhy(joints, specs, wings, idx) || (basketOn ? basketWhy(joints, idx) : null);
     };
     // the pose roll, against the body only (the wings are drawn after it, and its draws keep their place in the stream)
     let specs, joints, why = null, lenK = 1, pose = B.pose, attempt = 0;
@@ -4652,7 +4674,9 @@ function drawLegs(C) {
     // fit, wings): as rolled, else with every angle reversed, else no skew.
     const emit = wings => {
       const wingFirst = legsOk(joints, specs, wings);
-      const repaired = wingFirst ? repair(wings) : [];
+      let repaired = wingFirst ? repair(wings) : [];
+      let basket = basketOn ? 'shown' : null;   // #65: 'shown', or 'dropped' when no pose the repair reaches shows the basket
+      if (basketOn && repaired[0] === 'none') { basketOn = false; basket = 'dropped'; repaired = legsOk(joints, specs, wings) ? repair(wings) : []; }
       const pivots = B.legs.map(g => attachOf(g).p);
       const rotAbout = (p, c, deg) => add(c, rot(sub(p, c), deg * D2R));
       let skewK = 1;   // 1 as rolled, -1 the other way round, 0 none: the realised skew stays in 2-6 degrees or is dropped
@@ -4665,7 +4689,7 @@ function drawLegs(C) {
       for (let i = 0; i < 3; i++) for (const p of joints[i]) { const q = rotAbout(p, pivots[i], skews[i]); bb(q); bb([q[0] + 5, q[1] + 5]); bb([q[0] - 5, q[1] - 5]); }   // the rotated copy may reach further than the right side
       meta.legSkew = skews;
       // wingFirst: why the rolled pose broke against the wings (null: it passed); repaired: per pair the offset that fixed it
-      meta.legRoll = { attempts: attempt + 1, pose, why, lenK, reasons, skewK, wingFirst, repaired, wingWhy: legsOk(joints, specs, wings) };
+      meta.legRoll = { attempts: attempt + 1, pose, why, lenK, reasons, skewK, wingFirst, repaired, wingWhy: legsOk(joints, specs, wings), ...(basket && { basket }) };   // basket: a corbicula plate only (#65)
       B.sig.push(pose, ...specs.map(sp => Math.round(sp.dirs[1] / 12) + ':' + Math.round((sp.dirs[2] - sp.dirs[1]) / 12)));
       const legMeta = [];
       L.legPairs = [];
@@ -6085,9 +6109,15 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
     // basalSw basal vein weight; rsAt where Rs leaves Sc+R; rm = r-m plans, each a list of crossveins [u on Rs, u on M] (submarginals; the
     // second u sets the lean, bottom end distal as on hym-apis), one plan picked per seed; areolet: the r-m are the areolet pair, rolled
     // below instead of picked; rmReach how far an r-m's M end may slide (short keeps a named cell's drawn shape); mcu = recurrents; aEnd where A meets the margin; cuS / mS Cu
-    // and M target chord fractions; cells: the Rs-M and M-Cu bands hold only the named cells (no site ladder, no random fork across them, #11)
+    // and M target chord fractions; cells: the Rs-M and M-Cu bands hold only the named cells (no site ladder, no random fork across them, #11);
+    // theta / spread / bulge: the set's ranges where a family has its own (else [28, 58] / [6, 24] / [0.38, 0.62]): the forewing's angle below
+    // the horizontal, the hindwing's extra sweep, the hind margin's bulge. apid (#65, Nik 2026-10-26 option 2): the hindwing coupled to the
+    // forewing by its hamuli (spread 0, so it lies along the forewing's hind margin instead of out over the abdomen's flank), the forewing
+    // slimmer at the base and held out at 28-46 degrees, so the gap behind the hind margin beside the abdomen is within the hind leg's reach
+    // and the corbicula shows (tests/check.js beeBasket); a bee swept further back covers that flank (4 of 30 plates showed it at 50-70)
     apid:        { w: [0.26, 0.34], stig: ['solid', 'cross', 'axis'], stigL: [0.03, 0.07], stigD: [0.06, 0.1], xStig: [0.44, 0.52], xMarg: [0.9, 0.97], margOpen: 0.05, k: [2.0, 2.8], forks: [0, 0], uOpen: [0.74, 0.82], stub: 0.85, anal: 0.3, extra: 0.3, hind: [0.58, 0.72],
-                   basalSw: SW.O, rsAt: 'basal', rm: [[[0.53, 0.56], [0.62, 0.68], [0.74, 0.78]], [[0.53, 0.57], [0.64, 0.7], [0.77, 0.8]], [[0.54, 0.57], [0.63, 0.66], [0.75, 0.8]]], rmReach: 0.03, mcu: [[0.5, 0.68]], aEnd: [0.46, 0.56], cuS: [0.62, 0.7], mS: 0.36, cells: true },
+                   basalSw: SW.O, rsAt: 'basal', rm: [[[0.53, 0.56], [0.62, 0.68], [0.74, 0.78]], [[0.53, 0.57], [0.64, 0.7], [0.77, 0.8]], [[0.54, 0.57], [0.63, 0.66], [0.75, 0.8]]], rmReach: 0.03, mcu: [[0.5, 0.68]], aEnd: [0.46, 0.56], cuS: [0.62, 0.7], mS: 0.36, cells: true,
+                   theta: [28, 46], spread: [0, 0], bulge: [0.27, 0.43] },
     vespid:      { w: [0.32, 0.38], stig: ['axis', 'stipple', 'none', 'solid'], stigL: [0.03, 0.05], stigD: [0.04, 0.06], xStig: [0.46, 0.54], xMarg: [0.94, 0.99], margOpen: 0.15, k: [1.8, 2.6], forks: [0, 0], uOpen: [0.78, 0.86], stub: 0.7, anal: 0.2, extra: 0.2, hind: [0.5, 0.66],
                    basalSw: SW.D, rsAt: 'basal', rm: [[[0.5, 0.54], [0.6, 0.64], [0.76, 0.8]], [[0.49, 0.52], [0.62, 0.68], [0.77, 0.8]]], rmReach: 0.03, mcu: [[0.58, 0.72]], aEnd: [0.44, 0.54], cuS: [0.56, 0.64], mS: 0.32, cells: true },
     ichneumonid: { w: [0.32, 0.38], stig: ['solid'], stigL: [0.09, 0.14], stigD: [0.1, 0.16], xStig: [0.48, 0.56], xMarg: [0.94, 0.99], margOpen: 0, k: [1.5, 2.2], forks: [0, 0], uOpen: [0.74, 0.84], stub: 0.6, anal: 0.3, extra: 0.3, hind: [0.52, 0.68],
@@ -6099,8 +6129,8 @@ function wingsHymenoptera(C) {   // (type === 'bee' || type === 'wasp')
   }[fam];
   const ri = r => randInt(r[0], r[1]), rr = r => randRange(r[0], r[1]);
   const G = {
-    fam, theta: randRange(28, 58), spread: randRange(6, 24), len: randRange(0.85, 1.08),
-    w: rr(F.w), tipY: randRange(-0.14, 0.2), sharp: randRange(0, 1), bulge: randRange(0.38, 0.62), costaPeak: randRange(0.55, 0.78),
+    fam, theta: rr(F.theta || [28, 58]), spread: rr(F.spread || [6, 24]), len: randRange(0.85, 1.08),
+    w: rr(F.w), tipY: randRange(-0.14, 0.2), sharp: randRange(0, 1), bulge: rr(F.bulge || [0.38, 0.62]), costaPeak: randRange(0.55, 0.78),
     hindL: rr(F.hind), hindW: randRange(0.62, 0.9), nh: randInt(3, 9), hForks: randInt(0, 1), hK: randRange(2.2, 3.2),
     stig: pick(F.stig), stigL: rr(F.stigL), stigD: rr(F.stigD), stigPeak: randRange(0.3, 0.48), xStig: rr(F.xStig), xMarg: rr(F.xMarg), margOpen: rng() < F.margOpen,
     forks: ri(F.forks), uOpen: rr(F.uOpen), k: rr(F.k), minGap: randRange(0.06, 0.12), angle: randRange(112, 128), lean: rng() < 0.8 ? -1 : 1, bow: randRange(0.01, 0.035), grad: randRange(0, 0.2),
