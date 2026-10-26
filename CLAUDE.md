@@ -68,7 +68,7 @@ contract for changes.
 - Minimum stroke 0.5 px after the plate scale; use the `SW.H/O/D/F` tokens, never literal widths.
 - Hatching spacing never below ~1.8 px or e-ink fills in.
 - Dark tones come from hatch pitch, never from stacking full hatch families. On a lepidopteran plate no 9×9 px window
-  of the wings reaches 55% ink at 600 px, whatever made it (`lepInk` in `tests/check.js` rasterises every lep plate's
+  of the wings reaches 56% ink at 600 px, whatever made it (`lepInk` in `tests/check.js` rasterises every lep plate's
   `meta.lepInkSvg` and splits a failing window's ink against its line art alone, `meta.lepArtSvg`; #13, #67). Where the
   cross set lies over the fan the fan drops every other line; the hatch stops `LEP_HUG` short of the veins, band edges
   and cross-lines and never runs alongside one; the hindwing hatch and fringe keep `LEP_CLEAR` off the forewing's edge.

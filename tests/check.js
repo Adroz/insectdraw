@@ -377,7 +377,9 @@ const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family wi
 // made it (#67): the message splits its ink into the line art's alone (meta.lepArtSvg: outline, costa, veins, band edges,
 // cross-lines, spot rings; #67's costa beside Sc and R1, a vein fork, a zigzag cross-line) and the tone layers' (hatch,
 // stipple, fringe; #13's stacked hatch families), so it says which of the two to look at.
-const LEP_INK_MAX = 0.55, LEP_WIN = 9;
+// 0.56, not 0.55 (#75, Nik 2026-10-26): moth 1924's front-edge window is 0.558, a heavy vein ~7 px under the costa with a
+// fork between them; Nik looked at the plate and its 1-bit zoom and judged it fine, so the limit sits just above it
+const LEP_INK_MAX = 0.56, LEP_WIN = 9;
 const lepInk = {};   // variant -> { n, max, seed, art } over the run: the darkest window and its line-art ink, for the report (POST.lepInk)
 let lepRun = 0;      // plates lepInk saw (any type), so POST.lepInk can tell a lost variant from a short run
 const LEP_MIN = 40;  // lepidopteran plates a run needs before a variant with no plate fails (~0.6^40: no butterfly by chance)
