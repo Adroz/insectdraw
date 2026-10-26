@@ -283,7 +283,7 @@ skew) while the silhouette (wing set, abdomen shape, leg pose, overall proportio
 
 ## Perceptual criterion
 
-Proposed in #30 (PR #56, an unattended run, 2026-10-13), pending Nik's sign-off: judge uniqueness perceptually
+Proposed in #30 (PR #56, an unattended run, 2026-10-13) and adopted: Nik set the perceptual criterion when delegating #30, merged PR #56, and spec #70's body-variation tickets are measured against it. Judge uniqueness perceptually
 instead of replacing the `bodySig` rule, which stays as it is. **The smallest difference between any two plates of a
 type, rendered as 100 px thumbnails, must reach the type's floor.** Implemented as a report, `tests/perceptual.js`;
 it is not wired into `tests/check.js` and fails nothing.
