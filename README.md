@@ -35,7 +35,10 @@ Three pages, one engine:
   from the order's `famNouns`, and `genes` (`{ mark, ant }`, the abdominal
   marking and antenna kind) give the adjective whenever the plate has one to
   give ("Banded", "Black-tailed", "Feathered"); no name claims a marking the
-  plate does not draw. An optional qualifier ("Lesser", "Northern") keeps
+  plate does not draw. `genes.wing` (#82, an odonate's drawn wing pigment
+  kinds) gives the adjective on half the pigmented plates ("Band-winged",
+  "Dark-based", "Ebony"), and no name claims a wing pattern the plate does not
+  draw; colour words ("Amber-winged", "Red-veined") claim nothing and stay free. An optional qualifier ("Lesser", "Northern") keeps
   repeats under 10% of seeds 1-3000. The common
   name never repeats a stem ("Dark Darkling", "Blue-tailed Bluet"), and every
   epithet stem x gender is written out in `tests/names.js` (`FORMS`, against the `EPITHETS` export).

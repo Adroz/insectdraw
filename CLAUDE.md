@@ -141,7 +141,12 @@ contract for changes.
   is written out in `tests/names.js` `FORMS` too (check.js `epithets`); only adjectives are declined. The common name
   reads the plate (#28): a family's noun from `famNouns`, a gene word for the marking or a rare antenna kind; a new
   marking or antenna adjective goes into `GENE_MARK_ADJ` / `GENE_ANT_ADJ` and `tests/names.js` `MARK_CLAIMS` /
-  `ANT_CLAIMS`, never into a general adjective list (check.js `nameFamilies`, `nameFamily`, `nameGenes`).
+  `ANT_CLAIMS`, never into a general adjective list (check.js `nameFamilies`, `nameFamily`, `nameGenes`). The drawn wing
+  names it too (#82): an odonate's pigment kinds give the adjective on `GENE_WING_P` of the pigmented plates
+  (`GENE_WING_ADJ`; `WING_NOUN_KIND` for a noun such as Rubyspot), and a wing pattern word (`tests/names.js`
+  `WING_CLAIMS`: Band-winged, Spot-winged, Dusky-tipped, Dark-based ..., disjoint from the abdomen's `MARK_CLAIMS`) names only a plate that draws that pattern. Colour words
+  (`WING_COLOUR`: Amber-winged, Yellow-winged, Red-veined ...) claim nothing and stay free on any plate; a pattern word an
+  order carries for a pattern its wing never draws is left free there and listed in `WING_UNDRAWN` (check.js `nameWings`).
 - Per-seed variation is the whole point. Each winged body plan rolls a "wing genes" object
   (outline shape, vein counts, cell plan, crossvein spacing ...) at the top of its wing block and
   exposes a discrete `meta.wingSig`. `tests/check.js` fails if one signature covers more than 10%
