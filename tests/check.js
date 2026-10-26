@@ -210,7 +210,14 @@ const HYM_AREOLET_MAX = 0.08;   // the areolet is tiny: its two r-m at most this
 // head about as wide as the thorax, three ocelli in a triangle on the vertex; research-antennae: bee scape 0.3-0.4)
 const BEE_FAMS = ['apid'];   // the bee families the engine draws; type bee rolls only these, type wasp none
 const BEE = { abd: 1.05, tibia: 1.5, head: 0.8, ocelli: 0.6, scape: [0.27, 0.4] };
-const beeSeen = { hymFamilies: 0, beeAbdomen: 0, beeLegs: 0, beeCorbicula: 0, beeHead: 0, beeOcelli: 0, beeLattice: 0, beeScape: 0 };   // plates each #12 check asserted on, for POST.beeSeen
+// #65 the corbicula shows (the hind leg posed back so the tibia lies behind the hindwing's trailing edge, the layer order
+// unchanged; Nik 2026-10-26: the bee's wing set changed to make room for it, the legCap kept): a plate shows its basket when at least `vis` of the hind tibia's
+// length (knee to tibia tip) lies outside every wing and the body and behind a wing (a wing outline straight ahead of it,
+// toward the head: not out in front of the costa beside the mid leg), on the right leg and on the skewed left one; at least
+// `share` of a run's bee plates show it (the ticket: 7 of 9), once the run has BEE_MIN bee plates
+const BEE_BASKET = { vis: 0.5, share: 7 / 9 };
+const basketRun = { n: 0, shown: 0, worst: [] };   // over the run, for POST.beeBasket: bee plates, those showing the basket, the least visible
+const beeSeen = { hymFamilies: 0, beeAbdomen: 0, beeLegs: 0, beeCorbicula: 0, beeBasket: 0, beeHead: 0, beeOcelli: 0, beeLattice: 0, beeScape: 0 };   // plates each #12 check asserted on, for POST.beeSeen
 let beeSeenPlates = 0;   // bee plates in the run, counted by the seed loop whichever checks are selected
 const BEE_MIN = 20;   // bee plates a run needs before a #12 check that never ran fails rather than being reported (~8% of plates are bees; no lattice bee in 20 has odds 0.4^20)
 // #19, from the references (neu-nothochrysa: 2-5 rungs in the R1-Rs strip; M beside Rs for ~45% of the span, then forked,
@@ -1002,6 +1009,27 @@ const CHECKS = {
     if (!meta.bodyGenes.legs[2].corbicula) fail('bee hind leg without the fringed corbicula');
     const hind = meta.legs.find(l => l.pair === 'hind'), mid = meta.legs.find(l => l.pair === 'mid');
     if (hind.segHw[3] < BEE.tibia * mid.segHw[3]) fail('bee hind tibia only ' + (hind.segHw[3] / mid.segHw[3]).toFixed(2) + 'x the mid tibia width (want >= ' + BEE.tibia + ')');
+  },
+  // #65 the corbicula is seen, not just its tarsus: the share of the hind tibia (pts[3] knee to pts[4] tibia tip) outside
+  // every wing outline and the body profiles, sampled every ~1 px, the lesser of the right leg and the skewed left one;
+  // tallied for POST.beeBasket (a per-run share: the ticket asks for 7 of 9 plates, not every one)
+  beeBasket(meta, svg, fail, { seed }) {
+    if (meta.type !== 'bee') return;
+    beeSeen.beeBasket++;
+    const hind = meta.legs.find(l => l.pair === 'hind'), wings = meta.wingOutlines || [];
+    if (!hind || !wings.length) return fail('bee plate without a hind leg or wing outlines on meta');
+    const bodyHw = y => Math.max(profHw(meta.thorax.profile, y, 0.11), profHw(meta.abdomen.profile, y));
+    const behindWing = p => wings.some(w => w.some((a, i) => { const b = w[(i + 1) % w.length]; if ((a[0] > p[0]) === (b[0] > p[0])) return false; return a[1] + (b[1] - a[1]) * (p[0] - a[0]) / (b[0] - a[0]) < p[1]; }));   // an outline edge crosses the line toward the head
+    const shown = pts => {
+      const a = pts[3], b = pts[4], n = Math.max(2, Math.ceil(dist(a, b)));
+      let v = 0;
+      for (let q = 0; q <= n; q++) { const p = [a[0] + (b[0] - a[0]) * q / n, a[1] + (b[1] - a[1]) * q / n]; if (Math.abs(p[0]) >= bodyHw(p[1]) && !wings.some(w => inPoly(p, w)) && behindWing(p)) v++; }
+      return v / (n + 1);
+    };
+    const vis = Math.min(shown(hind.pts), shown(skewedPts(hind)));
+    basketRun.n++;
+    if (vis >= BEE_BASKET.vis) basketRun.shown++;
+    else basketRun.worst.push(seed + ' (' + vis.toFixed(2) + ')');
   },
   // a head nearly as wide as the thorax
   beeHead(meta, svg, fail) {
@@ -2769,6 +2797,14 @@ const POST = {
     console.log('#12 bee checks asserted on (of ' + bees + ' bee plates):', Object.keys(beeSeen).filter(k => ran.has(k)).map(k => k + ' ' + beeSeen[k]).join(', ') +
       (bees < BEE_MIN ? '; too few bee plates (' + bees + ' < ' + BEE_MIN + ') to require every check' : ''));
   },
+  // #65 the report for CHECKS.beeBasket: once the run has BEE_MIN bee plates, at least BEE_BASKET.share of them show the
+  // corbicula (BEE_BASKET.vis of the hind tibia outside the wings and the body)
+  beeBasket(fail) {
+    const { n, shown } = basketRun;
+    if (n >= BEE_MIN && shown < n * BEE_BASKET.share) fail('bee corbicula shown on ' + shown + ' of ' + n + ' bee plates (want >= ' + Math.round(BEE_BASKET.share * 100) + '%); hidden e.g. ' + basketRun.worst.slice(0, 6).join(', '), 'bee');
+    console.log('#65 bee corbicula shown (>= ' + BEE_BASKET.vis + ' of the hind tibia clear of the wings and body, behind a wing):', shown, 'of', n, 'bee plates' +
+      (n < BEE_MIN ? '; too few bee plates (' + n + ' < ' + BEE_MIN + ') to require the share' : '') + (basketRun.worst.length ? '; hidden e.g. ' + basketRun.worst.slice(0, 6).join(', ') : ''));
+  },
   // the #19 checks assert only on lacewing plates: once the run has NEU_MIN of them every selected one must have run
   neuSeen(fail) {
     const n = neuSeenPlates, idle = Object.keys(neuSeen).filter(k => ran.has(k) && !neuSeen[k]);
@@ -2988,7 +3024,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), orthShares: ['orthTegmen', 'orthWingSet', 'orthHindLeg'], cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), headSeen: Object.keys(headSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeBasket: ['beeBasket'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), orthShares: ['orthTegmen', 'orthWingSet', 'orthHindLeg'], cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), headSeen: Object.keys(headSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
