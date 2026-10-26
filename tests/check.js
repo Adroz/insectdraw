@@ -508,9 +508,26 @@ const colSeen = { beetleOcelli: 0, weevilSocket: 0, carabidMandibles: 0, longhor
 // - the families a beetle plate draws (COL_FAMS): the five of #24 plus the round ones the sheet never showed, the
 //   ladybird (Coccinellidae: elytra together about as broad as long, a hemisphere from above) and the leaf beetle
 //   (Chrysomelidae: a short convex oval), and the stag beetle (Lucanidae); the elytra together, breadth over length
-//   (meta.elytra.outline: one elytron, so twice its half width over its length), lie in COL_ASPECT[fam] where given
+//   (meta.elytra.outline: one elytron, so twice its half width over its length, elyAspect), lie in their build's band
+//   (COL_BUILD below; #53's family bands, ladybird 0.85-1.3 and leaf beetle 0.68-1.0, split by build in #74)
 const COL_FAMS = ['ground', 'rove', 'scarab', 'longhorn', 'weevil', 'coccinellid', 'chrysomelid', 'lucanid'];
-const COL_ASPECT = { coccinellid: [0.85, 1.3], chrysomelid: [0.68, 1.0] };
+const elyAspect = outline => { const ys = outline.map(p => p[1]); return 2 * Math.max(...outline.map(p => p[0])) / (Math.max(...ys) - Math.min(...ys)); };
+// - the round families' build (#74; meta.bodyGenes.build, on bodySig as 'bd' + its name): a weevil slender (Lixus),
+//   stout or globose (Otiorhynchus, Curculio), a ladybird broad, round or oval (Halyzia, Calvia), a leaf beetle elongate
+//   (Donacia, Lema), oval or broad (Cassida); every other family has none. The elytra together, breadth over length as
+//   for COL_FAMS, lie in the build's band (COL_BUILD); a globose or slender body
+//   never wears an elytral outline that contradicts it (COL_BUILD_NOT: no tapering globose weevil, no rounded slender
+//   one or parallel slender one, no rounded elongate or parallel broad leaf beetle)
+const COL_BUILD = {
+  weevil: { slender: [0.32, 0.67], stout: [0.43, 0.96], globose: [0.62, 1.27] },
+  coccinellid: { broad: [0.99, 1.3], round: [0.89, 1.19], oval: [0.75, 1.01] },
+  chrysomelid: { elongate: [0.52, 0.74], oval: [0.66, 0.95], broad: [0.82, 1.1] } };
+const COL_BUILD_NOT = { 'weevil:globose': ['tapering', 'parallel'], 'weevil:slender': ['rounded', 'parallel'], 'chrysomelid:elongate': ['rounded'], 'chrysomelid:broad': ['parallel'] };
+// - the spot layout (#74; meta.bodyGenes.elytra.pat.layout on a spotted or dark elytron, on bodySig as 'sl' + its name):
+//   scatter (#53's fixed layout per count), margin (a row down the outer margin: every spot's centre in the outer half of
+//   the elytron's width at its height) or suture (a row beside the suture: every centre in the inner half); two or more
+//   spots in a row stand one above the other (SPOT_ROW: their centres' x within that share of the half width)
+const SPOT_LAYOUTS = ['scatter', 'margin', 'suture'], SPOT_ROW = 0.12;
 // - the elytral outline (meta.bodyGenes.elytra.outline, on bodySig as 'eo' + its initial and the shoulder's) as drawn, the
 //   half width of meta.elytra.outline at a fraction t of its length over its widest (w(t)): parallel, the sides parallel
 //   over the disc (w(0.2), w(0.6) >= par); oval, widest about the middle (widest between oval.at) and narrowing to both
@@ -559,8 +576,8 @@ const colFams = {};   // family -> beetle plates, for POST.colGenes
 const colTally = {};   // gene -> value -> beetle plates, for POST.colGenes
 const tally = (g, v) => { const T = colTally[g] ||= {}; T[v] = (T[v] || 0) + 1; };
 const COL_SHARE = 0.05, COL_GENE_MIN = 20;   // ... and a gene is held to it once COL_GENE_MIN plates rolled it (a family's own gene: its plates)   // a gene value drawn on fewer of the plates that roll the gene is one the sheet never shows
-const COL_VALUES = { outline: ELY_OUTLINES, shoulder: ['square', 'rounded'], pattern: ELY_PATTERNS, pronPattern: Object.keys(PRON_PATTERNS), pronClass: Object.keys(PRON_CLASS), horn: ['none', 'cephalic', 'pronotal'], spines: ['0', '1'], stag: ['minor', 'major'], foretibia: ['slender', 'toothed'] };
-const COL_GENE_CHECKS = ['colFamily', 'elytraOutline', 'elytraPattern', 'pronotumPattern', 'pronotumRatio', 'beetleArmature', 'stagMandibles', 'foretibia'];   // the #53 checks POST.colGenes audits
+const COL_VALUES = { build: Object.keys(COL_BUILD).flatMap(f => Object.keys(COL_BUILD[f]).map(b => f + ':' + b)), spotLayout: SPOT_LAYOUTS, outline: ELY_OUTLINES, shoulder: ['square', 'rounded'], pattern: ELY_PATTERNS, pronPattern: Object.keys(PRON_PATTERNS), pronClass: Object.keys(PRON_CLASS), horn: ['none', 'cephalic', 'pronotal'], spines: ['0', '1'], stag: ['minor', 'major'], foretibia: ['slender', 'toothed'] };
+const COL_GENE_CHECKS = ['colFamily', 'elytraOutline', 'elytraPattern', 'pronotumPattern', 'pronotumRatio', 'beetleArmature', 'stagMandibles', 'foretibia', 'colBuild', 'spotLayout'];   // the #53 and #74 checks POST.colGenes audits
 const COL_MIN = 40;   // beetle plates a run needs before a #25 check that never ran fails rather than being reported (a family is 1/9 of beetles since #53: no weevil in 40 has odds 0.009)
 const median = a => { if (!a.length) return NaN; const b = a.slice().sort((x, y) => x - y), k = b.length >> 1; return b.length % 2 ? b[k] : (b[k - 1] + b[k]) / 2; };
 // breadth over length of a closed outline along its principal axes (the long axis is the first PCA axis)
@@ -2414,16 +2431,44 @@ const CHECKS = {
     if (exposed.length < ROVE.exposed) fail('rove abdomen shows ' + exposed.length + ' tergites past the elytra (want >= ' + ROVE.exposed + ')');
     if (exposed.some(seg => !seg.some(m => m.k === 'hatch'))) fail('a rove tergite past the elytra is not hatched');
   },
-  // #53: the beetle family is one of COL_FAMS, and the round families are round (COL_ASPECT)
+  // #53: the beetle family is one of COL_FAMS (the round families' aspect: colBuild)
   colFamily(meta, svg, fail) {
     if (meta.type !== 'beetle') return;
     if (!COL_FAMS.includes(meta.fam)) return fail('beetle family ' + meta.fam + ' is not one of ' + COL_FAMS.join('/'));
     colFams[meta.fam] = (colFams[meta.fam] || 0) + 1;
-    const Y = meta.elytra, band = COL_ASPECT[meta.fam];
-    if (!band) return;
+  },
+  // #74: the round families' build (COL_BUILD) as drawn, and never against the elytral outline (COL_BUILD_NOT)
+  colBuild(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    const b = meta.bodyGenes.build, bands = COL_BUILD[meta.fam];
+    if (!bands) return b ? fail(meta.fam + ' has a build (' + b + '); only ' + Object.keys(COL_BUILD).join('/') + ' do') : undefined;
+    if (!(b in bands)) return fail(meta.fam + ' build ' + b + ' is not one of ' + Object.keys(bands).join('/'));
+    if (!meta.bodySig.split(',').includes('bd' + b)) fail('build missing from bodySig');
+    tally('build', meta.fam + ':' + b);
+    const not = COL_BUILD_NOT[meta.fam + ':' + b] || [], G = meta.bodyGenes.elytra;
+    if (not.includes(G.outline)) fail('a ' + b + ' ' + meta.fam + ' with ' + G.outline + ' elytra');
+    const Y = meta.elytra;
     if (!Y || !Array.isArray(Y.outline)) return fail('no elytron outline on meta.elytra');
-    const ys = Y.outline.map(p => p[1]), k = 2 * Math.max(...Y.outline.map(p => p[0])) / (Math.max(...ys) - Math.min(...ys));
-    if (k < band[0] || k > band[1]) fail(meta.fam + ' elytra ' + k.toFixed(2) + ' as broad as long (want ' + band.join('-') + ')');
+    const k = elyAspect(Y.outline), band = bands[b];
+    if (k < band[0] || k > band[1]) fail(b + ' ' + meta.fam + ' elytra ' + k.toFixed(2) + ' as broad as long (want ' + band.join('-') + ')');
+  },
+  // #74: the spot layout of a spotted or dark elytron (SPOT_LAYOUTS) as drawn: the spots' centres on meta.elytra.pattern
+  spotLayout(meta, svg, fail) {
+    if (meta.type !== 'beetle') return;
+    const G = meta.bodyGenes.elytra, kind = G && G.pattern;
+    if (kind !== 'spots' && kind !== 'dark') return;
+    const lay = G.pat.layout;
+    if (!SPOT_LAYOUTS.includes(lay)) return fail('spot layout ' + lay + ' is not one of ' + SPOT_LAYOUTS.join('/'));
+    if (!meta.bodySig.split(',').includes('sl' + lay)) fail('spot layout missing from bodySig');
+    tally('spotLayout', lay);
+    const Y = meta.elytra, Pt = Y.pattern, rings = kind === 'dark' ? Pt.holes : Pt.regions;
+    if (!rings.length) return fail(kind + ' elytron with no spot drawn (' + lay + ')');
+    const hwAt = y => { let best = 0; for (let i = 0; i + 1 < Y.outline.length; i++) { const a = Y.outline[i], c = Y.outline[i + 1]; if ((a[1] - y) * (c[1] - y) <= 0 && a[1] !== c[1]) best = Math.max(best, a[0] + (c[0] - a[0]) * (y - a[1]) / (c[1] - a[1])); } return best; };
+    const cs = rings.map(r => { const xs = r.map(p => p[0]), ys = r.map(p => p[1]); return [(Math.min(...xs) + Math.max(...xs)) / 2, (Math.min(...ys) + Math.max(...ys)) / 2]; });
+    const fx = cs.map(c => c[0] / hwAt(c[1]));
+    if (lay === 'margin' && fx.some(f => f < 0.5)) fail('margin spots off the margin: ' + fx.map(f => f.toFixed(2)).join(' '));
+    if (lay === 'suture' && fx.some(f => f > 0.5)) fail('suture spots off the suture: ' + fx.map(f => f.toFixed(2)).join(' '));
+    if (lay !== 'scatter' && cs.length > 1 && Math.max(...fx) - Math.min(...fx) > SPOT_ROW) fail(lay + ' spots not in a row: ' + fx.map(f => f.toFixed(2)).join(' '));
   },
   // #53: the elytral outline and shoulders as drawn (ELY_SHAPE)
   elytraOutline(meta, svg, fail) {

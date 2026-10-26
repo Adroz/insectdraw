@@ -137,6 +137,17 @@ the digging carabids, slender otherwise. Engine: the beetle entry's `elytra` (`o
 `elytraPattern`, `pronotumPattern`, `pronotumRatio`, `beetleArmature`, `stagMandibles` and `foretibia`, with
 `colGenes` holding every gene value to 5 % of the plates that roll it.
 
+Inside the round families (#74): the families' outline is not one shape. Curculionidae run from slender,
+cylindrical bodies several times longer than broad (*Lixus*) through the stout ovals of most broad-nosed weevils to
+globose, pear-shaped ones whose fused elytra are nearly as broad as long (*Otiorhynchus*, *Curculio* with its long
+rostrum); Coccinellidae from broad, almost transverse hemispheres through the round *Coccinella* (source 15) to the
+longer ovals of *Calvia* and *Halyzia*; Chrysomelidae from the elongate, parallel *Donacia* and *Lema* through the
+convex ovals of *Chrysolina* to the broad, flattened tortoise beetles (*Cassida*). Engine: the beetle entry's `builds`
+(per family, each build's factor on the elytra's length and the outlines it may wear: no tapering globose weevil, no
+rounded slender one), asserted by `colBuild` (the elytra's breadth over length in the build's band). The spots of a
+spotted or melanic elytron are not always scattered: many ladybirds and weevils carry them in a row down the outer
+margin or beside the suture (`elytra.layouts`, asserted by `spotLayout`).
+
 **Diptera.** Prothorax and metathorax "considerably reduced"; the mesonotum "occupies most of the
 region" (2, 3). Dorsal landmarks (fig. `thorax-diptera-dorsal.png`): postpronotal lobes =
 humeral calli as two small ovals at the anterolateral corners; the **transverse suture** at

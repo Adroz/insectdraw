@@ -103,7 +103,9 @@ contract for changes.
   within-family genes (#53: elytral outline, sculpture, pattern; pronotal pattern and width class; horns, spines, the
   fossorial tibia, stag jaws) live in the entry's `elytra`, `pronotum`, `armature` and `legs` tables; a tone over a
   shape (an elytral or pronotal pattern) goes through `hatchRegions` at the plate pitch inside a deferred element,
-  never as a fill (`elytraPattern`, `pronotumPattern`).
+  never as a fill (`elytraPattern`, `pronotumPattern`). The round families' build (#74: weevil, ladybird, leaf beetle) is
+  the entry's `builds` table, a factor on the elytra's length rolled after every other beetle gene (`colBuild`), and a
+  spotted elytron's spot layout is `elytra.layouts` (`spotLayout`).
 - Output must be deterministic per seed and fit the 600×600 plate with the caption band.
 - Device plates (ADR 0001): `generateInsect(seed, { devicePx })` draws the same insect with every
   stroke weight ≥ 1.0 device px and every hatch / mesh pitch ≥ 2.5 device px

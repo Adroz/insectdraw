@@ -539,6 +539,22 @@ rules for all of them:
    reads as 9 distinct insects, nine ground beetles as about 8, nine ladybirds as about 7. Raising the second block's
    minimum without fitting it needs more spread inside the round families (ladybird body proportions and pronotal
    markings beyond the four patterns, leaf-beetle sculpture), left to a follow-up.
+
+   **Follow-up done (#74, 2026-10-26).** The round families spread by outline: a build per family (weevil slender /
+   stout / globose, ladybird broad / round / oval, leaf beetle elongate / oval / broad; the entry's `builds`, a factor on
+   the elytra's length, tied to the outlines it may wear) and a spot layout (scatter / margin / suture) on a spotted or
+   dark elytron; `colBuild` and `spotLayout` in `tests/check.js`. A pronotal pattern tied to the elytral one (the third
+   lever the ticket listed) was measured and dropped: it moved no minimum (on the build and layout genes before their final tuning: 61–120 14.49 → 14.54, 121–180 5.69 → 5.44).
+   `tests/perceptual.js`, N = 60, main (b20d778) → after:
+
+   | view | min 1–60 | min 61–120 | sheet9 1–60 | sheet9 61–120 |
+   |---|---|---|---|---|
+   | plate | 10.21 (4,9) → 10.54 (15,18) | 10.79 (64,106) → 13.92 (89,98) | 17.27 → 17.74 | 17.15 → 18.31 |
+   | body | 9.90 → 11.41 | 10.39 → 10.39 | 15.89 → 16.98 | 16.98 → 17.39 |
+
+   Unfitted blocks (not criteria), min / sheet9: 121–180 8.02 / 16.99 → 5.69 / 18.25 (two broad dark ladybirds, 126,134,
+   which no gene here separates), 181–240 11.97 / 17.40 → 12.04 / 17.40, 241–300 8.46 / 16.34 → 9.97 / 17.07, 301–360
+   9.12 / 17.63 → 11.59 / 18.27. The closest pair on 1–60 is now two scarabs (15,18), outside the round families.
 7. **Fly: wing set and abdomen families, #54** (10.59 under 12.5; body view 9.54). The wing outline covers the body on
    every plate. Genes: wing set (spread / half-folded / folded over the abdomen, scissor-wise, the resting pose that
    shows the abdomen's sides and is how most fly plates are drawn), abdomen family by `P.fam` (syrphid flat oval with
