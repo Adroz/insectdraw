@@ -484,12 +484,12 @@ const elyAspect = outline => { const ys = outline.map(p => p[1]); return 2 * Mat
 //   (Donacia, Lema), oval or broad (Cassida); every other family has none. The elytra together, breadth over length as
 //   for COL_FAMS, lie in the build's band (COL_BUILD); a globose or slender body
 //   never wears an elytral outline that contradicts it (COL_BUILD_NOT: no tapering globose weevil, no rounded slender
-//   one, no rounded elongate or parallel broad leaf beetle)
+//   one or parallel slender one, no rounded elongate or parallel broad leaf beetle)
 const COL_BUILD = {
   weevil: { slender: [0.32, 0.67], stout: [0.43, 0.96], globose: [0.62, 1.27] },
   coccinellid: { broad: [0.99, 1.3], round: [0.89, 1.19], oval: [0.75, 1.01] },
   chrysomelid: { elongate: [0.52, 0.74], oval: [0.66, 0.95], broad: [0.82, 1.1] } };
-const COL_BUILD_NOT = { 'weevil:globose': ['tapering', 'parallel'], 'weevil:slender': ['rounded'], 'chrysomelid:elongate': ['rounded'], 'chrysomelid:broad': ['parallel'] };
+const COL_BUILD_NOT = { 'weevil:globose': ['tapering', 'parallel'], 'weevil:slender': ['rounded', 'parallel'], 'chrysomelid:elongate': ['rounded'], 'chrysomelid:broad': ['parallel'] };
 // - the spot layout (#74; meta.bodyGenes.elytra.pat.layout on a spotted or dark elytron, on bodySig as 'sl' + its name):
 //   scatter (#53's fixed layout per count), margin (a row down the outer margin: every spot's centre in the outer half of
 //   the elytron's width at its height) or suture (a row beside the suture: every centre in the inner half); two or more
