@@ -4,7 +4,7 @@ Status: two plans in one file. The first, the per-seed genes for legs, body, hea
 steps implemented (steps 1–6 on 2026-10-02, step 7 mirror skew on 2026-10-07); it follows the wing-genes work (see
 README "Venation" and `meta.wingSig`). The second, "Nine plates, nine insects (#30)" at the end, is open: the
 perceptual criterion (`tests/perceptual.js`) and nine steps, one ticket per order (#48–#55, and #72 for the
-grasshopper, added by #57); step 2 (cicada, #49), step 5 (Lepidoptera, #52) and step 7 (fly, #54) are done.
+grasshopper, added by #57); step 2 (cicada, #49), step 5 (Lepidoptera, #52), step 7 (fly, #54) and step 9 (grasshopper, #72) are done.
 
 ### Status detail
 
@@ -583,5 +583,23 @@ rules for all of them:
    set, folded (as now) or the setting-board pose with the hindwing fan opened (band-winged Oedipodinae); a resting
    hind-leg pose with the femur along the body. Grounded in `research-thorax.md` (Orthoptera); the wing-length classes
    and the tetrigid pronotum need a note. Blocked by #8 for the hind-leg pose.
+
+   **Done (#72, 2026-10-26)**, grounded in `research-orthoptera-habitus.md` (refs `docs/ref/orth-hab-*`): the entry's
+   `orth` table, rolled last in `rollBodyGenes` as `B.orth`: the tegmen length class per family (macropterous,
+   brachypterous with the tergites showing, micropterous lateral pads, the groundhopper's scales; the folded fan only
+   when macropterous), the groundhopper's pronotum prolonged past the abdomen's tip to a point, the bush-cricket's sabre
+   ovipositor (0.52-0.98 abdomen lengths, straight or upcurved), the wing set folded or open (the band-winged setting-board
+   pose with the hindwing fan spread, macropterous acridids only) and the hind femur held along the body (within #8's leg
+   rules); `orthTegmen`, `orthTetrigid`, `orthOvipositor`, `orthWingSet`, `orthHindLeg` and the `orthShares` audit in
+   `tests/check.js`. `node tests/perceptual.js 60 --type grasshopper --pairs 3`, main (8a76362) -> after:
+
+   | view | min 1–60 | min 61–120 | sheet9 1–60 | sheet9 61–120 |
+   |---|---|---|---|---|
+   | plate | 9.44 (25,35) → 12.41 (35,49) | 9.14 (85,115) → 12.54 (80,105) | 12.58 → 18.55 | 13.01 → 17.97 |
+   | body | 10.68 → 12.32 | 10.77 → 13.13 | 16.18 → 18.44 | 16.51 → 17.77 |
+
+   The floor is cleared on both blocks. What still repeats is two plates of one family and one class: two folded
+   macropterous acridids (35,49), two groundhoppers (20,40), two brachypterous acridids (80,105). A seeds 1-9 sheet reads
+   as about 7 insects (main 2-3), `random:9` sheets as 6-7.
 
 Not in this plan: bee and wasp (above the floor; #12 is a separate habitus fix).

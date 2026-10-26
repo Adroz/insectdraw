@@ -265,7 +265,24 @@ const maxHw = prof => Math.max(...prof.map(p => p[1])), dist = (a, b) => Math.hy
 // fraction of that width ahead of the principal sulcus; hind: its half width at the hind margin at most this fraction of
 // the widest (an angled or rounded margin, never truncate); carinae: the lateral carina kinds the bodySig carries
 const ORTH = { fanOut: 0.5, overlap: 1, apexX: 2, tip: 0.04, oblique: 0.2, obliqueBand: [20, 65], cellsMin: 60, onVein: 0.75, base: 0.12, metazona: 0.55, prozona: 0.96, hind: 0.6, carinae: ['straight', 'incurved', 'outcurved'] };
-const orthSeen = { orthFan: 0, orthTegmina: 0, orthCells: 0, orthIntercalary: 0, orthPronotum: 0 };   // grasshopper plates each #22 check asserted on, for POST.orthSeen
+// #72 grasshopper body variation (docs/research-orthoptera-habitus.md). cls: the tegmen's length class as its drawn
+// reach (down the body from its root, meta.orth.root; on an open plate the outline point furthest from the root) per abdomen length, from the ticket and the research
+// note: macropterous as #22 drew every plate, brachypterous 0.25-0.6 (Chorthippus females, Metrioptera), micropterous
+// short lateral pads (Pholidoptera, Ephippiger), the groundhopper's lateral scales; tol on either side for the outline's
+// smoothing. show: a brachypterous plate leaves at least this share of the abdomen bare behind its tegmina (the tergites
+// showing). A micropterous pad or a scale never reaches the midline (lateral, minX > 0). tetrigid: the pronotum's
+// process (meta.orth.process, closed, body coordinates) reaches the abdomen's tip or past it and tapers to a point (its
+// half width over the last `tipLen` of its length at most `point` of its widest). ovi: the tettigoniid's sabre as drawn
+// (meta.orth.ovi.len) per abdomen length, any other family's valves at most `valves` of it. open: the setting-board pose,
+// only on a macropterous acridid: the tegmen's root-to-apex line `teg` degrees past straight out toward the tail, the
+// opened hindwing (meta.orth.hind) and the tegmen never across the midline. along: the hind femur held along the body,
+// its direction (degrees, 0 out, 90 straight back) in this band. share: over a run of shareMin grasshopper plates or more,
+// every class, the open set and the along pose each on at least that share of the plates they can occur on.
+const ORTH72 = { cls: { macro: [1.05, 1.18], brachy: [0.25, 0.6], micro: [0.1, 0.22], scale: [0.06, 0.16] }, tol: 0.03, show: 0.3,
+  tetrigid: { tipLen: 0.05, point: 0.2 }, ovi: { sabre: [0.5, 1.0], valves: 0.15, kinds: ['straight', 'upcurved'] },
+  open: { teg: [-5, 35] }, along: [55, 88], share: { cls: 0.08, open: 0.08, along: 0.15 }, shareMin: 60 };
+const orth72Run = { cls: {}, sets: {}, hind: {}, n: 0 };   // over the run's grasshoppers, for POST.orthShares
+const orthSeen = { orthFan: 0, orthTegmina: 0, orthCells: 0, orthIntercalary: 0, orthPronotum: 0, orthTegmen: 0, orthTetrigid: 0, orthOvipositor: 0, orthWingSet: 0, orthHindLeg: 0 };   // grasshopper plates each #22 check asserted on, for POST.orthSeen
 let orthSeenPlates = 0;   // grasshopper plates in the run, counted by the seed loop whichever checks are selected
 const ORTH_MIN = 20;   // grasshopper plates a run needs before a #22 check that never ran fails rather than being reported (~8% of plates)
 // #26 cicada (Cicadidae), from the references (cic-cicada: Sc+R, M, CuA and CuP four heavy trunks from the base, the anal
@@ -671,6 +688,15 @@ const PRE = {
         f('tails is not { splay: { class: [min, max] }, splays: { class: w }, curve: [min, max], fams: { fam: { n: 2 | 3, len: [min, max] } } }');
       if (o.hindwing !== undefined && Object.values(o.hindwing.fams || {}).some(w => Object.keys(w).some(k => k !== 'absent' && !range2((o.hindwing.len || {})[k])))) f('hindwing.fams weighs a class hindwing.len has no range for');
       if (o.antFit !== undefined && !(o.antFit && o.antFit.scale > 0 && o.antFit.width > 0)) f('antFit is not { scale, width } (both > 0): ' + JSON.stringify(o.antFit));
+      // #72 the grasshopper's orth table: a length range per tegmen class, the families' class weights only over those
+      // classes, and the open set's, the along pose's, the groundhopper process's and the sabre's ranges
+      if (o.orth !== undefined) {
+        const t = o.orth, w = t.open || {}, al = t.along || {};
+        if (!t.tegmen || Object.values(t.tegmen).some(c => !range2(c.len) || !c.ends || (c.lobe && c.lobe !== 'pad' && c.lobe !== 'scale')) || Object.values(t.tegFams || {}).some(x => Object.keys(x).some(k => !t.tegmen[k])) || !range2(w.teg) || !range2(w.hind) || !range2(w.anal)
+          || !range2(al.F) || !range2(al.tib) || !range2(al.T) || Object.values(t.process || {}).some(v => !range2(v.reach) || !range2(v.w)) || Object.values(t.ovipositor || {}).some(v => !range2(v.len) || !v.kinds)
+          || Object.values(t.sets || {}).some(x => Object.keys(x).some(k => k !== 'folded' && k !== 'open')) || Object.values(t.hindPoses || {}).some(x => Object.keys(x).some(k => k !== 'splayed' && k !== 'along')))
+          f('orth is not { tegmen: { class: { len, ends, lobe?: pad / scale, wK? } }, tegFams, sets (folded / open), open: { teg, hind, anal }, hindPoses (splayed / along), along: { F, tib, T }, process: { fam: { reach, w } }, ovipositor: { fam: { len, kinds } } }');
+      }
       if (typeof o.wings !== 'function') f('wings is not a function');
       const nb = namesBad(o.names); if (nb) f('names: ' + nb);
       for (const v of Object.keys(o.variantNames || {})) { const vb = namesBad(o.variantNames[v]); if (vb) f('variantNames.' + v + ': ' + vb); }
@@ -686,6 +712,7 @@ const PRE = {
       }
       for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['famScale', o.famScale || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}], ['wingSetFams', o.wingSetFams || {}], ['wingPlans', o.wingPlans || {}], ['chaetae', o.chaetae || {}],
         ['tails.fams', (o.tails && o.tails.fams) || {}], ['hindwing.fams', (o.hindwing && o.hindwing.fams) || {}], ['foreFams', o.foreFams || {}],
+        ['orth.tegFams', (o.orth && o.orth.tegFams) || {}], ['orth.sets', (o.orth && o.orth.sets) || {}], ['orth.hindPoses', (o.orth && o.orth.hindPoses) || {}], ['orth.ovipositor', (o.orth && o.orth.ovipositor) || {}], ['orth.process', (o.orth && o.orth.process) || {}],
         ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
@@ -1618,12 +1645,14 @@ const CHECKS = {
   },
   // #22 the tegmina overlap along the inner margin and their apices part: the right tegmen's inner margin crosses the
   // midline by ORTH.overlap or more over the middle of its length (the left one, drawn over it, hides that strip), its
-  // apex lies ORTH.apexX or more out on its own side, and its last ORTH.tip of length stays clear of the midline (no X)
+  // apex lies ORTH.apexX or more out on its own side, and its last ORTH.tip of length stays clear of the midline (no X);
+  // on the tegmina folded over the abdomen (#72: macropterous and brachypterous, not the open set or a lateral pad)
   orthTegmina(meta, svg, fail) {
     if (meta.type !== 'grasshopper') return;
     orthSeen.orthTegmina++;
-    const T = meta.orth && meta.orth.tegmen;
+    const T = meta.orth && meta.orth.tegmen, G = meta.bodyGenes.orth;
     if (!T) return fail('no tegmen outline on meta.orth');
+    if (G && (G.set === 'open' || (G.cls !== 'macro' && G.cls !== 'brachy'))) return;   // #72: an open set or a lateral pad has its own rules (orthWingSet, orthTegmen)
     const apex = T.reduce((m, p) => p[1] > m[1] ? p : m), top = Math.min(...T.map(p => p[1])), len = apex[1] - top;
     let shallow = -Infinity;
     for (let f = 0.15; f <= 0.75; f += 0.05) { const x = leftmostAt(T, top + f * len); shallow = Math.max(shallow, x === null ? Infinity : x); }
@@ -1642,8 +1671,10 @@ const CHECKS = {
     const c = meta.orth && meta.orth.cells;
     if (!Array.isArray(c)) return fail('no archedictyon cells on meta.orth');
     let tot = 0, obl = 0;
+    const turn = ((meta.orth.axis === undefined ? 90 : meta.orth.axis) - 90) * Math.PI / 180, cs = Math.cos(turn), sn = Math.sin(turn);   // #72: an open tegmen's axis turned back onto y
     for (const cell of c) for (let i = 0; i < cell.length; i++) {
-      const a = cell[i], b = cell[(i + 1) % cell.length], L = dist(a, b), ang = Math.atan2(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) * 180 / Math.PI;
+      const a = cell[i], b = cell[(i + 1) % cell.length], L = dist(a, b), dx = b[0] - a[0], dy = b[1] - a[1], ux = dx * cs + dy * sn, uy = -dx * sn + dy * cs;
+      const ang = Math.atan2(Math.abs(ux), Math.abs(uy)) * 180 / Math.PI;
       tot += L; if (ang >= ORTH.obliqueBand[0] && ang <= ORTH.obliqueBand[1]) obl += L;
     }
     if (c.length < ORTH.cellsMin) return;   // a sparse mesh (the tegmen mostly ladders, which are rows by construction) is too few cells to measure
@@ -1657,11 +1688,13 @@ const CHECKS = {
     orthSeen.orthIntercalary++;
     const T = meta.orth && meta.orth.tegmen, fr = (meta.wingLanes || []).find(w => w.lanes.some(l => l.id === 'R'));
     if (!T || !fr) return fail('no tegmen outline / lanes on meta');
-    const top = Math.min(...T.map(p => p[1])), len = Math.max(...T.map(p => p[1])) - top;
+    // #72 measured along the tegmen's axis from its root (meta.orth.root / .axis; down the body on a folded tegmen)
+    const r0 = meta.orth.root || [0, Math.min(...T.map(p => p[1]))], ax = (meta.orth.axis === undefined ? 90 : meta.orth.axis) * Math.PI / 180;
+    const along = p => (p[0] - r0[0]) * Math.cos(ax) + (p[1] - r0[1]) * Math.sin(ax), top = Math.min(...T.map(along)), len = Math.max(...T.map(along)) - top;
     const drawn = fr.lanes.filter(l => !l.wall && l.pieces.length);
     for (const l of drawn) {
-      const root = l.pieces.flatMap(pc => [pc.pts[0], pc.pts[pc.pts.length - 1]]).reduce((m, p) => p[1] < m[1] ? p : m);   // its end nearest the base (a lane carried onto another by a connector piece roots there)
-      if (root[1] - top <= ORTH.base * len) continue;
+      const root = l.pieces.flatMap(pc => [pc.pts[0], pc.pts[pc.pts.length - 1]]).reduce((m, p) => along(p) < along(m) ? p : m);   // its end nearest the base (a lane carried onto another by a connector piece roots there)
+      if (along(root) - top <= ORTH.base * len) continue;
       const d = Math.min(...fr.lanes.filter(m => m !== l).flatMap(m => m.pieces.map(pc => distToPl(root, pc.pts))));
       if (d > ORTH.onVein) fail('grasshopper tegmen lane ' + l.id + ' starts in the membrane, ' + d.toFixed(1) + ' from the nearest vein');
     }
@@ -1682,6 +1715,83 @@ const CHECKS = {
     const kind = T.latCar && T.latCar.kind;
     if (!ORTH.carinae.includes(kind)) fail('grasshopper pronotum has no lateral carinae of a known kind: ' + kind);
     else if (!meta.bodySig.split(',').includes('lc' + kind[0])) fail('grasshopper lateral carina kind ' + kind + ' not in the bodySig');
+  },
+  // #72 the tegmen's length class (ORTH72.cls) as drawn, on the bodySig; the folded hindwing fan only under macropterous
+  // tegmina; a brachypterous plate's tergites show behind its tegmina; a micropterous pad or a groundhopper's scale lateral
+  orthTegmen(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthTegmen++;
+    const o = meta.orth, G = meta.bodyGenes.orth;
+    if (!o || !o.tegmen || !o.root || !G) return fail('no tegmen outline, root or orth genes on meta');
+    const band = ORTH72.cls[G.cls];
+    if (!band) return fail('grasshopper tegmen class unknown: ' + G.cls);
+    orth72Run.n++; orth72Run.cls[G.cls] = (orth72Run.cls[G.cls] || 0) + 1;
+    if (!meta.bodySig.split(',').includes('tg' + G.cls)) fail('grasshopper tegmen class ' + G.cls + ' not in the bodySig');
+    const abdLen = meta.abdomen.yBot - meta.abdomen.yTop, reach = (G.set === 'open' ? Math.max(...o.tegmen.map(p => dist(p, o.root))) : Math.max(...o.tegmen.map(p => p[1])) - o.root[1]) / abdLen;   // down the body from the root, or out from it when open
+    if (reach < band[0] - ORTH72.tol || reach > band[1] + ORTH72.tol) fail('grasshopper ' + G.cls + ' tegmen reaches ' + reach.toFixed(2) + ' abdomen lengths, not ' + band.join('-'));
+    if (o.fan && G.cls !== 'macro') fail('grasshopper folded hindwing fan under ' + G.cls + ' tegmina');
+    if (G.cls === 'brachy') {
+      const bare = (meta.abdomen.yBot - Math.max(...o.tegmen.map(p => p[1]))) / abdLen;
+      if (bare < ORTH72.show) fail('brachypterous grasshopper shows only ' + bare.toFixed(2) + ' of its abdomen behind the tegmina (want ' + ORTH72.show + '+)');
+    }
+    if ((G.cls === 'micro' || G.cls === 'scale') && Math.min(...o.tegmen.map(p => p[0])) <= 0) fail('grasshopper ' + G.cls + ' tegmen reaches the midline (a lateral pad never does)');
+  },
+  // #72 the groundhopper's pronotum (meta.orth.process) prolonged back to the abdomen's tip or past it, tapering to a point,
+  // with the tegmina reduced to scales; no other family draws the process
+  orthTetrigid(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthTetrigid++;
+    const o = meta.orth || {}, G = meta.bodyGenes.orth || {}, P = o.process;
+    if (meta.fam !== 'tetrigid') { if (P) fail(meta.fam + ' draws a tetrigid pronotal process'); return; }
+    if (!P) return fail('tetrigid without its pronotal process on meta.orth.process');
+    if (G.cls !== 'scale') fail('tetrigid tegmina ' + G.cls + ', not scales');
+    const y0 = Math.min(...P.map(p => p[1])), y1 = Math.max(...P.map(p => p[1])), w = Math.max(...P.map(p => Math.abs(p[0])));
+    if (y1 < meta.abdomen.yBot) fail('tetrigid pronotum ends ' + (meta.abdomen.yBot - y1).toFixed(1) + ' short of the abdomen tip');
+    const tipW = Math.max(...P.filter(p => p[1] >= y1 - ORTH72.tetrigid.tipLen * (y1 - y0)).map(p => Math.abs(p[0])));
+    if (tipW > ORTH72.tetrigid.point * w) fail('tetrigid pronotum does not taper to a point: ' + (tipW / w).toFixed(2) + ' of its widest at the tip');
+  },
+  // #72 the tettigoniid's sabre ovipositor (ORTH72.ovi) as drawn; every other family's valves short
+  orthOvipositor(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthOvipositor++;
+    const ov = meta.bodyGenes.abd.ovipositor, d = meta.orth && meta.orth.ovi;
+    if (!ov) { if (d) fail('ovipositor drawn on a plate whose genes have none'); return; }
+    if (!d || !d.tip) return fail('grasshopper ovipositor not recorded on meta.orth.ovi');
+    const k = (d.tip[1] - meta.abdomen.yBot) / (meta.abdomen.yBot - meta.abdomen.yTop);   // the drawn tip's reach past the abdomen
+    if (meta.fam === 'tettigoniid') {
+      if (k < ORTH72.ovi.sabre[0] - 0.01 || k > ORTH72.ovi.sabre[1] + 0.01) fail('tettigoniid ovipositor ' + k.toFixed(2) + ' abdomen lengths, not ' + ORTH72.ovi.sabre.join('-'));
+      if (!ORTH72.ovi.kinds.includes(d.kind)) fail('tettigoniid ovipositor of unknown kind ' + d.kind);
+      if (!meta.bodySig.split(',').includes('ov' + d.kind[0])) fail('tettigoniid ovipositor kind not in the bodySig');
+    } else if (k > ORTH72.ovi.valves) fail(meta.fam + ' ovipositor valves ' + k.toFixed(2) + ' abdomen lengths, more than ' + ORTH72.ovi.valves);
+  },
+  // #72 the wing set: folded, or the setting-board pose (only on a macropterous acridid) with the tegmen held out
+  // ORTH72.open.teg past straight out and the hindwing opened beside it, neither across the midline
+  orthWingSet(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthWingSet++;
+    const o = meta.orth || {}, G = meta.bodyGenes.orth || {};
+    if (G.set !== 'folded' && G.set !== 'open') return fail('grasshopper wing set unknown: ' + G.set);
+    if (!meta.bodySig.split(',').includes('ws' + G.set[0])) fail('grasshopper wing set not in the bodySig');
+    if (G.cls === 'macro' && meta.fam === 'acridid') orth72Run.sets[G.set] = (orth72Run.sets[G.set] || 0) + 1;
+    if (G.set === 'folded') { if (o.hind) fail('folded grasshopper draws an opened hindwing'); return; }
+    if (G.cls !== 'macro' || meta.fam !== 'acridid') fail('open wing set on a ' + G.cls + ' ' + meta.fam);
+    if (!o.hind) return fail('open grasshopper without its opened hindwing on meta.orth.hind');
+    let apex = o.root; for (const p of o.tegmen) if (dist(p, o.root) > dist(apex, o.root)) apex = p;
+    const a = Math.atan2(apex[1] - o.root[1], apex[0] - o.root[0]) * 180 / Math.PI;
+    if (a < ORTH72.open.teg[0] || a > ORTH72.open.teg[1]) fail('open grasshopper tegmen at ' + a.toFixed(1) + ' degrees, not ' + ORTH72.open.teg.join('-'));
+    for (const [what, poly] of [['tegmen', o.tegmen], ['hindwing', o.hind]]) if (Math.min(...poly.map(p => p[0])) < 0) fail('open grasshopper ' + what + ' crosses the midline');
+  },
+  // #72 the hind-leg pose: splayed (as #8 drew every plate) or the femur held along the body (ORTH72.along), on the bodySig
+  orthHindLeg(meta, svg, fail) {
+    if (meta.type !== 'grasshopper') return;
+    orthSeen.orthHindLeg++;
+    const G = meta.bodyGenes.orth || {};
+    if (G.hind !== 'splayed' && G.hind !== 'along') return fail('grasshopper hind-leg pose unknown: ' + G.hind);
+    orth72Run.hind[G.hind] = (orth72Run.hind[G.hind] || 0) + 1;
+    if (!meta.bodySig.split(',').includes('hl' + G.hind[0])) fail('grasshopper hind-leg pose not in the bodySig');
+    if (G.hind !== 'along') return;
+    const j = meta.legs[2].pts, a = Math.atan2(j[3][1] - j[2][1], j[3][0] - j[2][0]) * 180 / Math.PI;
+    if (a < ORTH72.along[0] || a > ORTH72.along[1]) fail('grasshopper hind femur held along the body at ' + a.toFixed(1) + ' degrees, not ' + ORTH72.along.join('-'));
   },
   // #26 the forewing's sweep: the line from its root to the outline point furthest from it (the apex) lies CIC.sweep
   // degrees below the horizontal (set specimens; the audited plates held them at 15-25 and the plates came out at 0.81);
@@ -2679,6 +2789,17 @@ const POST = {
     console.log('#22 grasshopper checks asserted on (of ' + n + ' grasshopper plates):', Object.keys(orthSeen).filter(k => ran.has(k)).map(k => k + ' ' + orthSeen[k]).join(', ') +
       (n < ORTH_MIN ? '; too few grasshopper plates (' + n + ' < ' + ORTH_MIN + ') to require every check' : ''));
   },
+  // #72 the run's grasshoppers: every tegmen class on ORTH72.share.cls of them, the open set on .open of the macropterous
+  // acridids and the along pose on .along of them, once the run has ORTH72.shareMin
+  orthShares(fail) {
+    const n = orth72Run.n || Object.values(orth72Run.hind).reduce((a, b) => a + b, 0);
+    if (!n) return;
+    const enough = n >= ORTH72.shareMin, tot = c => Object.values(c).reduce((a, b) => a + b, 0);
+    if (enough && orth72Run.n) { const thin = Object.keys(ORTH72.cls).filter(k => (orth72Run.cls[k] || 0) < ORTH72.share.cls * orth72Run.n); if (thin.length) fail('grasshopper tegmen classes under their share: ' + thin.join(', ') + ' ' + JSON.stringify(orth72Run.cls), 'grasshopper'); }
+    if (enough && tot(orth72Run.sets) && (orth72Run.sets.open || 0) < ORTH72.share.open * tot(orth72Run.sets)) fail('open wing set on too few macropterous acridids ' + JSON.stringify(orth72Run.sets), 'grasshopper');
+    if (enough && tot(orth72Run.hind) && (orth72Run.hind.along || 0) < ORTH72.share.along * tot(orth72Run.hind)) fail('along hind-leg pose on too few grasshoppers ' + JSON.stringify(orth72Run.hind), 'grasshopper');
+    console.log('#72 grasshopper (n ' + n + (enough ? '' : ', too few to assert, < ' + ORTH72.shareMin) + '): tegmen classes ' + JSON.stringify(orth72Run.cls) + ', macropterous acridid sets ' + JSON.stringify(orth72Run.sets) + ', hind legs ' + JSON.stringify(orth72Run.hind));
+  },
   // the #25 checks assert only on beetle plates (three of them on one family each): once the run has COL_MIN beetle plates
   // every selected one must have run
   colSeen(fail) {
@@ -2867,7 +2988,7 @@ function parseArgs(argv) {
   return { from, to, only };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), headSeen: Object.keys(headSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), orthShares: ['orthTegmen', 'orthWingSet', 'orthHindLeg'], cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), headSeen: Object.keys(headSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 

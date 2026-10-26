@@ -2236,6 +2236,9 @@ function insectName(seed, type, variant, fam, genes) {
 //     foreshortening, LEP_POSE_LEN), hiddenSets (the wing sets a hidden pose stands under; else it stands as raised) and
 //     brush (LEP_BRUSH: the nymphalid foreleg reduced to a brush); abdFams spotPos / crests (the spot row's place, the
 //     noctuid's dorsal crest odds).
+//   orth (optional, #72, the grasshopper; docs/research-orthoptera-habitus.md): the tegmen length class per family
+//     (tegmen ranges, tegFams weights), the wing set of a macropterous plate (sets, open), the hind-leg pose (hindPoses,
+//     along), the groundhopper's pronotal process and the bush-cricket's sabre ovipositor; rolled as B.orth.
 //   legThick (optional, default 1): leg thickness factor on top of body size (slender-legged orders < 1).
 //   laneFloor (optional, default true): false opts the order's wings out of growVeins' lane floor (#14) and
 //     tests/check.js laneSep: the beetle (no lanes). The moth draws its own veins through laneFloor (lepVeinFloor, #67).
@@ -2294,6 +2297,10 @@ const LEP_WING_SETS = { sets: lepSets({ square: 2, delta: 1, forward: 1 }), fams
   noctuid: { sets: lepSets({ square: 1, delta: 2, forward: 0.7 }) },
   nymphalid: { sets: lepSets({ square: 2, delta: 1.2, forward: 1 }) }, satyrine: { sets: lepSets({ square: 2, delta: 1.2, forward: 1 }) },
   lycaenid: { sets: lepSets({ square: 2, delta: 1.3, forward: 1.5 }) }, papilionid: { sets: lepSets({ square: 2, delta: 1.3, forward: 1.5 }) } } };
+// #72 where the tegmen's veins meet its margin (fractions of its length, wingsOrthoptera's g.margin): #22's on a long
+// tegmen; on a short one (brachypterous, a pad, a scale) nearer the apex, so the same lanes run down it instead of
+// sweeping across a stub. scK: how far Sc's rolled end moves toward 0.95.
+const ORTH_ENDS = { long: { scK: 0, rs: 0.96, m: 0.9, cua: 0.8, cup: 0.62, a: 0.36, i: 0.93 }, short: { scK: 0.6, rs: 0.985, m: 0.97, cua: 0.93, cup: 0.84, a: 0.62, i: 0.98 } };
 const ORDERS = {
   beetle: {
     proportions: P => {
@@ -2672,6 +2679,28 @@ const ORDERS = {
       tettigoniid: { kinds: { filiform: 1 }, len: [1.0, 1.8], seg: [30, 45] },
       tetrigid: { kinds: { filiform: 1 }, ref: 'hw', len: [0.9, 1.4], seg: [11, 16] } },   // #23: short, but a head width or more, never two hairs
     antFit: { scale: 1.0, width: 1.3 },   // #23: the antenna alone never takes the plate under scale 1.0, nor past 1.3x the body box's half width
+    // #72 body variation (docs/research-orthoptera-habitus.md), rolled last in rollBodyGenes (B.orth) and read by the wing,
+    // thorax, abdomen and leg sections. tegmen: the tegmen's length per abdomen length per class (macropterous as #22 drew
+    // every plate; brachypterous with the tergites showing behind, narrower by wK; micropterous lateral pads; the
+    // groundhopper's lateral scales: len per abdomen length, lobe the lateral kind, ends where the veins meet the margin,
+    // ORTH_ENDS) and tegFams the classes' weights per family; sets: the wing set's weights per family, read only on a
+    // macropterous plate (open: the band-winged Oedipodinae setting-board pose, the tegmen held out teg degrees past
+    // straight out toward the tail, the hindwing fan opened behind it, hind times the tegmen's length, its anal lobe's reach
+    // `anal` times the round fan's); hindPoses: the hind
+    // leg splayed (as #8) or held along the body at the `along` angles (drawLegs' F / tib / T); process: the groundhopper's
+    // pronotum prolonged back past the abdomen's tip by `reach` abdomen lengths, `w` of the saddle's width at its base;
+    // ovipositor: the bush-cricket's sabre, len abdomen lengths, straight or upcurved
+    orth: {
+      tegmen: { macro: { len: [1.05, 1.18], ends: ORTH_ENDS.long }, brachy: { len: [0.28, 0.56], wK: 0.78, ends: ORTH_ENDS.short },
+        micro: { len: [0.12, 0.2], lobe: 'pad', ends: ORTH_ENDS.short }, scale: { len: [0.08, 0.13], lobe: 'scale', ends: ORTH_ENDS.short } },
+      tegFams: { acridid: { macro: 3, brachy: 2, micro: 1 }, tettigoniid: { macro: 2, brachy: 2, micro: 2 }, tetrigid: { scale: 1 } },
+      sets: { acridid: { folded: 1, open: 1 } },
+      open: { teg: [2, 26], hind: [0.84, 1.0], anal: [0.72, 1.08] },
+      hindPoses: { acridid: { splayed: 2, along: 1 }, tettigoniid: { splayed: 1, along: 1 }, tetrigid: { splayed: 2, along: 1 } },
+      along: { F: [64, 74], tib: [84, 94], T: [4, 14] },
+      process: { tetrigid: { reach: [0.04, 0.16], w: [0.85, 1.0] } },
+      ovipositor: { tettigoniid: { len: [0.52, 0.98], kinds: { straight: 1, upcurved: 1 } } },
+    },
     headScaleP5: 1.18,
     wingRoots: [0.45, 0.78],   // held for width by tests/check.js; the tegmen itself roots under the pronotum's hind margin (thorax.yBot - 6)
     legThick: 0.95,
@@ -3605,6 +3634,26 @@ function rollBodyGenes(type, P) {
     }
     B.sig.push(A.chaetae ? 'ch' + A.chaetae.kind[0] + A.chaetae.rows + A.chaetae.n : 'ch-');
   }
+  // ---- grasshopper body variation (#72, the entry's orth table): rolled last so every gene above keeps its draws. The
+  // tegmen length class, the wing set (only a macropterous plate rolls one), the hind-leg pose (the along pose replaces
+  // the hind leg's rolled angles; no rng there), the groundhopper's pronotal process and the bush-cricket's sabre in place
+  // of the short valves (the valves' presence roll above is kept, so only a female draws one) ----
+  B.orth = null;
+  if (order.orth) {
+    const O = order.orth, cls = weighted(O.tegFams[fam]);
+    const set = cls === 'macro' && O.sets[fam] ? weighted(O.sets[fam]) : 'folded';
+    const op = set === 'open', TC = O.tegmen[cls];
+    const G = B.orth = { cls, tegK: rr(TC.len), wK: TC.wK || 1, lobe: TC.lobe || null, ends: TC.ends, set, teg: op ? rr(O.open.teg) : 0, hindK: op ? rr(O.open.hind) : 0, anal: op ? rr(O.open.anal) : 0, hind: weighted(O.hindPoses[fam]), process: null };
+    if (G.hind === 'along') {   // in every pose the plate may fall back to, so the wing repair holds it too (never raised more than LEG_RAISE_TOL past it)
+      const g = B.legs[2], A = O.along, F0 = (A.F[0] + A.F[1]) / 2, tb = (A.tib[0] + A.tib[1]) / 2;
+      g.ang = null; g.poseAng = Object.fromEntries(Object.keys(order.legs.base.poses).concat('spread').map(k => [k, A])); g.safe = [F0 - 7, F0, tb, tb + (A.T[0] + A.T[1]) / 2];
+    }
+    if (O.process[fam]) G.process = { reach: rr(O.process[fam].reach), w: rr(O.process[fam].w) };
+    const OV = O.ovipositor[fam];
+    if (OV && A.ovipositor) A.ovipositor = { len: P.abdLen * rr(OV.len), kind: weighted(OV.kinds), sabre: true, curve: 0, sheath: false };
+    B.sig.push('tg' + cls, Math.round(G.tegK * 10), 'ws' + set[0], Math.round(G.teg / 6), Math.round(G.anal * 5), 'hl' + G.hind[0], G.process ? 'pp' + Math.round(G.process.reach * 20) : '-',
+      A.ovipositor && A.ovipositor.sabre ? 'ov' + A.ovipositor.kind[0] : '-', A.ovipositor && A.ovipositor.sabre ? Math.round(A.ovipositor.len / P.abdLen * 10) : '-');
+  }
   return B;
 }
 
@@ -3693,6 +3742,7 @@ function layoutBody(C) {
   if (type === 'fly') meta.fly = { set: B.wing.set, fam: P.fam, chaetae: null };
   if (type === 'moth') meta.lep = { set: B.wingSet.set, fam: P.fam, fore: null, abd: null };   // #52, the abdomen's marks filled in by the abdomen section (at plate scale), the forewing by the wing block
   if (type === 'cranefly') meta.cranefly = { set: B.wing.set, fam: P.fam, ratio: B.legRatio };   // #55
+  if (B.orth) meta.orth = { root: null, axis: null, tegmen: null, fan: null, hind: null, cells: null, process: null, ovi: null };   // #72, filled in by the thorax, abdomen and wing sections
   if (order.hindwing) meta.mayfly = { fam: P.fam, sex: P.sex, set: B.wing.set, hindClass: B.hindClass, tails: null, tergites: null, fore: null, hind: null };   // #50, the tails and tergites filled in by the abdomen section, the wings by the wing block
   P.abdAnchors = B.abd.anchors; P.abdW *= B.abd.wK;
   if (B.habitus && B.habitus.abdCap) P.abdW = Math.min(P.abdW, B.habitus.abdCap * P.thoraxW);   // a slender family (#49): the abdomen held under this share of the thorax's width
@@ -3892,7 +3942,22 @@ function drawAbdomen(C) {
     const tipY = abdomen.yBot;
     if (A.ovipositor) {
       const o = A.ovipositor;
-      if (o.valves) { for (const sgn of [-1, 1]) L.abdomen.push(pathEl(cubicBezierPath([[sgn * 1.5, tipY - 4], [sgn * 2.5, tipY + o.len * 0.4], [sgn * 2, tipY + o.len * 0.8], [sgn * 0.6, tipY + o.len]], false), SW.D)); }
+      if (o.sabre) {   // #72 the bush-cricket's sabre from above: the paired valves as one blade back from the tip, its dorsal
+        // edge down the middle; straight, an even sword tapering in its last fifth (Tettigonia, Conocephalus), or upcurved,
+        // the sickle's broad lateral face seen from above, widest past the middle (Phaneroptera, Meconema), no rng
+        const n = 16, w = abdomen.hwAt(tipY - 4) * 0.5, prof = [];
+        for (let k = 0; k <= n; k++) {
+          const u = k / n, hw = o.kind === 'straight' ? Math.max(0.6, 1.9 * (u < 0.8 ? 1 : (1 - u) / 0.2)) : Math.max(0.6, 1.5 + 1.6 * Math.sin(Math.PI * Math.min(1, u / 0.62) / 2) * (u < 0.62 ? 1 : (1 - u) / 0.38));
+          prof.push([Math.min(w, hw), tipY - 4 + u * (o.len + 4)]);
+        }
+        prof[n] = [0, tipY + o.len];
+        if (meta.orth) meta.orth.ovi = { tip: prof[n], kind: o.kind };   // #72, the drawn blade's tip
+        L.abdomen.push(pathEl(smoothPath(prof.concat(prof.slice(0, n).reverse().map(([x, y]) => [-x, y])), true), SW.D, '#fff'));
+        L.abdomen.push(pathEl(smoothPath(prof.slice(2, n - 1).map(([x, y]) => [0, y]), false), SW.F));
+      } else if (o.valves) {
+        for (const sgn of [-1, 1]) L.abdomen.push(pathEl(cubicBezierPath([[sgn * 1.5, tipY - 4], [sgn * 2.5, tipY + o.len * 0.4], [sgn * 2, tipY + o.len * 0.8], [sgn * 0.6, tipY + o.len]], false), SW.D));
+        if (meta.orth) meta.orth.ovi = { tip: [0.6, tipY + o.len], kind: 'valves' };   // #72, the drawn valves' tip
+      }
       else {
         const pts = shaftPoints([0, tipY - 2], 90, o.len, o.curve, 8);
         L.abdomen.push(pathEl(smoothPath(pts, false), SW.D));
@@ -4126,6 +4191,19 @@ function drawThorax(C) {
       const y = yAt(0.86), hw = hwAt(y);
       both(s => TH.push(pathEl(ellipsePath([s * hw * 0.55, y], 2.2, 1.3, 0), SW.F)));
     }
+  }
+  if (B.orth && B.orth.process) {   // #72 the groundhopper's pronotum (docs/research-orthoptera-habitus.md): prolonged from the
+    // saddle's widest point back over the abdomen past its tip, tapering to a point, a white plate over the tegmina and the
+    // abdomen with the median carina along it; its outline counts as a wing for the legs' and antennae's rules (wingPolys)
+    const G = B.orth.process, abdomen = C.abdomen, y0 = thorax.yAt(B.thorax.peak), w0 = thorax.hwAt(y0), y1 = abdomen.yBot + G.reach * (abdomen.yBot - abdomen.yTop);
+    const side = [[0, 1], [0.15, G.w], [0.35, G.w], [0.55, 0.92 * G.w], [0.75, 0.7 * G.w], [0.9, 0.38 * G.w]].map(([u, k]) => [w0 * k, lerp(y0, y1, u)]);
+    const rim = side.concat([[0, y1]], side.slice().reverse().map(([x, y]) => [-x, y]));
+    L.thoraxHead.push('<path d="' + smoothPath(rim, true, 0.8) + '" fill="#fff" stroke="none"/>', pathEl(smoothPath(rim, false, 0.8), SW.O));   // masked whole, stroked open across the saddle (no seam where it leaves the pronotum)
+    L.thoraxHead.push(lineEl([0, y0 - 4], [0, lerp(y0, y1, 0.93)], SW.D));   // the median carina runs on along the process
+    for (const sg of [-1, 1]) L.thoraxHead.push(pathEl(smoothPath(side.slice(1, 5).map(([x, y]) => [sg * x * 0.62, y]), false), SW.F));   // the shoulders' carinae, fading out over the abdomen
+    const poly = sampleSmooth(rim, true, 0.8, 8);
+    wingPolys.push(poly.filter(p => p[0] >= 0).concat([[0, y0]]));
+    if (meta.orth) meta.orth.process = poly;
   }
   if (B.armature && B.armature.horn === 'pronotal') {   // #53 a pronotal horn (Dynastes, Typhaeus): from the disc forward over the head
     const by = thorax.yAt(0.5), bw = thorax.hwAt(by) * 0.24, tipY = thorax.yTop - B.armature.hornLen * P.headW;
@@ -6575,7 +6653,7 @@ function elytralStriae(meta, striae, G, outline, Pf, pattern) {
   return els;
 }
 function wingsOrthoptera(C) {   // (type === 'grasshopper')
-  const { L, meta, P, B, thorax, abdHW } = C;
+  const { L, meta, order, P, B, thorax, abdHW } = C;
   // ---- Orthoptera, grown by growVeins v2 (docs/wing-venation-spec.md, Orthoptera; ref orth-grasshopper). The tegmen is
   // a wing frame pointing down the body (local x along the tegmen, local -y toward its outer edge, which is the costa;
   // the straight inner edge just past the midline is the hind margin, so the left tegmen overlaps the right). C and the
@@ -6592,7 +6670,13 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
     k: randRange(1.0, 1.4), angle: randRange(110, 124), lean: rng() < 0.7 ? -1 : 1, zig: randRange(0.04, 0.1), heavy: rng() < 0.3,   // cell size (fraction of the tegmen width: 6-9 cells across), junction genes (zig is still rolled; the square grid does not read it, #22)
     cuFork: randRange(0.1, 0.2), rFork: randRange(0.58, 0.72), scEnd: randRange(0.68, 0.82), anal: rng() < 0.6, fanCell: randRange(0.05, 0.08),
   };
-  const Lt = P.abdLen * randRange(1.05, 1.18), wt = abdHW * G.wt;
+  // #72 the body genes the wing block reads (B.orth): the tegmen's length class sets its length (the old 1.05-1.18 roll is
+  // still drawn so the venation genes after it keep their draws), the wing set its pose; the folded fan lies only under
+  // macropterous tegmina, and an open plate spreads its hindwing instead
+  const O = B.orth, open = O.set === 'open', lateral = !!O.lobe;
+  rng();
+  const Lt = P.abdLen * O.tegK, wt = abdHW * G.wt * O.wK;   // a brachypterous tegmen is narrower as well as short (Chorthippus females, Metrioptera)
+  if (O.cls !== 'macro' || open) G.fan = false;
   const S = { joins: 0, dropped: 0, minAngle: 180, maxAngle: 0, rungs: 0, angSum: 0, ladders: 0, multi: 0 };
   const addStats = st => { S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle); S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi; };
   // a frame pointing down the body: world = base + rot(local, 90 deg), so local x runs down the body and local -y outward
@@ -6601,9 +6685,38 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
   // after, over it) overlaps the right along the inner margin; the apical margin leaves the inner margin at `qa` of the
   // length and sweeps out to the apex on its own side, so the two apices part in a V instead of crossing ----
   const ov = wt * 0.1, qa = G.tipY - 0.1, ax = wt * Math.max(G.tipX, 0.16);
-  const tegPts = [[-ov, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * G.bulge, by + Lt * G.midX], [wt * 0.55, by + Lt * 0.85], [ax, by + Lt],
-    [lerp(-ov, ax, 0.3), by + Lt * lerp(qa, 1, 0.55)], [-ov, by + Lt * qa], [-ov, by + Lt * qa * 0.66], [-ov, by + Lt * qa * 0.33], [-ov, by + Lt * 0.03]];   // the last holds the inner margin straight to the base, under the pronotum
-  const teg = frame([0, by], tegPts), tegWorld = teg.localPoly.map(teg.T);
+  // #72 a micropterous pad or a groundhopper's scale: a short rounded lobe at the side, its inner margin x0 off the midline
+  // (the pad beside the pronotum's hind margin; the scale under the edge of the groundhopper's process, showing past it)
+  const pw = thorax.hwAt(thorax.yAt(B.thorax.peak));   // the saddle's widest half width, where the groundhopper's process leaves it
+  const scale = O.lobe === 'scale', x0 = scale ? pw * 0.72 : abdHW * 0.3, xo = scale ? pw * O.process.w + Math.max(6, wt * 0.3) : wt * 0.95;
+  const tegPts = lateral
+    ? [[x0, by], [lerp(x0, xo, 0.6), by + 1], [xo, by + Lt * 0.35], [lerp(x0, xo, 0.85), by + Lt * 0.8], [lerp(x0, xo, 0.45), by + Lt], [x0 + 1, by + Lt * 0.75], [x0, by + Lt * 0.35]]
+    : [[-ov, by], [wt * 0.55, by + 3], [wt * 0.75, by + Lt * 0.12], [wt * G.bulge, by + Lt * G.midX], [wt * 0.55, by + Lt * 0.85], [ax, by + Lt],
+      [lerp(-ov, ax, 0.3), by + Lt * lerp(qa, 1, 0.55)], [-ov, by + Lt * qa], [-ov, by + Lt * qa * 0.66], [-ov, by + Lt * qa * 0.33], [-ov, by + Lt * 0.03]];   // the last holds the inner margin straight to the base, under the pronotum
+  // the open set (#72): the same tegmen held out from a root beside the midline under the pronotum, turned O.teg degrees
+  // back from straight out (its inner margin is then the hind margin, over the opened hindwing's leading edge)
+  const rootO = [thorax.hwAt(by) * 0.45, by];
+  const teg = open ? makeWing(rootO, O.teg, tegPts.map(p => [p[1] - by, -p[0]]), 1) : frame([0, by], tegPts), tegWorld = teg.localPoly.map(teg.T);
+  meta.orth.root = open ? rootO : lateral ? [x0, by] : [0, by]; meta.orth.axis = open ? O.teg : 90;   // the tegmen's root and its axis (degrees, 0 out, 90 down the body), for tests/check.js
+  if (open) {   // the opened hindwing (Oedipodinae, set): a broad fan rooted behind the tegmen, its leading edge under the
+    // tegmen, the apex as far out, the hind margin sweeping round to the anal lobe beside the abdomen; drawn first (covers)
+    // so the tegmen lies over its leading edge. Radiating veins (R, M, Cu and the anal fan) with ladder rungs, as the folded fan
+    const yh = meta.thorax.wingRoots[1] !== undefined ? thorax.yAt(meta.thorax.wingRoots[1]) : by, hr = [thorax.hwAt(yh) * 0.4, yh], Lh = Lt * O.hindK, th = O.teg + 8;
+    const at = (deg, r) => { const p = add(hr, mul(dirv(deg), r * Lh)); return [Math.max(p[0], 3 + (r * Lh) * 0.02), p[1]]; };
+    const lb = O.anal;   // the anal lobe's reach: how far back round the hind margin the fan runs (a broad lobe or a narrow wing)
+    const world = [hr, add(at(th - 2, 0.5), [0, -3]), at(th, 1), at(th + 22, lerp(1, 0.97, lb)), at(th + 44, 0.9 * lb), at(th + 64, 0.8 * lb), at(th + 82, 0.66 * lb), at(th + 96, 0.48 * lb), [Math.max(4, hr[0] * 0.6), hr[1] + Lh * 0.12]];
+    const hind = makeWing(hr, th, world.map(p => rot(sub(p, hr), -th * D2R)), 1);
+    L.covers.push(pathEl(hind.path, SW.O, '#fff'));
+    meta.orth.hind = hind.localPoly.map(hind.T);
+    const hg = wingGraph(hind, Lh), P0 = [2, 0.5], lanes = [];
+    const tg = marginTargets(hind.localPoly, P0, G.rays + 3, Lh * 0.3);
+    tg.forEach((t, k) => { const pl = []; for (let q = 0; q <= 24; q++) { const u = q / 24; pl.push(add(lerpP(P0, t, u), mul(perp(norm(sub(t, P0))), vlen(sub(t, P0)) * 0.015 * Math.sin(Math.PI * u) * (k % 2 ? 1 : -1)))); } pl[24] = t; lanes.push({ id: 'H' + k, pl, sw: k < 3 ? SW.D : SW.F, noFork: true, stub: false }); });
+    const grownH = growVeins(hg, { lanes, named: [], forks: 0, uOpen: 1.0, k: G.k, minSep: 0.03, angle: G.angle, lean: G.lean, stubProb: 0, bowAmt: 0,
+      evenSites: true, gapNear: 0.2, reachW: 0.7, cell: u => Lh * G.fanCell * (1 - 0.2 * u), cellMin: 3.0, joinSw: SW.F });
+    L.covers.push(...hg.emit());
+    L.covers.push(...costaEls(hind, Lh * 0.02, Lh * 0.9));
+    addStats(grownH.stats);
+  }
   const costaAt = y => { const r = teg.yRange(y - by); return r ? -r[0] : -Infinity; };   // body x of the tegmen's outer edge (the costa) at body y
   let fanJoins = 0, fanPoly = null;
   if (G.fan) {   // the folded hindwing fan under the tegmen (#22): it lies inside the tegmen's costa and ends just short of
@@ -6639,7 +6752,9 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
   for (let q = 0; q < nW; q++) { const x = lerp(X(0.02), apex[0], q / nW); costaPl.push([x, topAt(teg, x, 0.3)]); edgePl.push([x, botAt(teg, x, 0.3)]); }
   costaPl.push(apex); edgePl.push(apex);
   const wR = G.heavy ? SW.O : SW.D;
-  g.margin('scE', G.scEnd, 'top'); g.margin('tip', 1, 'tip'); g.margin('rsE', 0.96, 'bot'); g.margin('mE', 0.9, 'bot'); g.margin('cuaE', 0.8, 'bot'); g.margin('cupE', 0.62, 'bot'); g.margin('aE', 0.36, 'bot'); g.margin('iE', 0.93, 'bot');
+  // a short tegmen (#72) keeps its veins running down it: they end nearer the apex, so they do not sweep across a stub
+  const ME = Object.assign({ sc: lerp(G.scEnd, 0.95, O.ends.scK) }, O.ends);
+  g.margin('scE', ME.sc, 'top'); g.margin('tip', 1, 'tip'); g.margin('rsE', ME.rs, 'bot'); g.margin('mE', ME.m, 'bot'); g.margin('cuaE', ME.cua, 'bot'); g.margin('cupE', ME.cup, 'bot'); g.margin('aE', ME.a, 'bot'); g.margin('iE', ME.i, 'bot');
   const lanes = [
     { id: 'C', pl: costaPl, sw: SW.D, noDraw: true, noFork: true, stub: false },
     { id: 'Sc', u0: 0.02, s0: 0.1, s1: 0.05, end: 'scE', sw: SW.O, noFork: true, stub: false, ctrl: 2, bow: randRange(0.0, 0.03) },              // Sc hugs the costa and meets it
@@ -6662,8 +6777,8 @@ function wingsOrthoptera(C) {   // (type === 'grasshopper')
   L.covers.push(...costaEls(teg, X(0.01), X(0.96)));   // the costa, heavy, along the outer edge
   addStats(grown.stats);
   meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi };
-  meta.orth = { tegmen: tegWorld, fan: fanPoly, cells: grown.cells };   // right side, body coordinates (tests/check.js: orthFan, orthTegmina, orthCells)
-  meta.wingSig = ['orth', G.subRow ? 1 : 0, G.anal ? 1 : 0, G.fan ? 1 : 0, G.rays, grown.joins.length, fanJoins, grown.stats.multi, Math.round(G.cell * 200), Math.round(G.wt * 20), Math.round(G.tipX * 10), Math.round(G.bulge * 20), Math.round(G.midX * 10),
+  Object.assign(meta.orth, { tegmen: tegWorld, fan: fanPoly, cells: grown.cells });   // right side, body coordinates (tests/check.js: orthFan, orthTegmina, orthCells)
+  meta.wingSig = ['orth', O.cls, O.set, G.subRow ? 1 : 0, G.anal ? 1 : 0, G.fan ? 1 : 0, G.rays, grown.joins.length, fanJoins, grown.stats.multi, Math.round(G.cell * 200), Math.round(G.wt * 20), Math.round(G.tipX * 10), Math.round(G.bulge * 20), Math.round(G.midX * 10),
     Math.round(G.cuFork * 20), Math.round(G.rFork * 20), Math.round(G.scEnd * 20), Math.round(G.k * 4), G.heavy ? 1 : 0].join(',');
 }
 
