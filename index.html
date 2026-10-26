@@ -3035,12 +3035,12 @@ const ORDERS = {
     // #48: the lestid holds its wings half open; #73 the hindwing a further 8-30 degrees (under ~11 the pair was turned apart to
     // meet only at the roots anyway, so the smaller rolls all drew one set), the lestid's forewing 15-48
     wingSet: { fw: [-16, 20], hw: [8, 30], fams: { lestid: { fw: [15, 48], hw: [10, 28] } } },
-    // #73 wing pigment (see the dragonfly's): the demoiselles' bands, dark wings, tips and red bases; Megaloprepus' band and
-    // Argia's smoky wash among the coenagrionids, Orolestes' bands among the spreadwings; Platycnemis clear
     // #73 the resting pose: per family, the odds of resting with the wings closed back over the abdomen (the forewing's sweep
     // fw, the hindwing a further hw, which may be less: it then shows outside the forewing); the spreadwings rest half open
     // (Sympecma closes them)
     rest: { fams: { coenagrionid: 0.4, lestid: 0.2, calopterygid: 0.5, platycnemidid: 0.5 }, fw: [52, 84], hw: [-9, 11] },
+    // #73 wing pigment (see the dragonfly's): the demoiselles' bands, dark wings, tips and red bases; Megaloprepus' band and
+    // Argia's smoky wash among the coenagrionids, Orolestes' bands among the spreadwings; Platycnemis clear
     wingPig: { coenagrionid: { wash: 0.15, tips: 0.1, band: 0.1 }, lestid: { band: 0.15 }, calopterygid: { band: 0.45, full: 0.15, basal: 0.3, tips: 0.3 }, platycnemidid: {} },
     // socketOc (#27): the socket's radius at most this times the ocellus's, so the dorsal head reads as three ocelli between the eyes (head-odo-damselfly)
     ant: { base: { ref: 'hw', len: [0.12, 0.22], seg: [4, 7], socket: [0.12, 0.25], kinds: { setaceous: 1 }, socketOc: 0.5 } },
@@ -3764,7 +3764,7 @@ function rollOdoPigment(C) {
     if (on) patches.push(q);
   }
   const full = patches.find(q => q.name === 'full');
-  B.wingPig = { patches: full ? [full] : patches, pitch: randRange(1.9, 3.2) };   // pitch: the hatch's (body units; never under ODO_PIG_PX at plate scale)
+  B.wingPig = { patches: full ? [full] : patches, pitch: rr(ODO_PIG_PITCH) };   // pitch: the hatch's (body units; never under ODO_PIG_PX at plate scale)
   B.sig.push('pg' + (B.wingPig.patches.map(q => q.name[0] + Math.round(q.u * 10) + Math.round(q.v * 10) + (q.fore ? '' : 'h')).join('') || '-'));
   meta.odoPig.patches = B.wingPig.patches;
   meta.wingSig += ',' + (B.wingPig.patches.map(q => q.name[0]).join('') || '-');
@@ -6247,8 +6247,10 @@ const ODO_FAN_GAP = 2.4;   // body units between neighbouring lanes of a dragonf
 const ODO_TRI_H = 0.25;   // the discoidal triangle's strip at least this fraction of the chord gene deep at the arculus
 const ODO_CELL = 0.0135;   // the narrowest odonate cell, span fractions: a wing spans 228-270 plate px, so >= 3 px (#18; ~2 px read as stipple)
 const ODO_CELL_MIN = 3.3;   // and never under this many body units: a short wing (wingLen x len reaches ~190) on a plate scaled 0.93 still keeps 3 px (#48)
+const ODO_REST_MAX = 86;   // a closed wing swept back at most this far (degrees; 90 lies along the body)
 const ODO_MID = 1.5;   // a closed damselfly wing keeps this far (body units) on its own side of the midline (#73)
-const ODO_PIG_HUG = 1.0;   // and stop this many plate px short of every vein, so the tone never runs the venation solid (the 1-bit gate)
+const ODO_PIG_HUG = 1.0;   // and stop this many plate px (+ the costa's half width) short of the outline and the pterostigma, where the hatch ran solid at 1 bit (odoInk)
+const ODO_PIG_PITCH = [1.9, 3.2];   // the hatch pitch gene's range (body units)
 const ODO_PIG_PX = 2;   // the wing pigment's hatch lines at least this many plate px apart (#73; the e-ink hatch floor is ~1.8)
 const ODO_STRUCT = [75, 179];   // junction band of the structural odonate crossveins (discoidal sides, Ax1 / Ax2, the damselfly arculus): wide, so they are never dropped
 function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
@@ -6285,7 +6287,7 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   // #73 a damselfly's wing outline spread wider, the same rolls mapped: its chord 0.12-0.21 of its span (Coenagrion's narrow
   // wing to Lestes' and Platycnemis' broader one) and its length 0.8-1.2 (the wings against the abdomen, short in Lestes,
   // long in Platycnemis)
-  if (dam) { G.wF = lerp(0.12, 0.21, (G.wF - 0.13) / 0.06); G.len = lerp(0.8, 1.2, (G.len - 0.88) / 0.24); }
+  if (dam) { if (fam !== 'calopterygid') G.wF = lerp(0.12, 0.21, (G.wF - 0.13) / 0.06); G.len = lerp(0.8, 1.2, (G.len - 0.88) / 0.24); }   // (the calopterygid's broad wing is mapped from the roll below)
   if (fam === 'calopterygid') { G.petiole = lerp(0.07, 0.11, (G.petiole - 0.12) / 0.14); G.wF = lerp(0.2, 0.26, (G.wF - 0.13) / 0.06); }   // the same rolls, mapped onto a short stalk and a broad wing (#48)
   const Lw = P.wingLen * G.len, nodusX = Lw * G.nodus;
   const [tF, tH] = order.wingRoots;   // forewing / hindwing roots along the thorax (the damselfly's hind pair sits a little further forward)
@@ -6330,7 +6332,7 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   const closed = !!(B.rest && B.rest.closed);
   meta.odoRest = { closed };
   if (closed) {
-    fwD.theta = B.rest.fw; hwD.theta = B.rest.fw + B.rest.hw;
+    fwD.theta = B.rest.fw; hwD.theta = Math.min(ODO_REST_MAX, B.rest.fw + B.rest.hw);
     for (const wd of [fwD, hwD]) for (let k = 0; k < 40 && Math.min(...bodyPoly(wd).map(p => p[0])) < ODO_MID; k++) wd.theta -= 1;
   } else
   // (a damselfly's stalked hindwing takes the whole separation while it can, so the forewing keeps its set: the lestid's half-open pose, #48)
@@ -6477,14 +6479,14 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     {
       const wi = wingDefs.indexOf(wd), hind = wd.hind;
       L.wings.push(sc => {
-        const P = B.wingPig, pig = P ? P.patches.map(q => {
+        const PG = B.wingPig, pig = PG ? PG.patches.map(q => {
           const k = hind ? q.hind : q.fore, xa = Lw * q.u, xb = Math.min(Lw * 1.05, Lw * (q.u + (q.v - q.u) * k)), yb = q.s >= 1 ? w * 2 : lerp(-w * 0.5, w * 0.6, q.s);
           return k ? [[xa, -w], [xb, -w], [xb, yb], [xa, yb]] : null;
         }).filter(Boolean) : [];
         if (!pig.length) return [];
-        const pk = Math.max(...P.patches.map(q => ODO_PIG_KINDS[q.name].pitchK || 1)), rec = { wing: wi, segs: [] };
+        const pk = Math.max(...PG.patches.map(q => ODO_PIG_KINDS[q.name].pitchK || 1)), rec = { wing: wi, segs: [] };
         meta.odoPig.hatch.push(rec);
-        rec.segs = clearOf(hatchUnion(pig, poly, Math.max(floorPitch(P.pitch * pk, 2), ODO_PIG_PX * pk / sc), [stigPoly]), [poly.concat([poly[0]]), stigPoly.concat([stigPoly[0]])], (ODO_PIG_HUG + SW_PX.H / 2) / sc).map(([a, b]) => [wing.T(a), wing.T(b)]);
+        rec.segs = clearOf(hatchUnion(pig, poly, Math.max(floorPitch(PG.pitch * pk, 2), ODO_PIG_PX * pk / sc), [stigPoly]), [poly.concat([poly[0]]), stigPoly.concat([stigPoly[0]])], (ODO_PIG_HUG + SW_PX.H / 2) / sc).map(([a, b]) => [wing.T(a), wing.T(b)]);
         return (rec.els = rec.segs.map(([a, b]) => lineEl(a, b, SW.D)));
       });
     }
@@ -6641,11 +6643,7 @@ function pronotalPattern(meta, kind, regions, outline, Pf) {
   meta.thorax.pattern = { kind, regions, hatch };
   return els;
 }
-// #53 an engraver's tone over shapes: parallel lines `step` apart (one direction, rising to the right) across each region,
-// cut to the region (less any holes, even-odd) and to the outline; the segments as [a, b] pairs, the slivers dropped
 const HATCH_DIR = norm([1, -1.3]);
-// #73 hatchRegions over several regions that may overlap, as one tone: the lines lie on one grid (offsets k x step), so a
-// line two regions share is drawn once, its intervals merged
 // #73 the parts of segments [a, b] at least d from every polyline in pls (sampled every d / 2; runs under d / 2 dropped)
 function clearOf(segs, pls, d) {
   const cell = Math.max(d, 1), grid = new Map(), key = (i, j) => i * 100003 + j;
@@ -6666,6 +6664,8 @@ function clearOf(segs, pls, d) {
   }
   return out;
 }
+// #73 hatchRegions over several regions that may overlap, as one tone: the lines lie on one grid (offsets k x step), so a
+// line two regions share is drawn once, its intervals merged
 function hatchUnion(regions, outline, step, holes) {
   const byLine = new Map(), nn = [-HATCH_DIR[1], HATCH_DIR[0]], out = [];
   for (const [a, b] of hatchRegions(regions, outline, step, holes)) {
@@ -6681,6 +6681,8 @@ function hatchUnion(regions, outline, step, holes) {
   }
   return out;
 }
+// #53 an engraver's tone over shapes: parallel lines `step` apart (one direction, rising to the right) across each region,
+// cut to the region (less any holes, even-odd) and to the outline; the segments as [a, b] pairs, the slivers dropped
 function hatchRegions(regions, outline, step, holes) {
   const d = HATCH_DIR, nn = [-d[1], d[0]], out = [];
   for (const R of regions) {

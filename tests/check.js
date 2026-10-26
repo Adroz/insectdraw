@@ -746,7 +746,8 @@ const PRE = {
       for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['famScale', o.famScale || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}], ['wingSetFams', o.wingSetFams || {}], ['wingPlans', o.wingPlans || {}], ['chaetae', o.chaetae || {}],
         ['tails.fams', (o.tails && o.tails.fams) || {}], ['hindwing.fams', (o.hindwing && o.hindwing.fams) || {}], ['foreFams', o.foreFams || {}],
         ['orth.tegFams', (o.orth && o.orth.tegFams) || {}], ['orth.sets', (o.orth && o.orth.sets) || {}], ['orth.hindPoses', (o.orth && o.orth.hindPoses) || {}], ['orth.ovipositor', (o.orth && o.orth.ovipositor) || {}], ['orth.process', (o.orth && o.orth.process) || {}],
-        ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}]])
+        ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}],
+        ['wingPig', o.wingPig || {}], ['rest.fams', (o.rest && o.rest.fams) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
   },

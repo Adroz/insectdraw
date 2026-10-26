@@ -97,7 +97,7 @@ the stigma, where the costal field converges (on a narrow wing it ran solid ther
 abdomen; the spreadwings hold them half open (but *Sympecma* closes them). The pose comes from the wing set's own two
 draws (the forewing draw under the family's odds closes the wings and is rescaled onto the closed sweep), so it adds no
 draw either. Closed plates draw the forewing swept back
-52-84 degrees and the hindwing a further -9..+11 (under the forewing, peeking out on either side), the forewing over the
+52-84 degrees and the hindwing a further -9..+11, at most 86 (under the forewing, peeking out on either side), the forewing over the
 hindwing, each turned out until no point lies across the midline (the left wings are the mirror image). Odds: coenagrionid
 0.4, lestid 0.2, calopterygid 0.5, platycnemidid 0.5. `odoRest` asserts the sweep and the midline; `odoOverlap` (#18) does
 not apply to a closed pair.
