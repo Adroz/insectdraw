@@ -6,7 +6,8 @@
   "scripts": {
     "test": "node tests/eink.js",
     "check": "node tests/check.js 3000",
-    "check:daily": "node tests/daily.js"
+    "check:daily": "node tests/daily.js",
+    "check:parity": "node tests/parity.js"
   },
   "devDependencies": {
     "sharp": "^0.35.5"

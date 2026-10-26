@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Runs the engine from index.html over many seeds and checks structural invariants.
 //
-//   node tests/check.js [N | --seeds A-B] [--only name,name]
+//   node tests/check.js [N | --seeds A-B] [--only name,name] [--jobs J]
 //
 // N (default 3000) checks seeds 1..N; --seeds A-B checks that range instead (the two are exclusive). --only runs just
 // the named checks (a name from PRE, CHECKS or POST below; an unknown or empty list exits 2 and lists them, so a
@@ -13,8 +13,16 @@
 // run once as (fail), before and after the seed loop, where fail(msg, type) records a seed-0 finding under the
 // check's name (or the type given). Adding an invariant is adding one entry; the order of the tables is the order
 // the failures are recorded and reported in.
+//
+// --jobs J (default: the machine's cores less two, at least 1) runs the seed loop in J worker processes (this file again,
+// with the internal --worker flag), each over a contiguous shard of the range; the parent runs PRE, folds the workers'
+// run state back into its own in seed order through the RUN_STATE merge table, runs POST and prints the report, the same
+// report a serial run prints (tests/parity.js holds that). --jobs 1 is the serial run in this process. A new module-scope
+// accumulator a check or the seed loop writes is one line in RUN_STATE, saying how two shards' values combine.
 'use strict';
 const { loadEngine, engineContract } = require('./engine');
+const os = require('os');
+const { fork } = require('child_process');
 const raster = require('./raster');
 const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX } = require('./names');
 const E = loadEngine();
@@ -99,6 +107,7 @@ const outlineYs = (poly, x) => { const ys = []; for (let i = 0; i < poly.length;
 const DEV = 440;   // device plate size the device checks draw at (spec #32, ADR 0001)
 const SAMPLE = 50;   // the slow extras (parts, the 800 px device plate) run on every SAMPLE-th seed
 const SAMPLED = ['parts', 'device'];   // the checks that read ctx.sampled, for the report
+let sampledCount = 0;   // SAMPLE-th seeds in the run, for the report
 const failures = [];
 const typeCount = {};
 const wingSigs = {};   // type -> Map(structural wing signature -> count)
@@ -617,7 +626,8 @@ const rotAbout = (p, c, deg) => { const a = deg * Math.PI / 180, dx = p[0] - c[0
 const skewedPts = leg => leg.pts.map(p => rotAbout(p, leg.pivot, leg.skew));   // the left leg before mirroring: the right leg rotated about its coxa by its skew (plan step 7)
 const LEG_WING_CLEAR = 1.5;   // legWings: a joint's disc beyond its half width, the engine's WING_LEG_CLEAR (the same 16 rim points, and the same body: both read meta's sampled thorax and abdomen profiles)
 const legRun = {};   // type -> { n, reroll, repaired, placed } over the run (CHECKS.legWings, for POST.legWings): plates whose body-only pose roll re-rolled, whose rolled pose broke against the wings and was repaired, and where a pair was placed first
-const sweptRun = {};   // type -> { n, scale, under } over the run's swept-antenna beetle and grasshopper plates (CHECKS.sweptForelegs, for POST.sweptReport)
+const sweptRun = {};   // type -> { n, scales, under } over the run's swept-antenna beetle and grasshopper plates (CHECKS.sweptForelegs, for POST.sweptReport); the scales
+// themselves, not their sum, so a sharded run (#77) adds them in seed order and its mean is the serial run's to the last bit
 const SWEPT_SCALE = 0.7;   // #47: the plate scale a swept plate is counted under in POST.sweptReport
 const ANT_LEG_CLEAR = 2.5;   // antLegs: asserted clearance beyond the leg's half width (engine: 3 + the antenna's half width, at least 3.65)
 const ptSegDist = (p, u, v) => { const wx = v[0] - u[0], wy = v[1] - u[1], l2 = wx * wx + wy * wy, t = l2 ? Math.max(0, Math.min(1, ((p[0] - u[0]) * wx + (p[1] - u[1]) * wy) / l2)) : 0; return Math.hypot(p[0] - u[0] - wx * t, p[1] - u[1] - wy * t); };
@@ -1014,8 +1024,8 @@ const CHECKS = {
   sweptForelegs(meta, svg, fail) {
     if ((meta.type !== 'beetle' && meta.type !== 'grasshopper') || !meta.antennae || meta.antennae.pose !== 'swept') return;
     const an = meta.antennae, fore = meta.legs[0];
-    const R = sweptRun[meta.type] ||= { n: 0, scale: 0, under: 0 };
-    R.n++; R.scale += meta.scale; if (meta.scale < SWEPT_SCALE) R.under++;
+    const R = sweptRun[meta.type] ||= { n: 0, scales: [], under: 0 };
+    R.n++; R.scales.push(meta.scale); if (meta.scale < SWEPT_SCALE) R.under++;
     if (an.reasons.includes('legs')) fail('swept antenna re-rolled for a leg (' + meta.fam + ', legs ' + meta.legRoll.pose + '; reasons ' + an.reasons.join(',') + ')');
     if (an.why && an.tip[1] < meta.head.top) fail('swept antenna laid forward in its fallback pose after ' + an.why + ' (' + meta.fam + ')');
     if (fore.pts.slice(2, 5).some(p => p[1] < meta.head.top)) fail('swept plate with the fore femur or tibia ahead of the head (' + meta.fam + ', legs ' + meta.legRoll.pose + ')');
@@ -2989,7 +2999,7 @@ const POST = {
   // #47 the run's swept-antenna beetle and grasshopper plates: none under SWEPT_SCALE, and their mean plate scale (reported)
   sweptReport(fail) {
     for (const t in sweptRun) if (sweptRun[t].under) fail(sweptRun[t].under + ' swept-antenna ' + t + ' plates under scale ' + SWEPT_SCALE, t);
-    console.log('#47 swept-antenna plates:', Object.keys(sweptRun).sort().map(t => t + ' ' + sweptRun[t].n + ' (mean scale ' + (sweptRun[t].scale / sweptRun[t].n).toFixed(3) + ')').join(', ') || 'none');
+    console.log('#47 swept-antenna plates:', Object.keys(sweptRun).sort().map(t => t + ' ' + sweptRun[t].n + ' (mean scale ' + (sweptRun[t].scales.reduce((a, b) => a + b, 0) / sweptRun[t].n).toFixed(3) + ')').join(', ') || 'none');
   },
   // #26 the run's cicadas: the median plate scale at least CIC.scale (0.81 before #26), once the run has CIC_MIN of them
   cicScale(fail) {
@@ -3128,8 +3138,9 @@ const POST = {
 
 // ---- the run: arguments, the seed loop over the selected checks, the report ----
 const NAMES = [...Object.keys(PRE), ...Object.keys(CHECKS), ...Object.keys(POST)];
+const JOBS_DEFAULT = Math.max(1, os.cpus().length - 2);   // worker processes when --jobs is not given: leave two cores to the machine
 function parseArgs(argv) {
-  let n = null, from = 1, to = null, only = null;
+  let n = null, from = 1, to = null, only = null, jobs = JOBS_DEFAULT, worker = false;
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--only') {
@@ -3139,7 +3150,12 @@ function parseArgs(argv) {
       const m = /^(\d+)-(\d+)$/.exec(argv[++i] || '');
       if (!m) throw new Error('--seeds wants a range A-B');
       from = +m[1]; to = +m[2];
-    } else if (/^\d+$/.test(a)) n = +a;
+    } else if (a === '--jobs') {
+      const v = argv[++i] || '';
+      if (!/^\d+$/.test(v) || +v < 1) throw new Error('--jobs wants a whole number of worker processes, 1 or more');
+      jobs = +v;
+    } else if (a === '--worker') worker = true;   // internal: a shard forked by the parent (runWorker)
+    else if (/^\d+$/.test(a)) n = +a;
     else throw new Error('unknown argument ' + a);
   }
   if (n !== null && to !== null) throw new Error('give N (seeds 1..N) or --seeds A-B, not both');
@@ -3147,22 +3163,104 @@ function parseArgs(argv) {
   if (from < 1 || to < from) throw new Error('--seeds range must be ascending and start at 1 or above');
   const bad = (only || []).filter(x => !NAMES.includes(x));
   if (bad.length) throw new Error('unknown check(s) ' + bad.join(', ') + '; the checks are: ' + NAMES.join(', '));
-  return { from, to, only };
+  return { from, to, only, jobs, worker };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
 const POST_FOR = { neuFamilies: ['neuFamily'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), orthShares: ['orthTegmen', 'orthWingSet', 'orthHindLeg'], cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), headSeen: Object.keys(headSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
-async function run() {
-  let args;
-  try { args = parseArgs(process.argv.slice(2)); } catch (e) { console.error(e.message); process.exit(2); }
-  const { from, to, only } = args, count = to - from + 1;
-  const pre = selected(PRE, only), checks = selected(CHECKS, only);
-  const post = Object.keys(POST).filter(k => !only || only.includes(k) || (POST_FOR[k] || []).some(c => only.includes(c)));
-  for (const k of checks) ran.add(k);
-  let sampledCount = 0;
-  for (const name of pre) PRE[name](onceFail(name));
+// ---- run state: what the seed loop accumulates, and how worker shards merge back into it (#77) ----
+// A parallel run splits the seed range into contiguous shards, one per worker process (this file with --worker). Each
+// worker runs the seed loop over its shard and sends back the value of every RUN_STATE entry; the parent folds them into
+// its own, shard by shard in seed order, before POST. So every module-scope accumulator the seed loop or a CHECKS entry
+// writes and POST or the report reads is one line here, with how two shards' values combine (a the earlier shard's, b the
+// later's). tests/parity.js fails on a module-scope accumulator missing from this table (or RUN_STATE_SKIP) and on any
+// difference between a --jobs 1 and a --jobs 3 report.
+const MERGE = {
+  sum: (a, b) => a + b,
+  concat: (a, b) => a.concat(b),
+  vec: (a, b) => a.map((x, i) => x + b[i]),   // a fixed-length tuple of counts
+  range: (a, b) => [Math.min(a[0], b[0]), Math.max(a[1], b[1])],   // [min, max] seen
+  // counts all the way down: numbers add, arrays concatenate, objects and Maps merge key by key (a key new in b goes
+  // last, as it first appeared last in seed order), anything else (a label such as dipStats' type) keeps a's
+  tree(a, b) {
+    if (typeof a === 'number') return a + b;
+    if (Array.isArray(a)) return a.concat(b);
+    if (a instanceof Map) { const m = new Map(a); for (const [k, v] of b) m.set(k, m.has(k) ? MERGE.tree(m.get(k), v) : v); return m; }
+    if (a && typeof a === 'object') { const o = { ...a }; for (const k of Object.keys(b)) o[k] = Object.hasOwn(o, k) ? MERGE.tree(o[k], b[k]) : b[k]; return o; }
+    if (a instanceof Set || typeof a === 'function') throw new Error('MERGE.tree cannot merge a ' + a.constructor.name + '; give the accumulator its own merge');
+    return a === undefined ? b : a;
+  },
+  // a run record holding the best value seen and the seed (and context) it came from: b's only when strictly better, as
+  // the seed loop's own strict test keeps the earliest seed on a tie
+  min: (key, ...carry) => (a, b) => b[key] < a[key] ? { ...a, [key]: b[key], ...Object.fromEntries(carry.map(c => [c, b[c]])) } : a,
+  max: (key, ...carry) => (a, b) => b[key] > a[key] ? { ...a, [key]: b[key], ...Object.fromEntries(carry.map(c => [c, b[c]])) } : a,
+  fields: spec => (a, b) => { const o = { ...a }; for (const k in spec) o[k] = spec[k](a[k], b[k]); return o; },   // per field, the rest kept from a
+  each: f => (a, b) => { const o = { ...a }; for (const k of Object.keys(b)) o[k] = Object.hasOwn(o, k) ? f(o[k], b[k]) : b[k]; return o; },   // per key of a keyed table
+  all: (...fs) => (a, b) => fs.reduce((o, f) => f(o, b), a),
+};
+const refill = (target, v) => {   // a const accumulator takes its merged value in place, so the code that reads it by name sees it
+  if (v === target) return;   // a merge that kept a
+  if (target instanceof Map || target instanceof Set) throw new Error('refill: a module-scope Map / Set accumulator needs its own setter');
+  if (Array.isArray(target)) { target.length = 0; for (const x of v) target.push(x); return; }
+  for (const k of Object.keys(target)) delete target[k];
+  Object.assign(target, v);
+};
+const obj = (o, merge) => ({ get: () => o, set: v => refill(o, v), merge });
+const best = (minmax, key, ...carry) => MERGE.all(MERGE.fields({ n: MERGE.sum }), MERGE[minmax](key, ...carry));   // { n, best, seed, ... }
+const RUN_STATE = {
+  failures: obj(failures, MERGE.concat),
+  commons: obj(commons, MERGE.concat),
+  typeCount: obj(typeCount, MERGE.tree),
+  wingSigs: obj(wingSigs, MERGE.tree),
+  bodySigs: obj(bodySigs, MERGE.tree),
+  elTotal: { get: () => elTotal, set: v => { elTotal = v; }, merge: MERGE.sum },
+  sampledCount: { get: () => sampledCount, set: v => { sampledCount = v; }, merge: MERGE.sum },
+  ephHab: obj(ephHab, MERGE.tree),
+  ephSeen: obj(ephSeen, MERGE.tree),
+  ephSeenPlates: { get: () => ephSeenPlates, set: v => { ephSeenPlates = v; }, merge: MERGE.sum },
+  ephHindPlates: { get: () => ephHindPlates, set: v => { ephHindPlates = v; }, merge: MERGE.sum },
+  dipStats: obj(dipStats, MERGE.tree),
+  dipSet: obj(dipSet, MERGE.tree),
+  lepSet: obj(lepSet, MERGE.fields({ sets: MERGE.tree, fams: MERGE.tree, cov: MERGE.tree, poses: MERGE.tree, hidden: MERGE.vec, brushMid: MERGE.vec })),
+  craneRun: obj(craneRun, MERGE.tree),
+  beeSeen: obj(beeSeen, MERGE.tree),
+  beeSeenPlates: { get: () => beeSeenPlates, set: v => { beeSeenPlates = v; }, merge: MERGE.sum },
+  neuSeen: obj(neuSeen, MERGE.tree),
+  neuSeenPlates: { get: () => neuSeenPlates, set: v => { neuSeenPlates = v; }, merge: MERGE.sum },
+  neuFamRun: obj(neuFamRun, MERGE.tree),
+  orth72Run: obj(orth72Run, MERGE.tree),
+  orthSeen: obj(orthSeen, MERGE.tree),
+  orthSeenPlates: { get: () => orthSeenPlates, set: v => { orthSeenPlates = v; }, merge: MERGE.sum },
+  cicSet: obj(cicSet, MERGE.tree),
+  cicSeen: obj(cicSeen, MERGE.tree),
+  cicSeenPlates: { get: () => cicSeenPlates, set: v => { cicSeenPlates = v; }, merge: MERGE.sum },
+  cicRun: obj(cicRun, MERGE.tree),
+  hymSeen: obj(hymSeen, MERGE.tree),
+  odoSeen: obj(odoSeen, MERGE.tree),
+  odoRun: obj(odoRun, MERGE.all(MERGE.min('cell', 'cellSeed'), MERGE.max('overlap', 'overlapSeed'))),
+  odoHab: obj(odoHab, MERGE.tree),
+  headSeen: obj(headSeen, MERGE.tree),
+  lepInk: obj(lepInk, MERGE.each(best('max', 'max', 'seed', 'art'))),
+  lepRun: { get: () => lepRun, set: v => { lepRun = v; }, merge: MERGE.sum },
+  laneRun: obj(laneRun, MERGE.each(best('min', 'worst', 'seed'))),
+  abdRun: obj(abdRun, MERGE.each(best('min', 'worst', 'seed', 'at'))),
+  elyRun: obj(elyRun, best('min', 'worst', 'seed', 'at')),
+  elyStyles: obj(elyStyles, MERGE.tree),
+  roveSeen: { get: () => roveSeen, set: v => { roveSeen = v; }, merge: MERGE.sum },
+  beetlePlates: { get: () => beetlePlates, set: v => { beetlePlates = v; }, merge: MERGE.sum },
+  beetleRun: obj(beetleRun, MERGE.fields({ n: MERGE.sum, wl: MERGE.range, pe: MERGE.range })),
+  colSeen: obj(colSeen, MERGE.tree),
+  colFams: obj(colFams, MERGE.tree),
+  colTally: obj(colTally, MERGE.tree),
+  legRun: obj(legRun, MERGE.tree),
+  sweptRun: obj(sweptRun, MERGE.tree),
+};
+const RUN_STATE_SKIP = ['ran', 'workers'];   // module-scope but not accumulated: ran is set from the arguments by every process alike, workers is the parent's own
+
+// the seed loop over seeds from..to: one plate per seed, the run counters, then every selected check
+async function seedLoop(from, to, checks) {
   for (let seed = from; seed <= to; seed++) {
     const { svg, meta } = E.generateInsectDetailed(seed);
     const key = meta.variant || meta.type;
@@ -3182,6 +3280,58 @@ async function run() {
     const ctx = { seed, sampled, get dev() { return devPlate ||= E.generateInsectDetailed(seed, { devicePx: DEV }); } };
     for (const name of checks) { const r = CHECKS[name](meta, svg, fail, ctx); if (r && r.then) await r; }   // lepInk rasterises (async)
   }
+}
+
+// contiguous shards of from..to, one per job, in seed order
+const shardRanges = (from, to, jobs) => Array.from({ length: jobs }, (_, i) => {
+  const n = to - from + 1;
+  return [from + Math.floor(n * i / jobs), from + Math.floor(n * (i + 1) / jobs) - 1];
+});
+const workers = new Set();   // live worker processes, killed if the parent exits first
+process.on('exit', () => { for (const w of workers) w.kill(); });
+// one worker over seeds a..b: resolves to its run state and whatever it printed (stderr passes straight through)
+function runShard([a, b], only) {
+  return new Promise((resolve, reject) => {
+    const argv = ['--worker', '--seeds', a + '-' + b, ...(only ? ['--only', only.join(',')] : [])];
+    const w = fork(__filename, argv, { serialization: 'advanced', stdio: ['ignore', 'pipe', 'inherit', 'ipc'] });   // advanced: Maps and Infinity survive
+    workers.add(w);
+    let out = '', state = null;
+    w.stdout.on('data', d => { out += d; });
+    w.on('message', m => { state = m; });
+    w.on('error', reject);
+    w.on('close', (code, signal) => {
+      workers.delete(w);
+      if (code === 0 && state) resolve({ state, out });
+      else { process.stdout.write(out); reject(new Error('check.js worker for seeds ' + a + '-' + b + ' ' + (signal ? 'killed by ' + signal : 'exited ' + code) + (state ? '' : ' without its run state'))); }   // what it printed before it died, then the error
+    });
+  });
+}
+// a worker: the seed loop over its shard, then its run state to the parent; no PRE, POST or report
+async function runWorker(from, to, checks) {
+  if (!process.send) throw new Error('--worker is internal: check.js forks its shards with it');
+  await seedLoop(from, to, checks);
+  const state = {};
+  for (const k in RUN_STATE) state[k] = RUN_STATE[k].get();
+  await new Promise((resolve, reject) => process.send(state, e => e ? reject(e) : resolve()));
+  process.disconnect();
+}
+
+async function run() {
+  let args;
+  try { args = parseArgs(process.argv.slice(2)); } catch (e) { console.error(e.message); process.exit(2); }
+  const { from, to, only, worker } = args, count = to - from + 1, jobs = Math.min(args.jobs, count);
+  const pre = selected(PRE, only), checks = selected(CHECKS, only);
+  const post = Object.keys(POST).filter(k => !only || only.includes(k) || (POST_FOR[k] || []).some(c => only.includes(c)));
+  for (const k of checks) ran.add(k);
+  if (worker) return runWorker(from, to, checks);
+  // --jobs 1 runs the seed loop here; otherwise the shards start first and run while PRE does
+  const shards = jobs > 1 ? Promise.all(shardRanges(from, to, jobs).map(r => runShard(r, only))) : null;
+  for (const name of pre) PRE[name](onceFail(name));
+  if (shards) {
+    const results = await shards;
+    for (const k in RUN_STATE) { const e = RUN_STATE[k]; e.set(results.reduce((acc, r) => e.merge(acc, r.state[k]), e.get())); }
+    for (const r of results) process.stdout.write(r.out);
+  } else await seedLoop(from, to, checks);
   for (const name of post) POST[name](onceFail(name));
 
   console.log('seeds checked:', count, ...(from === 1 ? [] : ['(' + from + '-' + to + ')']));
@@ -3206,4 +3356,5 @@ async function run() {
   console.log('OK');
 }
 
-run().catch(e => { console.error(e); process.exit(1); });
+module.exports = { RUN_STATE, RUN_STATE_SKIP };   // for tests/parity.js
+if (require.main === module) run().catch(e => { console.error(e); process.exit(1); });
