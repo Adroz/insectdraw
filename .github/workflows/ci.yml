@@ -1,13 +1,15 @@
 # CI for the e-ink contract (spec #32, ticket #37).
 #
-# On every push to main and every pull request this runs the two gates from the "Verify before claiming
-# done" block in CLAUDE.md:
-#   node tests/check.js 300   the structural invariant check: determinism, fit, legs / antennae / head
+# On every push to main and every pull request this runs gates from the "Verify before claiming done"
+# block in CLAUDE.md:
+#   node tests/check.js 300 --jobs 4   the structural invariant check: determinism, fit, legs / antennae / head
 #                             assertions, wing and body signature uniqueness, the 0.5 px stroke floor and,
 #                             for every seed, the device plate at 440 px (1.0 device px stroke floor,
 #                             2.5 device px pitch floor, subtitle rule, no rng shift).
 #   npm test                  the raster survival gate (tests/eink.js): 39 device plates rasterised with
 #                             sharp through the panel's exact pipeline, per-layer survival against the floors.
+#   node tests/pages.js       the three pages in headless Chrome.
+#   npm run check:parity      (its own job) check.js sharded = serial, see below.
 #
 # 300 seeds, not the 3000 of `npm run check`: each seed now also draws the device plate twice (pass 1 for
 # the scale, pass 2 with the floors, then once more for the determinism assertion), so 3000 seeds take

@@ -24,12 +24,13 @@ const fail = msg => { bad++; console.log('FAIL', msg); };
 // ---- 1. static: the merge table covers every module-scope accumulator ----
 const { RUN_STATE, RUN_STATE_SKIP } = require('./check');
 const covered = new Set([...Object.keys(RUN_STATE), ...RUN_STATE_SKIP]);
+const STATE_CONST = /^const [a-z]\w* = (\{|\[|new (Map|Set)\b|-?\d|Infinity)/;
 const declared = [];
 for (const line of fs.readFileSync(CHECK, 'utf8').split('\n')) {
-  let m = /^let (.*?);/.exec(line);
-  if (m) { for (const d of m[1].split(',')) { const n = /^\s*(\w+)\s*=/.exec(d); if (n) declared.push(n[1]); } continue; }
-  m = /^const ([a-z]\w*) = (\{|\[|new (Map|Set)\b|-?\d|Infinity)/.exec(line);
-  if (m) declared.push(m[1]);
+  const m = /^let (.*?);/.exec(line);
+  if (m) { for (const d of m[1].split(',')) { const n = /^\s*(\w+)\s*(=|$)/.exec(d); if (n) declared.push(n[1]); } continue; }
+  // every declarator of a const line that starts with a lower-case one (`const a = {}, b = 0;`)
+  if (STATE_CONST.test(line)) for (const d of line.matchAll(/(?:^const |, )([a-z]\w*) = (?:\{|\[|new (?:Map|Set)\b|-?\d|Infinity)/g)) declared.push(d[1]);
 }
 const missing = declared.filter(n => !covered.has(n)), stale = [...covered].filter(n => !declared.includes(n));
 if (missing.length) fail('module-scope state not in check.js RUN_STATE (or RUN_STATE_SKIP): ' + missing.join(', '));

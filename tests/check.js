@@ -3027,6 +3027,7 @@ const MERGE = {
     if (Array.isArray(a)) return a.concat(b);
     if (a instanceof Map) { const m = new Map(a); for (const [k, v] of b) m.set(k, m.has(k) ? MERGE.tree(m.get(k), v) : v); return m; }
     if (a && typeof a === 'object') { const o = { ...a }; for (const k of Object.keys(b)) o[k] = Object.hasOwn(o, k) ? MERGE.tree(o[k], b[k]) : b[k]; return o; }
+    if (a instanceof Set || typeof a === 'function') throw new Error('MERGE.tree cannot merge a ' + a.constructor.name + '; give the accumulator its own merge');
     return a === undefined ? b : a;
   },
   // a run record holding the best value seen and the seed (and context) it came from: b's only when strictly better, as
@@ -3039,6 +3040,7 @@ const MERGE = {
 };
 const refill = (target, v) => {   // a const accumulator takes its merged value in place, so the code that reads it by name sees it
   if (v === target) return;   // a merge that kept a
+  if (target instanceof Map || target instanceof Set) throw new Error('refill: a module-scope Map / Set accumulator needs its own setter');
   if (Array.isArray(target)) { target.length = 0; for (const x of v) target.push(x); return; }
   for (const k of Object.keys(target)) delete target[k];
   Object.assign(target, v);
@@ -3138,7 +3140,7 @@ function runShard([a, b], only) {
     w.on('close', (code, signal) => {
       workers.delete(w);
       if (code === 0 && state) resolve({ state, out });
-      else reject(new Error('check.js worker for seeds ' + a + '-' + b + ' ' + (signal ? 'killed by ' + signal : 'exited ' + code) + (state ? '' : ' without its run state')));
+      else { process.stdout.write(out); reject(new Error('check.js worker for seeds ' + a + '-' + b + ' ' + (signal ? 'killed by ' + signal : 'exited ' + code) + (state ? '' : ' without its run state'))); }   // what it printed before it died, then the error
     });
   });
 }
