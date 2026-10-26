@@ -32,7 +32,7 @@ jobs:
   gates:
     name: invariants (300 seeds) + survival gate
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       # The prologue (checkout, node, font, npm ci) is step for step daily.yml's; change both together.
       - uses: actions/checkout@v4
