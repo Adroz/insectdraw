@@ -3147,6 +3147,7 @@ const RUN_STATE = {
   lepSet: obj(lepSet, MERGE.fields({ sets: MERGE.tree, fams: MERGE.tree, cov: MERGE.tree, poses: MERGE.tree, hidden: MERGE.vec, brushMid: MERGE.vec })),
   craneRun: obj(craneRun, MERGE.tree),
   beeSeen: obj(beeSeen, MERGE.tree),
+  basketRun: obj(basketRun, MERGE.tree),
   beeSeenPlates: { get: () => beeSeenPlates, set: v => { beeSeenPlates = v; }, merge: MERGE.sum },
   neuSeen: obj(neuSeen, MERGE.tree),
   neuSeenPlates: { get: () => neuSeenPlates, set: v => { neuSeenPlates = v; }, merge: MERGE.sum },
