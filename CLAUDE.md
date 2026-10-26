@@ -213,7 +213,7 @@ contract for changes.
 ## Verify before claiming done
 
 ```
-node tests/check.js 3000                 # invariants + determinism + wing uniqueness + lane floor + abdomen and elytral pitch (laneSep, abdPitch and elytraPitch run on the default and the device plate); seed shards run in parallel workers (--jobs J, default cores - 2; --jobs 1 is serial, about 50 min)
+node tests/check.js 3000                 # invariants + determinism + wing uniqueness + lane floor + abdomen and elytral pitch (laneSep, abdPitch and elytraPitch run on the default and the device plate); seed shards run in parallel workers (--jobs J, default cores - 2: about 12 min on the 14-core Mac while other runs share it; --jobs 1 is serial, about 55 min)
 node tests/check.js 300 --only antennae  # just the named checks (a,b,...), in seconds; --seeds 100-130 instead of N takes a seed range; an unknown or empty name list exits 2 and lists them
 npm test                                 # e-ink survival gate: per-layer survival at device size 440
 npm run check:parity                     # check.js --jobs 1 vs --jobs 3 on seeds 1-150 print the same report, and every module-scope accumulator is in its RUN_STATE merge table (a few minutes)
