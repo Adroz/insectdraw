@@ -105,4 +105,4 @@ not apply to a closed pair.
 **Outline and set spread** (the same rolls mapped wider, no new draws): a damselfly's chord 0.12-0.21 of the span and its
 length 0.8-1.2 (a dragonfly's chord was tried at 0.13-0.23: narrow hindwings swept back lose their anal lobe, `odoHindwing`,
 so it stays 0.16-0.23); the open damselfly's hindwing a further 8-30 degrees (under ~11 the separation step turned every smaller roll
-into one drawn set) and the lestid's forewing 15-48.
+into one drawn set) and the lestid's forewing 18-48.

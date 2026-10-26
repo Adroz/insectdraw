@@ -370,8 +370,8 @@ const ODO_FAMS = { dragonfly: ['aeshnid', 'libellulid', 'gomphid', 'corduliid'],
 const ODO_PROFILE = { aeshnid: ['rod', 'waisted'], libellulid: ['broad'], gomphid: ['club'], corduliid: ['waisted'], coenagrionid: ['rod'], lestid: ['rod'], calopterygid: ['rod'], platycnemidid: ['rod'] };
 const ODO_HAB = { broad: 6, taper: 0.7, club: 1.3, waist: 0.75, rod: 1.4, lestid: 15, tibia: 1.8, fw: [-10, 15], fwLestid: [20, 35], hw: [0, 12], poseShare: 0.15,
   // #73 the open damselfly's set, wider: the hindwing a further 8..30 degrees (under ~11 the pair is turned apart to meet only
-  // at the roots anyway, so smaller rolls all drew one set), the lestid's forewing 15..48 (Lestes rests half to well open)
-  dam: { fw: [-16, 20], hw: [8, 30] }, damLestid: { fw: [15, 48], hw: [10, 28] } };
+  // at the roots anyway, so smaller rolls all drew one set), the lestid's forewing 18..48 (Lestes rests half to well open)
+  dam: { fw: [-16, 20], hw: [8, 30] }, damLestid: { fw: [18, 48], hw: [10, 28] } };
 const ODO_PATTERNS = ['plain', 'banded', 'spotted', 'rings', 'tipdark'];   // the dorsal pattern families every odonate run must show
 const odoHab = { fam: {}, pose: {}, mark: {}, plates: 0 };   // over the run, for POST.odoHabitus
 // #27 odonate and butterfly heads, from the references and the ticket, stated here rather than read from the engine:
