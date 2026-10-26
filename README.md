@@ -190,7 +190,11 @@ margin-terminating vein ends on an outline sample.
   platycnemidid, a ladder on a calopterygid, and its common name follows (#17).
   Both suborders roll a family habitus with the body (#48,
   `docs/research-odonata-habitus.md`): abdomen width profile, dorsal pattern,
-  wing set, leg pose. The dragonfly hindwing is widest at its
+  wing set, leg pose. Since #73 the wings carry pigment by family (dark bases,
+  an amber costal wash, nodal spots, bands, dark tips, a whole-wing tone; one
+  hatch at the plate pitch, never a fill, kept off the outline, and gated at
+  1 bit by `odoInk`), and a damselfly may rest with its wings closed back over
+  the abdomen. The dragonfly hindwing is widest at its
   base with an anal lobe against the body, the two wings meet only at their
   roots (swept apart until they do), the arculus is a short step from the
   sectors' stem to the triangle, the pterostigma is 4–8% of the span, and no

@@ -2259,6 +2259,23 @@ const LEGS_SWEPT = { fore: { F: [0, 15], tib: [15, 45], T: [5, 20], safe: [5, 8,
 // for that pose, per pair, over LEG_POSES'; legs folded under the thorax out of sight would leave only half-hidden tarsi)
 const LEGS_ODONATA = { spines: 1, spineSeg: 'both', spineSide: 'inner', spineLen: [0.8, 1.2], spineSp: [3.5, 5.5], spurs: [0, 0], tarsomeres: [3, 3], tibR: [0.92, 1.08], hindK: [1.2, 1.4], poses: { basket: 2, tucked: 1 },
   poseAng: { tucked: [{ F: [-72, -58], tib: [-112, -92], T: [-15, -5] }, { F: [-55, -40], tib: [-110, -90], T: [-15, -5] }, { F: [-30, -15], tib: [-100, -80], T: [-15, -5] }] } };
+// #73 odonate wing pigment (docs/research-odonata-habitus.md "Wing pigment"): the patch kinds an entry's wingPig odds pick
+// from, each a band across the wing from u to u + w of its span (fractions), reaching s of the chord from the costa (1 = the
+// whole chord), on the hindwing w times hind and on the forewing times fore (0: the hindwing alone); drawn as one hatch at the
+// plate pitch, never a fill. basal: the dark wing bases (Libellula depressa, Epitheca bimaculata; amber in Sympetrum,
+// Hetaerina); wash: an amber costal field from the base (Sympetrum flaveolum, Anax, Argia); nodal: the costal spot at the
+// nodus (L. quadrimaculata); band: a dark band across the wing (Sympetrum pedemontanum, Calopteryx splendens, Megaloprepus,
+// Orolestes); tips: dark apices (C. haemorrhoidalis, L. pulchella); full: the whole wing toned past its base (C. virgo,
+// Aeshna grandis), drawn alone
+const ODO_PIG_KINDS = {
+  basal: { u: [0, 0], w: [0.1, 0.36], s: [1, 1], hind: [1.2, 2.0], fore: [0, 1] },
+  wash: { u: [0, 0], w: [0.35, 0.75], s: [0.25, 0.85], hind: [1, 1] },   // to the nodus or short of the stigma: the costal field converges under it (odoInk)
+  nodal: { u: [0.36, 0.42], w: [0.07, 0.13], s: [0.3, 0.6], hind: [1, 1] },
+  band: { u: [0.3, 0.6], w: [0.12, 0.26], s: [1, 1], hind: [1, 1] },
+  tips: { u: [0.78, 0.9], w: [0.3, 0.3], s: [1, 1], hind: [1, 1] },
+  full: { u: [0.06, 0.2], w: [1, 1], s: [1, 1], hind: [1, 1], pitchK: 1.3 },
+};
+const ODO_PIG_FORE0 = 0.4;   // a basal patch's odds of lying on the hindwing alone (Epitheca, Sympetrum danae)
 // #48 abdomen width profiles (docs/research-odonata-habitus.md): anchors [t, half width / the widest] up to the tip, which
 // the tip shape adds; rod is the order's own anchors (P.abdAnchors) with the widest point slid as before. broad: the
 // libellulid abdomen, widest at S3-S4 and tapering from there; club: the gomphid's slender mid abdomen and S1-S2 swelling,
@@ -2646,6 +2663,8 @@ const ORDERS = {
     legs: { base: LEGS_ODONATA },
     // #48 wing set (degrees, + swept back toward the tail): the forewing's sweep at its root, the hindwing a further hw
     wingSet: { fw: [-10, 15], hw: [0, 12] },
+    // #73 wing pigment: per family, each ODO_PIG_KINDS kind's odds (rolled independently; full stands alone)
+    wingPig: { aeshnid: { basal: 0.55, wash: 0.55, full: 0.2 }, libellulid: { basal: 0.6, wash: 0.2, nodal: 0.4, band: 0.35, tips: 0.25 }, gomphid: { basal: 0.55, wash: 0.55 }, corduliid: { basal: 0.7, wash: 0.4, nodal: 0.2, tips: 0.2 } },
     ant: { base: { ref: 'hw', len: [0.12, 0.22], seg: [4, 7], socket: [0.14, 0.12], kinds: { setaceous: 1 } } },
     headScaleP5: 0.99,
     wingRoots: [0.5, 0.8],
@@ -3013,7 +3032,16 @@ const ORDERS = {
     thorax: { front: [0.4, 0.55], peak: [0.4, 0.55], hump: [0, 0.05], waist: [0, 0], lenK: [0.95, 1.2] },
     head: { outline: 'transverse', ratio: [2.3, 2.9], cx: [0.36, 0.4], rx: [0.09, 0.11], ry: [0.38, 0.46], cy: [0, 0.04], ocelli: 3, oc: 'triangle', ocY: [0.3, 0.45], styles: { lattice: 3, stipple: 2 } },
     legs: { base: LEGS_ODONATA, platycnemidid: { tibFlat: [2.1, 2.6] } },   // tibFlat: the mid and hind tibiae this many times as wide, leaf-like (#48)
-    wingSet: { fw: [-10, 15], hw: [0, 12], fams: { lestid: { fw: [20, 35], hw: [0, 8] } } },   // #48: the lestid holds its wings half open
+    // #48: the lestid holds its wings half open; #73 the hindwing a further 8-30 degrees (under ~11 the pair was turned apart to
+    // meet only at the roots anyway, so the smaller rolls all drew one set), the lestid's forewing 15-48
+    wingSet: { fw: [-16, 20], hw: [8, 30], fams: { lestid: { fw: [15, 48], hw: [10, 28] } } },
+    // #73 wing pigment (see the dragonfly's): the demoiselles' bands, dark wings, tips and red bases; Megaloprepus' band and
+    // Argia's smoky wash among the coenagrionids, Orolestes' bands among the spreadwings; Platycnemis clear
+    // #73 the resting pose: per family, the odds of resting with the wings closed back over the abdomen (the forewing's sweep
+    // fw, the hindwing a further hw, which may be less: it then shows outside the forewing); the spreadwings rest half open
+    // (Sympecma closes them)
+    rest: { fams: { coenagrionid: 0.4, lestid: 0.2, calopterygid: 0.5, platycnemidid: 0.5 }, fw: [52, 84], hw: [-9, 11] },
+    wingPig: { coenagrionid: { wash: 0.15, tips: 0.1, band: 0.1 }, lestid: { band: 0.15 }, calopterygid: { band: 0.45, full: 0.15, basal: 0.3, tips: 0.3 }, platycnemidid: {} },
     // socketOc (#27): the socket's radius at most this times the ocellus's, so the dorsal head reads as three ocelli between the eyes (head-odo-damselfly)
     ant: { base: { ref: 'hw', len: [0.12, 0.22], seg: [4, 7], socket: [0.12, 0.25], kinds: { setaceous: 1 }, socketOc: 0.5 } },
     headScaleP5: 1.02,
@@ -3530,7 +3558,7 @@ function rollBodyGenes(type, P) {
   // further sweep, in degrees, + toward the tail; the wing block reads it and draws the venation unchanged. #51: an entry
   // with sets picks one by weight first (B.wingSet.set) and rolls its fw / hw, and abdWing, the abdomen over the forewing's
   // length, when the table has it ----
-  B.wingSet = null;
+  B.wingSet = null; B.rest = null;
   if (order.wingSet) {
     const WS = Object.assign({}, order.wingSet, (order.wingSet.fams || {})[fam]);
     if (WS.sets) {
@@ -3538,8 +3566,15 @@ function rollBodyGenes(type, P) {
       B.wingSet = { set, abdWing: WS.abdWing ? rr(WS.abdWing) : 0, fw: rr(SR.fw), hw: rr(SR.hw) };   // no abdWing on the moth's table (#52): its wing length is the span gene
       B.sig.push('ws' + set[0] + (WS.abdWing ? Math.round(B.wingSet.abdWing * 10) : '') + '/' + Math.round(B.wingSet.fw / 8) + '/' + Math.round(B.wingSet.hw / 6));
     } else {
-      B.wingSet = { fw: rr(WS.fw), hw: rr(WS.hw) };
+      // #73 an entry with a resting pose (rest: the damselfly) takes it from the same two draws, so no later roll moves: the
+      // forewing's draw below the family's odds closes the wings (B.rest, rescaled onto the closed sweep), above it is the set
+      const RS = order.rest, u = rng(), v = rng(), p = RS ? RS.fams[fam] || 0 : 0, closed = u < p, uo = closed ? u / p : (u - p) / (1 - p);
+      B.wingSet = { fw: lerp(WS.fw[0], WS.fw[1], uo), hw: lerp(WS.hw[0], WS.hw[1], v) };
       B.sig.push('ws' + Math.round(B.wingSet.fw / 5) + ':' + Math.round(B.wingSet.hw / 4));
+      if (RS) {
+        B.rest = { closed, fw: closed ? lerp(RS.fw[0], RS.fw[1], uo) : 0, hw: closed ? lerp(RS.hw[0], RS.hw[1], v) : 0 };
+        B.sig.push(closed ? 'rc' + Math.round(B.rest.fw / 4) + ':' + Math.round(B.rest.hw / 3) : 'ro');
+      }
     }
   }
   // #52 the leg pose against the wing set (no rng): a lepidopteran's legs fold away under square or forward wings, but a
@@ -3712,7 +3747,27 @@ function drawPlate(seed, opts, dev) {
   partStart(); placeLegs(C); partEnd('legs');           // #8: settles the pose against the wing outlines (no rng) and draws the legs
   partStart(); drawAntennae(C); partEnd('antennae');   // after the wings since #6: the pose is checked against their outlines
   partStart(); drawTails(C); partEnd('tails');   // #50 last: the tails are shortened to the room the rest of the plate leaves
+  rollOdoPigment(C);   // #73 after every other draw: the wing pigment's genes, read by the wing block's deferred hatch (draws nothing)
   return assemblePlate(C);
+}
+
+// #73 the odonate wing pigment (the entry's wingPig odds over ODO_PIG_KINDS):
+// rolled at the very end of the plate's stream, so no draw of the plate moves; each kind draws its odds and ranges whether
+// it is on or not; a whole-wing tone stands alone. On bodySig and wingSig; the wing block's deferred hatch draws it.
+function rollOdoPigment(C) {
+  const { order, B, meta } = C;
+  if (!order.wingPig) return;
+  const rr = r => randRange(r[0], r[1]), odds = order.wingPig[B.fam] || {}, patches = [];
+  for (const name of Object.keys(ODO_PIG_KINDS)) {
+    const K = ODO_PIG_KINDS[name], on = rng() < (odds[name] || 0), u = rr(K.u);
+    const q = { name, u, v: u + rr(K.w), s: rr(K.s), hind: rr(K.hind), fore: K.fore && rng() < ODO_PIG_FORE0 ? 0 : K.fore ? rr(K.fore) : 1 };
+    if (on) patches.push(q);
+  }
+  const full = patches.find(q => q.name === 'full');
+  B.wingPig = { patches: full ? [full] : patches, pitch: randRange(1.9, 3.2) };   // pitch: the hatch's (body units; never under ODO_PIG_PX at plate scale)
+  B.sig.push('pg' + (B.wingPig.patches.map(q => q.name[0] + Math.round(q.u * 10) + Math.round(q.v * 10) + (q.fore ? '' : 'h')).join('') || '-'));
+  meta.odoPig.patches = B.wingPig.patches;
+  meta.wingSig += ',' + (B.wingPig.patches.map(q => q.name[0]).join('') || '-');
 }
 
 // ---------- proportions ----------
@@ -6192,6 +6247,9 @@ const ODO_FAN_GAP = 2.4;   // body units between neighbouring lanes of a dragonf
 const ODO_TRI_H = 0.25;   // the discoidal triangle's strip at least this fraction of the chord gene deep at the arculus
 const ODO_CELL = 0.0135;   // the narrowest odonate cell, span fractions: a wing spans 228-270 plate px, so >= 3 px (#18; ~2 px read as stipple)
 const ODO_CELL_MIN = 3.3;   // and never under this many body units: a short wing (wingLen x len reaches ~190) on a plate scaled 0.93 still keeps 3 px (#48)
+const ODO_MID = 1.5;   // a closed damselfly wing keeps this far (body units) on its own side of the midline (#73)
+const ODO_PIG_HUG = 1.0;   // and stop this many plate px short of every vein, so the tone never runs the venation solid (the 1-bit gate)
+const ODO_PIG_PX = 2;   // the wing pigment's hatch lines at least this many plate px apart (#73; the e-ink hatch floor is ~1.8)
 const ODO_STRUCT = [75, 179];   // junction band of the structural odonate crossveins (discoidal sides, Ax1 / Ax2, the damselfly arculus): wide, so they are never dropped
 function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   const { type, order, L, meta, P, B, thorax } = C;
@@ -6222,7 +6280,12 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
   // (Ax1, Ax2; odo-damsel-ris1921), Calopterygidae a ladder on a broad wing that barely narrows to a stalk; every dragonfly a
   // ladder. The family is rolled with the body (P.fam, #48), so the wing, the abdomen, the legs and the name agree.
   const fam = P.fam;
+  meta.odoPig = { patches: [], hatch: [] };   // #73: the patches rolled last (rollOdoPigment), the hatch filled in at plate scale
   G.ladder = !dam || fam === 'calopterygid';
+  // #73 a damselfly's wing outline spread wider, the same rolls mapped: its chord 0.12-0.21 of its span (Coenagrion's narrow
+  // wing to Lestes' and Platycnemis' broader one) and its length 0.8-1.2 (the wings against the abdomen, short in Lestes,
+  // long in Platycnemis)
+  if (dam) { G.wF = lerp(0.12, 0.21, (G.wF - 0.13) / 0.06); G.len = lerp(0.8, 1.2, (G.len - 0.88) / 0.24); }
   if (fam === 'calopterygid') { G.petiole = lerp(0.07, 0.11, (G.petiole - 0.12) / 0.14); G.wF = lerp(0.2, 0.26, (G.wF - 0.13) / 0.06); }   // the same rolls, mapped onto a short stalk and a broad wing (#48)
   const Lw = P.wingLen * G.len, nodusX = Lw * G.nodus;
   const [tF, tH] = order.wingRoots;   // forewing / hindwing roots along the thorax (the damselfly's hind pair sits a little further forward)
@@ -6261,9 +6324,20 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     for (const [a, b] of [[fp, hp], [hp, fp]]) for (const p of a) if ((p[0] - x0) / (x1 - x0) > far && pointInPoly(p, b)) far = (p[0] - x0) / (x1 - x0);
     return far;
   };
+  // #73 closed at rest (B.rest): both wings swept back over the abdomen at the rolled angles, the forewing over the hindwing
+  // (drawn after it, below), each turned out a degree at a time until no point lies across the midline, where the left
+  // wings (the mirror image) would run through them (no rng); the roots' overlap is the pose, so ODO_ROOT does not apply
+  const closed = !!(B.rest && B.rest.closed);
+  meta.odoRest = { closed };
+  if (closed) {
+    fwD.theta = B.rest.fw; hwD.theta = B.rest.fw + B.rest.hw;
+    for (const wd of [fwD, hwD]) for (let k = 0; k < 40 && Math.min(...bodyPoly(wd).map(p => p[0])) < ODO_MID; k++) wd.theta -= 1;
+  } else
   // (a damselfly's stalked hindwing takes the whole separation while it can, so the forewing keeps its set: the lestid's half-open pose, #48)
   for (let k = 0; k < ODO_SWEEP_MAX && overlapFar() > ODO_ROOT; k++) if (hwD.theta < hindMax && (dam || k % 2 === 0)) hwD.theta += 1; else fwD.theta -= 1;
+  const wingEl0 = [];   // where each wing's elements start in L.wings
   for (const wd of wingDefs) {
+    wingEl0.push(L.wings.length);
     const { bx, by, w } = wd, pts = outlinePts(wd);
     const wing = makeWing([bx, by], wd.theta, pts, 0.8);
     const poly = wing.localPoly;
@@ -6370,6 +6444,7 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     S.stigma = Math.max(S.stigma, (psx1 - psx0) / apex[0]);   // along the costa, a fraction of the span (root to apex)
     for (const x of [psx0, psx1]) named.push({ a: 'C', ua: x / Lw, b: 'R1', ub: (x + psSkew) / Lw, reach: 0, bow: 0, ang: [60, 179], sw: SW.O });
     gaps.push(['C', 'R1', (psx0 - 1) / Lw, (psx1 + psSkew + 1) / Lw]);
+    const stigPoly = [[psx0, topAt(wing, psx0)], [psx1, topAt(wing, psx1)], [psx1 + psSkew, r1y(psx1 + psSkew)], [psx0 + psSkew, r1y(psx0 + psSkew)]];   // #73 the pigment's hatch keeps out of it
     // arculus: a heavy crossvein stepping from R2 through the fan to the median lane; the discoidal triangle (dragonfly)
     // or quadrilateral (damselfly) just below it; the bridge vein, an oblique from R1 to R2 behind the subnodus
     // (a damselfly's arculus stands square, a structural crossvein with its own band, and the quadrilateral's proximal side
@@ -6394,6 +6469,25 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
       rows2: true, rowsAt: 1.6, evenSites: true, gapNear: 0.25, cell: cellFn, cellMin: 3.2, siteMin: floorPitch(Math.max(ODO_CELL * Lw, ODO_CELL_MIN)), zig: G.zig, joinSw: SW.F, gaps, noPair: [['C', 'Sc'], ['Sc', 'R1']] });   // the antenodal strips carry only the named antenodals
     L.wings.push(...g.emit());
     L.wings.push(...costaEls(wing, x0, apex[0]));   // the costa itself, heavy (R7)
+    // #73 wing pigment (B.wingPig, rolled at the end of the plate's stream by rollOdoPigment, so no other draw moves): each
+    // patch a band across the wing (u..v of the span, s of the chord from the costa; on the hindwing v scaled by hind, on the
+    // forewing by fore, 0 leaving it bare), hatched as one tone over the venation at the plate pitch and kept off the
+    // outline and the pterostigma (one deferred element: the gene's pitch, never under ODO_PIG_PX plate px; on a device plate twice the pitch floor,
+    // as a second family over the mesh, which alone already runs near solid on the panel; no rng)
+    {
+      const wi = wingDefs.indexOf(wd), hind = wd.hind;
+      L.wings.push(sc => {
+        const P = B.wingPig, pig = P ? P.patches.map(q => {
+          const k = hind ? q.hind : q.fore, xa = Lw * q.u, xb = Math.min(Lw * 1.05, Lw * (q.u + (q.v - q.u) * k)), yb = q.s >= 1 ? w * 2 : lerp(-w * 0.5, w * 0.6, q.s);
+          return k ? [[xa, -w], [xb, -w], [xb, yb], [xa, yb]] : null;
+        }).filter(Boolean) : [];
+        if (!pig.length) return [];
+        const pk = Math.max(...P.patches.map(q => ODO_PIG_KINDS[q.name].pitchK || 1)), rec = { wing: wi, segs: [] };
+        meta.odoPig.hatch.push(rec);
+        rec.segs = clearOf(hatchUnion(pig, poly, Math.max(floorPitch(P.pitch * pk, 2), ODO_PIG_PX * pk / sc), [stigPoly]), [poly.concat([poly[0]]), stigPoly.concat([stigPoly[0]])], (ODO_PIG_HUG + SW_PX.H / 2) / sc).map(([a, b]) => [wing.T(a), wing.T(b)]);
+        return (rec.els = rec.segs.map(([a, b]) => lineEl(a, b, SW.D)));
+      });
+    }
     const st = grown.stats;
     S.joins += st.joins; S.dropped += st.dropped; S.minAngle = Math.min(S.minAngle, st.minAngle); S.maxAngle = Math.max(S.maxAngle, st.maxAngle);
     S.rungs += st.rungs; S.angSum += st.angSum; S.ladders += st.ladders; S.multi += st.multi; S.cellMin = Math.min(S.cellMin, st.cellMin);
@@ -6403,12 +6497,15 @@ function wingsOdonata(C) {   // (type === 'dragonfly' || type === 'damselfly')
     if (!dam) S.triOff = Math.min(S.triOff, arcSpec.pl && discSpecs[0].pl ? discSpecs[0].uMid - arcSpec.uMid : -Infinity);
     if (dam) S.qGap = Math.max(S.qGap, arcSpec.pl && discSpecs[0].pl ? Math.abs(discSpecs[0].uMid - arcSpec.uMid) : Infinity);
   }
+  if (closed) L.wings.push(...L.wings.splice(wingEl0[0], wingEl0[1] - wingEl0[0]));   // the forewing over the hindwing (its white fill hides what lies under it)
+  meta.odoRest.theta = wingDefs.map(wd => wd.theta);
   meta.wingStats = { joins: S.joins, dropped: S.dropped, minAngle: S.minAngle, maxAngle: S.maxAngle, rungs: S.rungs, meanAngle: S.rungs ? S.angSum / (2 * S.rungs) : 0, ladders: S.ladders, multi: S.multi,
     discoidal: S.discoidal, subnodus: S.subnodus,   // wings (of 2) whose discoidal triangle / quadrilateral and subnodus were placed
     cellMin: S.cellMin, stigma: S.stigma,   // the narrowest cell laid out on either wing (body units) and the longest pterostigma (fraction of its wing's span), #18
     antMin: S.antMin, antMax: S.antMax, ...(dam ? { qGap: S.qGap } : { triOff: S.triOff }) };   // antenodals placed on the sparest / densest wing; arculus to the quadrilateral (damselfly, largest) or to the triangle's base (dragonfly, smallest), span fractions
   meta.wingSig = ['odo', G.heavy ? 1 : 0, Math.round(G.len * 10), G.nV, S.multi, G.psStyle, G.ladder ? 1 : 0, G.bridge ? 1 : 0, Math.round(G.psL * 100), Math.round(G.nodus * 20), Math.round(G.tipY * 5), Math.round(G.sharp * 2),
-    Math.round(G.pow0 * 4), Math.round(G.antStep * 100), Math.round(G.ps0 * 20), Math.round(G.cells * 3), Math.round(G.wH * 5), Math.round(G.anal * 5), Math.round(G.period * 50)].join(',');
+    Math.round(G.pow0 * 4), Math.round(G.antStep * 100), Math.round(G.ps0 * 20), Math.round(G.cells * 3), Math.round(G.wH * 5), Math.round(G.anal * 5), Math.round(G.period * 50),
+    closed ? 'c' + Math.round(fwD.theta / 6) : 'o'].join(',');   // #73 the resting pose (rollOdoPigment adds the pigment kinds)
 }
 
 function wingsElytra(C) {   // (type === 'beetle')
@@ -6547,6 +6644,43 @@ function pronotalPattern(meta, kind, regions, outline, Pf) {
 // #53 an engraver's tone over shapes: parallel lines `step` apart (one direction, rising to the right) across each region,
 // cut to the region (less any holes, even-odd) and to the outline; the segments as [a, b] pairs, the slivers dropped
 const HATCH_DIR = norm([1, -1.3]);
+// #73 hatchRegions over several regions that may overlap, as one tone: the lines lie on one grid (offsets k x step), so a
+// line two regions share is drawn once, its intervals merged
+// #73 the parts of segments [a, b] at least d from every polyline in pls (sampled every d / 2; runs under d / 2 dropped)
+function clearOf(segs, pls, d) {
+  const cell = Math.max(d, 1), grid = new Map(), key = (i, j) => i * 100003 + j;
+  for (const pl of pls) for (let i = 0; i + 1 < pl.length; i++) {
+    const a = pl[i], b = pl[i + 1], i0 = Math.floor((Math.min(a[0], b[0]) - d) / cell), i1 = Math.floor((Math.max(a[0], b[0]) + d) / cell), j0 = Math.floor((Math.min(a[1], b[1]) - d) / cell), j1 = Math.floor((Math.max(a[1], b[1]) + d) / cell);
+    for (let x = i0; x <= i1; x++) for (let y = j0; y <= j1; y++) { const k = key(x, y); if (!grid.has(k)) grid.set(k, []); grid.get(k).push([a, b]); }
+  }
+  const free = p => { const g = grid.get(key(Math.floor(p[0] / cell), Math.floor(p[1] / cell))); return !g || g.every(([a, b]) => ptSeg(p, a, b) >= d); };
+  const out = [];
+  for (const [a, b] of segs) {
+    const L = vlen(sub(b, a)), n = Math.max(1, Math.ceil(L / (d / 2)));
+    let run = null;
+    for (let k = 0; k <= n; k++) {
+      const p = lerpP(a, b, k / n), ok = free(p);
+      if (ok && !run) run = [p, p]; else if (ok) run[1] = p;
+      if ((!ok || k === n) && run) { if (vlen(sub(run[1], run[0])) >= d / 2) out.push(run); run = null; }
+    }
+  }
+  return out;
+}
+function hatchUnion(regions, outline, step, holes) {
+  const byLine = new Map(), nn = [-HATCH_DIR[1], HATCH_DIR[0]], out = [];
+  for (const [a, b] of hatchRegions(regions, outline, step, holes)) {
+    const k = Math.round((a[0] * nn[0] + a[1] * nn[1]) / step), ta = a[0] * HATCH_DIR[0] + a[1] * HATCH_DIR[1], tb = b[0] * HATCH_DIR[0] + b[1] * HATCH_DIR[1];
+    if (!byLine.has(k)) byLine.set(k, []);
+    byLine.get(k).push([Math.min(ta, tb), Math.max(ta, tb)]);
+  }
+  for (const [k, iv] of byLine) {
+    iv.sort((x, y) => x[0] - y[0]);
+    const base = mul(nn, k * step), merged = [];
+    for (const r of iv) if (merged.length && r[0] <= merged[merged.length - 1][1] + 1e-6) merged[merged.length - 1][1] = Math.max(merged[merged.length - 1][1], r[1]); else merged.push(r.slice());
+    for (const [t0, t1] of merged) out.push([add(base, mul(HATCH_DIR, t0)), add(base, mul(HATCH_DIR, t1))]);
+  }
+  return out;
+}
 function hatchRegions(regions, outline, step, holes) {
   const d = HATCH_DIR, nn = [-d[1], d[0]], out = [];
   for (const R of regions) {
@@ -6848,6 +6982,12 @@ function assemblePlate(C) {
   const svg = tokens(head + order.join('') + '</g>' + caption + '</svg>');
   // a lepidopteran plate's wings alone (meta.lepInk) and their line art alone (meta.lepArt), placed, weighted and
   // mirrored exactly as on the plate, for the 1-bit ink gate (lepInk) in tests/check.js (#13)
+  // #73 a pigmented odonate plate's wings as drawn and without the pigment's hatch, for the 1-bit ink gate (odoInk)
+  if (meta.odoPig && meta.odoPig.hatch.some(h => h.els && h.els.length)) {
+    const pig = new Set(meta.odoPig.hatch.flatMap(h => h.els || []));
+    meta.odoInkSvg = tokens(head + mirrorEls(L.wings) + '</g></svg>'); meta.odoArtSvg = tokens(head + mirrorEls(L.wings.filter(e => !pig.has(e))) + '</g></svg>');
+    for (const h of meta.odoPig.hatch) delete h.els;
+  }
   if (meta.lepInk) {   // the lep veins are a deferred element (#67), the one L.wings resolved above (memoised per scale)
     const resolve = els => els.flatMap(e => typeof e === 'function' ? e(s, meta.weights) : [e]);
     meta.lepInkSvg = tokens(head + mirrorEls(resolve(meta.lepInk)) + '</g></svg>'); meta.lepArtSvg = tokens(head + mirrorEls(resolve(meta.lepArt)) + '</g></svg>');

@@ -58,3 +58,51 @@ a dark tip over S7-S10 or a pale one under a dark ring (*Ischnura*, *Lestes*), a
   back of the head, as on a specimen at rest.
 - Platycnemidid: the mid and hind tibiae 2.1-2.6 times as wide (`tibFlat`), drawn as flat leaves.
 - Gomphid eyes apart (`apart: 1`), aeshnid eyes larger (meeting along a longer seam).
+
+## Wing pigment and resting pose (#73)
+
+#48 left the perceptual minimum (`tests/perceptual.js`) under the floor because the thumbnail's ink is mostly wing and
+the wing set has little room (`ODO_ROOT`, `ODO_HIND_MAX`). #73 adds two levers on the wings themselves, both grounded in
+the families' field marks (Dijkstra & Lewington 2006; Wikipedia family and species pages; the refs above:
+`odo-hab-libellula.jpg` shows the dark wing bases, `odo-hab-calopteryx.jpg` the whole-wing tone, `odo-hab-lestes.jpg` the
+half-open spreadwing).
+
+**Pigment** (`ODO_PIG_KINDS`, the entries' `wingPig` odds, `B.wingPig`): each kind is a band across the wing, rolled
+independently per family, a whole-wing tone standing alone. The genes are rolled by `rollOdoPigment` after every other
+draw of the plate (the wing block's hatch is a deferred element that reads them at plate scale), so they move no draw.
+
+| kind | where | examples |
+|---|---|---|
+| basal | the wing base, wider on the hindwing (on the hindwing alone 40% of the time) | *Libellula depressa*, *Epitheca bimaculata*, *Sympetrum danae*; red bases of *Hetaerina* |
+| wash | an amber field along the costa from the base to the nodus or stigma | *Sympetrum flaveolum*, *Anax*, the smoky *Argia* |
+| nodal | a costal spot at the nodus | *Libellula quadrimaculata*, *Epitheca princeps* |
+| band | a dark band across the mid-wing | *Sympetrum pedemontanum*, *Calopteryx splendens*, *Megaloprepus*, *Orolestes* |
+| tips | dark apices | *Calopteryx haemorrhoidalis*, *Libellula pulchella*, *Epitheca princeps* |
+| full | the whole wing past its base, paler | *Calopteryx virgo*, *Aeshna grandis* |
+
+Odds by family: libellulids carry every kind but the full tone; aeshnids bases, wash or the full tone; gomphids bases or
+wash (most are clear); corduliids bases and wash, the *Epitheca princeps* spots now and then; calopterygids bands, dark
+wings, tips and red bases; coenagrionids are mostly clear (a wash, the odd band or tip); lestids clear but for
+*Orolestes*' bands; platycnemidids clear.
+
+Drawn as a tone, never a fill: one hatch over all of a wing's patches (`hatchUnion`, so overlapping patches never stack
+two families), at the gene's pitch and never under `ODO_PIG_PX` (2) plate px apart, stopping `ODO_PIG_HUG` + the costa's
+half width short of the outline. The mesh alone already reaches ~0.56 ink in a 9x9 window at 600 px on most plates, so
+lepInk's measure does not transfer; the gate (`odoInk`) is the panel itself: on the device plate's 1-bit raster the
+pigment adds no solid 5x5 block of black that the wing alone does not already have nearby (the solid pterostigma). That
+cost the hatch two choices: the whole-wing tone is 1.3x the pitch, and the wash stops at 0.35-0.75 of the span, short of
+the stigma, where the costal field converges (on a narrow wing it ran solid there).
+
+**Resting pose** (`B.rest`, the damselfly entry's `rest`): most damselflies rest with the wings closed back over the
+abdomen; the spreadwings hold them half open (but *Sympecma* closes them). The pose comes from the wing set's own two
+draws (the forewing draw under the family's odds closes the wings and is rescaled onto the closed sweep), so it adds no
+draw either. Closed plates draw the forewing swept back
+52-84 degrees and the hindwing a further -9..+11 (under the forewing, peeking out on either side), the forewing over the
+hindwing, each turned out until no point lies across the midline (the left wings are the mirror image). Odds: coenagrionid
+0.4, lestid 0.2, calopterygid 0.5, platycnemidid 0.5. `odoRest` asserts the sweep and the midline; `odoOverlap` (#18) does
+not apply to a closed pair.
+
+**Outline and set spread** (the same rolls mapped wider, no new draws): a damselfly's chord 0.12-0.21 of the span and its
+length 0.8-1.2 (a dragonfly's chord was tried at 0.13-0.23: narrow hindwings swept back lose their anal lobe, `odoHindwing`,
+so it stays 0.16-0.23); the open damselfly's hindwing a further 8-30 degrees (under ~11 the separation step turned every smaller roll
+into one drawn set) and the lestid's forewing 15-48.

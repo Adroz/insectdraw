@@ -407,6 +407,26 @@ rules for all of them:
    themselves, outside this step: wing outline families per family (the aeshnid's narrow hindwing base against the
    libellulid's broad one), pigment bands or basal patches as hatch (*Calopteryx*, *Libellula*), and the zygopteran
    resting pose with the wings closed over the abdomen.
+
+   **#73 (2026-10-26), the wing lever; the damselfly reaches the floor on 1-60, the dragonfly does not.** Wing pigment by
+   family as one hatch at the plate pitch (dark bases, an amber costal wash, nodal spots, bands, dark tips, a whole-wing
+   tone; `B.wingPig`, rolled after every other draw), the zygopteran closed resting pose (`B.rest`, from the wing set's own
+   draws), and the damselfly's wing outline and open set spread wider (the same rolls mapped); grounded in
+   `research-odonata-habitus.md` "Wing pigment and resting pose"; checks `odoPigment`, `odoRest`, `odoInk` (the pigment
+   adds no solid block to the 1-bit wing). `tests/perceptual.js 60`, main (b20d778) -> after:
+
+   | type | min 1-60 | min 61-120 | min 121-180 | min 181-240 | sheet9 1-60 | sheet9 61-120 | median 1-60 |
+   |---|---|---|---|---|---|---|---|
+   | dragonfly | 6.39 -> 9.60 | 6.46 -> 6.97 | 7.13 -> 6.67 | 6.14 -> 9.07 | 12.59 -> 15.47 | 11.69 -> 13.70 | 30.85 -> 33.41 |
+   | damselfly | 5.91 -> 10.10 | 7.16 -> 7.31 | 7.30 -> 10.07 | 6.24 -> 9.62 | 11.09 -> 16.86 | 11.13 -> 17.39 | 28.41 -> 43.46 |
+
+   The minimum is one pair (dragonfly 61-120: 80,95 at 6.97, the next pair 10.01; damselfly 68,85 at 7.31, the next 9.46).
+   What still repeats on the dragonfly is the wing set: when the rolled pair overlaps, the separation step sweeps the
+   hindwing to `ODO_HIND_MAX` and the forewing forward until they meet only at the roots, so about a third of the plates
+   draw the same set (forewing near -13, hindwing 22), and two plates there with light pigment (a gomphid's or corduliid's
+   small base, most of them clear in life) read alike. A narrower dragonfly chord (0.13) gave the set more room but let a
+   swept narrow hindwing lose its anal lobe (`odoHindwing`), so it was not kept. Further room needs a decision on the
+   constraints (`ODO_ROOT`, `ODO_HIND_MAX`) or a body lever; see #73.
 2. **Cicada: wing set, body breadth, mesonotum pattern, #49** (6.20). Same tented spread and the same stout body on all
    nine. Genes: wing set from spread to half-open to roofed over the abdomen (in dorsal view the tegmina cover the
    abdomen and meet along the midline, the hindwings hidden: the resting pose of most cicada plates); forewing
