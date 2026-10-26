@@ -16,7 +16,8 @@ contract for changes.
   `wingsOdonata`, `wingsElytra`, `wingsOrthoptera`), `placeLegs` (#8: settles the leg pose `drawLegs`
   rolled against the wing outlines, without rng, and draws the legs), then `drawAntennae` (after the
   wings, so the pose can be checked against their outlines), `drawTails` (the mayfly's tails, #50: drawn
-  last so they are shortened to the room the plate leaves; no rng) and `assemblePlate`.
+  last so they are shortened to the room the plate leaves; no rng), `rollOdoPigment` (#73: the odonate wing pigment's genes,
+  rolled after every other draw and read by the wing block's deferred hatch) and `assemblePlate`.
   `rollProportions` takes the type and returns `P`; every other section takes one context object `C`
   (`seed`, `type`, `order` (the type's `ORDERS` entry), `dev`, `replay`, `L`, `meta`, `outerBox` from
   the orchestrator; `P`, `B`, `thorax`, `abdomen`, `abdHW`, `headTop`, `headCy` added by `layoutBody`),
@@ -33,7 +34,7 @@ contract for changes.
   x as a fraction of the thorax half-width), the `tegula`, `legThick`, `antFit` and `foreCoxa` (the mayfly's fore coxa behind the head, #21) opt-ins (and the lacewing's #51
   `famScale`, `prothorax`, `wingSet` sets and `wingFams` family tables; the mayfly's #50 `legSexes`, `tails`, `hindwing`, `foreFams`
   and `wingSets`; the moth's #52 `wingSet` (`LEP_WING_SETS`, hind-margin angles), `famScale`, `abdFams` and the `legs` rows' `poseAng`,
-  `poseLen`, `hiddenSets` and `brush`; the crane fly's #55 leg `ratios` / `ratioK` and stippled `wingPatterns`; the grasshopper's #72 `orth` table: tegmen length class, wing set, hind-leg pose, the groundhopper's pronotal process, the sabre ovipositor), its `wings` function
+  `poseLen`, `hiddenSets` and `brush`; the crane fly's #55 leg `ratios` / `ratioK` and stippled `wingPatterns`; the grasshopper's #72 `orth` table: tegmen length class, wing set, hind-leg pose, the groundhopper's pronotal process, the sabre ovipositor; the odonates' #73 `wingPig` pigment odds over `ODO_PIG_KINDS`, the damselfly's `rest` pose), its `wings` function
   and its `names` (+ `variantNames`). `TYPES` is the registry's key list in pick order (the plate's
   first rng draw indexes it), so a new order goes at the END of the table; inserting or reordering
   re-rolls every seed. Sections read `C.order` (or `ORDERS[type]`); a per-order fact a section needs

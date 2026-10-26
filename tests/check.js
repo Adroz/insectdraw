@@ -384,7 +384,10 @@ const odoRun = { cell: Infinity, cellSeed: 0, overlap: 0, overlapSeed: 0 };   //
 // the ticket's ranges (forewing sweep -10..+15, the lestid's 20..35, the hindwing a further 0..12 degrees).
 const ODO_FAMS = { dragonfly: ['aeshnid', 'libellulid', 'gomphid', 'corduliid'], damselfly: ['coenagrionid', 'lestid', 'calopterygid', 'platycnemidid'] };
 const ODO_PROFILE = { aeshnid: ['rod', 'waisted'], libellulid: ['broad'], gomphid: ['club'], corduliid: ['waisted'], coenagrionid: ['rod'], lestid: ['rod'], calopterygid: ['rod'], platycnemidid: ['rod'] };
-const ODO_HAB = { broad: 6, taper: 0.7, club: 1.3, waist: 0.75, rod: 1.4, lestid: 15, tibia: 1.8, fw: [-10, 15], fwLestid: [20, 35], hw: [0, 12], poseShare: 0.15 };
+const ODO_HAB = { broad: 6, taper: 0.7, club: 1.3, waist: 0.75, rod: 1.4, lestid: 15, tibia: 1.8, fw: [-10, 15], fwLestid: [20, 35], hw: [0, 12], poseShare: 0.15,
+  // #73 the open damselfly's set, wider: the hindwing a further 8..30 degrees (under ~11 the pair is turned apart to meet only
+  // at the roots anyway, so smaller rolls all drew one set), the lestid's forewing 18..48 (Lestes rests half to well open)
+  dam: { fw: [-16, 20], hw: [8, 30] }, damLestid: { fw: [18, 48], hw: [10, 28] } };
 const ODO_PATTERNS = ['plain', 'banded', 'spotted', 'rings', 'tipdark'];   // the dorsal pattern families every odonate run must show
 const odoHab = { fam: {}, pose: {}, mark: {}, plates: 0 };   // over the run, for POST.odoHabitus
 // #27 odonate and butterfly heads, from the references and the ticket, stated here rather than read from the engine:
@@ -402,6 +405,36 @@ const odoHab = { fam: {}, pose: {}, mark: {}, plates: 0 };   // over the run, fo
 const ODO_EYE = { cross: 0.05, seam: 0.25, reach: 1.5, apart: 0.04, socket: 0.5 };
 const headSeen = { odoEyes: 0, odoSockets: 0, lepHead: 0 };   // plates each #27 check asserted on, for POST.headSeen
 const ODO_MIN = 40;   // damselfly plates a run needs before a family with no plate fails rather than being reported
+// #73 wing pigment, from the references (docs/research-odonata-habitus.md "Wing pigment"; odo-hab-* in docs/ref) and the
+// ticket, stated here rather than read from the engine: a plate's pigment patches (meta.odoPig.patches) are kinds its family
+// carries (an empty list is a clear wing); a whole-wing tone (full, Calopteryx virgo / Aeshna grandis) stands alone; the tone
+// is hatch, never a fill: meta.odoPig.hatch holds each wing's hatch segments (body coordinates), every one inside its wing's
+// outline (meta.wingOutlines), and neighbouring hatch lines at least ODO_PIG.px plate px apart (a device plate: the device
+// pitch floor), measured across the lines themselves. Over a run each suborder draws every kind it has once it has
+// ODO_PIG.min plates.
+const ODO_PIG = { px: 2, min: 150, kinds: { aeshnid: ['basal', 'wash', 'full'], libellulid: ['basal', 'wash', 'nodal', 'band', 'tips'], gomphid: ['basal', 'wash'], corduliid: ['basal', 'wash', 'nodal', 'tips'],
+  coenagrionid: ['wash', 'tips', 'band'], lestid: ['band'], calopterygid: ['basal', 'band', 'tips', 'full'], platycnemidid: [] } };
+const odoPigRun = { plates: {}, kinds: {}, clear: {}, pitch: Infinity, seed: 0 };   // over the run, for POST.odoPigment
+// #73 the zygopteran resting pose (docs/research-odonata-habitus.md "Resting pose"), stated from the references: a damselfly
+// may rest with its wings closed back over the abdomen (meta.odoRest.closed): each wing's axis (root to its farthest point)
+// swept back ODO_REST.ang degrees from square, and no point of either outline across the midline (the left wings are the
+// mirror image, so a crossing would draw the two sides through each other). A dragonfly never rests closed. Over a run
+// the closed pose is on ODO_REST.share of the damselflies and every family in ODO_REST.fams closes at least once.
+const ODO_REST = { ang: [45, 90], share: [0.15, 0.55], fams: ['coenagrionid', 'calopterygid', 'platycnemidid'] };
+const odoRestRun = { plates: 0, closed: 0, fams: {} };
+// #73 the pigment is a tone, never a fill, on the panel: the device plate's wings as drawn (meta.odoInkSvg) and without the
+// pigment's hatch (meta.odoArtSvg) go through the panel pipeline (tests/raster.js bits, DEV px, threshold 128), and no
+// ODO_SOLID x ODO_SOLID block of black pixels appears that is not within ODO_SOLID px of a block the wing alone already has
+// (its solid pterostigma, a heavy vein junction). The 600 px 9x9 window measure of lepInk does not transfer: the odonate
+// mesh alone already reaches ~0.56 there on most plates, without a pigment, and reads as lines at 1 bit.
+const ODO_SOLID = 5;
+const odoInkRun = { n: 0, worst: 0, seed: 0 };
+const solidBlocks = async svg => {
+  const { data, info } = await raster.bits(svg, DEV).raw().toBuffer({ resolveWithObject: true });
+  const w = info.width, h = info.height, ch = info.channels, k = ODO_SOLID, black = (x, y) => data[(y * w + x) * ch] < 128, out = [];
+  for (let y = 0; y + k <= h; y++) for (let x = 0; x + k <= w; x++) { let all = true; for (let j = 0; j < k && all; j++) for (let i = 0; i < k; i++) if (!black(x + i, y + j)) { all = false; break; } if (all) out.push([x, y]); }
+  return out;
+};
 const HYM_MIN = 40;   // Hymenoptera plates a run needs before a named family with no plate fails rather than being reported (~0.2% odds of no ichneumonid by chance)
 // #13: a lepidopteran plate's wings (meta.lepInkSvg, every element of the wing layer, as on the plate) rasterised at 600 px,
 // antialiased ink averaged over every 9 x 9 px window: a window at LEP_INK_MAX or more reads as a black blotch on the 1-bit
@@ -749,7 +782,8 @@ const PRE = {
       for (const [tab, T] of [['headFams', o.headFams || {}], ['abdFams', o.abdFams || {}], ['legs', o.legs || {}], ['ant', o.ant || {}], ['famScale', o.famScale || {}], ['wingFams', o.wingFams || {}], ['elytra.fams', (o.elytra && o.elytra.fams) || {}], ['wingSet.fams', (o.wingSet && o.wingSet.fams) || {}], ['wingSetFams', o.wingSetFams || {}], ['wingPlans', o.wingPlans || {}], ['chaetae', o.chaetae || {}],
         ['tails.fams', (o.tails && o.tails.fams) || {}], ['hindwing.fams', (o.hindwing && o.hindwing.fams) || {}], ['foreFams', o.foreFams || {}],
         ['orth.tegFams', (o.orth && o.orth.tegFams) || {}], ['orth.sets', (o.orth && o.orth.sets) || {}], ['orth.hindPoses', (o.orth && o.orth.hindPoses) || {}], ['orth.ovipositor', (o.orth && o.orth.ovipositor) || {}], ['orth.process', (o.orth && o.orth.process) || {}],
-        ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}]])
+        ['armature', o.armature || {}], ['pronotum.shapes', (o.pronotum && o.pronotum.shapes) || {}], ['pronotum.classW', (o.pronotum && o.pronotum.classW) || {}], ['pronotum.patterns', (o.pronotum && o.pronotum.patterns) || {}],
+        ['wingPig', o.wingPig || {}], ['rest.fams', (o.rest && o.rest.fams) || {}]])
         for (const k of Object.keys(T)) if (k !== 'base' && !fams.has(k)) f(tab + '.' + k + ' keys a family the proportions roll never produces (rolled: ' + [...fams].filter(Boolean).join('/') + ')');
     }
   },
@@ -1458,6 +1492,7 @@ const CHECKS = {
   // ODO_ROOT of the hindwing's span (body x, root to tip) from the hindwing's root
   odoOverlap(meta, svg, fail, { seed }) {
     if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    if (meta.odoRest && meta.odoRest.closed) return;   // #73 closed at rest, the forewing lies over the hindwing (odoRest)
     const [fw, hw] = meta.wingOutlines || [];
     if (!fw || !hw) return fail('odonate plate has fewer than two wing outlines');
     const x0 = Math.min(...hw.map(p => p[0])), x1 = Math.max(...hw.map(p => p[0]));
@@ -1516,8 +1551,8 @@ const CHECKS = {
     if (A.profile === 'club' && over(0.6, 0.92, 'max') < ODO_HAB.club * over(0.25, 0.55, 'min')) fail('gomphid abdomen not clubbed: S7-S9 ' + (over(0.6, 0.92, 'max') / over(0.25, 0.55, 'min')).toFixed(2) + 'x the mid abdomen (min ' + ODO_HAB.club + ')');
     if (A.profile === 'waisted' && over(0.12, 0.3, 'min') > ODO_HAB.waist * over(0, 0.12, 'max')) fail('abdomen not waisted at S3: ' + (over(0.12, 0.3, 'min') / over(0, 0.12, 'max')).toFixed(2) + ' of S1-S2 (max ' + ODO_HAB.waist + ')');
     if (A.profile === 'rod' && over(0.15, 0.8, 'max') > ODO_HAB.rod * over(0.15, 0.8, 'min')) fail('rod abdomen not a rod: ' + (over(0.15, 0.8, 'max') / over(0.15, 0.8, 'min')).toFixed(2) + 'x its narrowest (max ' + ODO_HAB.rod + ')');
-    const ws = B.wingSet, fwR = fam === 'lestid' ? ODO_HAB.fwLestid : ODO_HAB.fw;
-    if (!ws || !(ws.fw >= fwR[0] && ws.fw <= fwR[1]) || !(ws.hw >= ODO_HAB.hw[0] && ws.hw <= ODO_HAB.hw[1])) fail('odonate wing set ' + JSON.stringify(ws) + ' outside forewing ' + fwR.join('..') + ', hindwing +' + ODO_HAB.hw.join('..'));
+    const ws = B.wingSet, R = meta.type === 'damselfly' ? (fam === 'lestid' ? ODO_HAB.damLestid : ODO_HAB.dam) : { fw: ODO_HAB.fw, hw: ODO_HAB.hw };
+    if (!ws || !(ws.fw >= R.fw[0] && ws.fw <= R.fw[1]) || !(ws.hw >= R.hw[0] && ws.hw <= R.hw[1])) fail('odonate wing set ' + JSON.stringify(ws) + ' outside forewing ' + R.fw.join('..') + ', hindwing +' + R.hw.join('..'));
     if (fam === 'lestid') {
       const fw = meta.wingOutlines && meta.wingOutlines[0];
       if (!fw) return fail('lestid plate has no forewing outline');
@@ -1530,6 +1565,52 @@ const CHECKS = {
       if (!tw.every(w => w > 0)) return fail('platycnemidid legs have no tibia widths on meta.legs[i].tib');
       if (Math.min(tw[1], tw[2]) < ODO_HAB.tibia * tw[0]) fail('platycnemidid mid / hind tibiae not broad: ' + (Math.min(tw[1], tw[2]) / tw[0]).toFixed(2) + 'x the fore tibia (min ' + ODO_HAB.tibia + ')');
     }
+  },
+  // #73 the zygopteran resting pose (ODO_REST above)
+  odoRest(meta, svg, fail) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const R = meta.odoRest;
+    if (!R || typeof R.closed !== 'boolean') return fail('odonate plate has no resting-pose record (meta.odoRest)');
+    if (meta.type === 'dragonfly') { if (R.closed) fail('dragonfly drawn with its wings closed'); return; }
+    odoRestRun.plates++;
+    if (!R.closed) return;
+    odoRestRun.closed++; odoRestRun.fams[meta.fam] = (odoRestRun.fams[meta.fam] || 0) + 1;
+    (meta.wingOutlines || []).slice(0, 2).forEach((ol, i) => {
+      const xMin = Math.min(...ol.map(p => p[0])), near = ol.filter(p => p[0] < xMin + 1), root = [near.reduce((a, p) => a + p[0], 0) / near.length, near.reduce((a, p) => a + p[1], 0) / near.length];
+      const tip = ol.reduce((b, p) => dist(p, root) > dist(b, root) ? p : b, ol[0]), ang = Math.atan2(tip[1] - root[1], tip[0] - root[0]) * 180 / Math.PI;
+      if (ang < ODO_REST.ang[0] || ang > ODO_REST.ang[1]) fail('closed damselfly ' + (i ? 'hindwing' : 'forewing') + ' swept back ' + ang.toFixed(1) + ' degrees (want ' + ODO_REST.ang.join('..') + ')');
+      if (xMin < 0) fail('closed damselfly ' + (i ? 'hindwing' : 'forewing') + ' crosses the midline by ' + (-xMin).toFixed(2));
+    });
+  },
+  // #73 wing pigment as hatch (ODO_PIG above), on the default and the device plate
+  odoPigment(meta, svg, fail, { seed, dev }) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    const one = (m, floorPx, what) => {
+      const P = m.odoPig;
+      if (!P || !Array.isArray(P.patches) || !Array.isArray(P.hatch)) return fail(what + 'odonate plate has no wing pigment record (meta.odoPig)');
+      const ok = ODO_PIG.kinds[meta.fam] || [];
+      for (const q of P.patches) if (!ok.includes(q.name)) fail(what + meta.fam + ' wing pigment ' + q.name + ', not ' + (ok.join(' / ') || 'clear'));
+      if (P.patches.length > 1 && P.patches.some(q => q.name === 'full')) fail(what + 'whole-wing tone drawn with other patches: ' + P.patches.map(q => q.name).join(', '));
+      if (P.patches.length && !P.hatch.some(h => h.segs.length)) fail(what + 'wing pigment ' + P.patches.map(q => q.name).join(', ') + ' rolled but no hatch drawn');
+      if (!P.patches.length && P.hatch.some(h => h.segs.length)) fail(what + 'clear wing drew pigment hatch');
+      for (const h of P.hatch) {
+        const ol = m.wingOutlines && m.wingOutlines[h.wing];
+        if (!ol) return fail(what + 'pigment hatch on wing ' + h.wing + ', which has no outline');
+        const out = h.segs.find(([p, q]) => !inPoly([(p[0] + q[0]) / 2, (p[1] + q[1]) / 2], ol));   // its ends lie on the outline
+        if (out) fail(what + 'pigment hatch outside its wing at ' + out[0].map(v => v.toFixed(1)).join(','));
+        const gap = hatchGap(h.segs);
+        if (gap === null) { fail(what + 'pigment hatch lines not parallel on wing ' + h.wing); continue; }
+        const px = gap * m.scale;
+        if (!what && px < odoPigRun.pitch) { odoPigRun.pitch = px; odoPigRun.seed = seed; }
+        if (px < floorPx - 0.02) fail(what + 'pigment hatch lines ' + px.toFixed(2) + ' px apart (min ' + floorPx.toFixed(2) + ')');
+      }
+    };
+    one(meta, ODO_PIG.px, '');
+    one(dev.meta, Math.max(ODO_PIG.px, E.DEVICE.pitchPx * 600 / DEV), 'device plate: ');
+    const P = meta.odoPig; if (!P || !P.patches) return;
+    const t = meta.type; odoPigRun.plates[t] = (odoPigRun.plates[t] || 0) + 1; odoPigRun.kinds[t] ||= {};
+    if (!P.patches.length) odoPigRun.clear[t] = (odoPigRun.clear[t] || 0) + 1;
+    for (const q of P.patches) odoPigRun.kinds[t][q.name] = (odoPigRun.kinds[t][q.name] || 0) + 1;
   },
   // #27 the dragonfly's eyes meet along a seam (or stand apart on a gomphid); ODO_EYE above
   odoEyes(meta, svg, fail) {
@@ -2695,6 +2776,20 @@ const CHECKS = {
     const c = LEP_WIN >> 1;
     if (v >= LEP_INK_MAX) fail('lep wing solid at 1 bit: a ' + LEP_WIN + 'x' + LEP_WIN + ' window at ' + v.toFixed(3) + ' ink (max ' + LEP_INK_MAX + '), ' + art[at].toFixed(3) + ' of it line art and ' + (v - art[at]).toFixed(3) + ' tone, centred at ' + (at % ink.w + c) + ',' + (Math.floor(at / ink.w) + c) + ' px');
   },
+  // #73 the odonate wing pigment adds no solid block to the 1-bit wings (ODO_SOLID above); every pigmented plate's device
+  // plate is rasterised twice
+  async odoInk(meta, svg, fail, { seed, dev }) {
+    if (meta.type !== 'dragonfly' && meta.type !== 'damselfly') return;
+    if (!meta.odoPig || !meta.odoPig.hatch.some(h => h.segs.length)) return;
+    const m = dev.meta;
+    if (!m.odoInkSvg || !m.odoArtSvg) return fail('no wing rasters (meta.odoInkSvg / odoArtSvg) on a pigmented odonate device plate');
+    const ink = await solidBlocks(m.odoInkSvg), art = await solidBlocks(m.odoArtSvg), near = new Set();
+    for (const [x, y] of art) for (let dy = -ODO_SOLID; dy <= ODO_SOLID; dy++) for (let dx = -ODO_SOLID; dx <= ODO_SOLID; dx++) near.add((x + dx) + ',' + (y + dy));
+    const fresh = ink.filter(([x, y]) => !near.has(x + ',' + y));
+    odoInkRun.n++;
+    if (fresh.length > odoInkRun.worst) { odoInkRun.worst = fresh.length; odoInkRun.seed = seed; }
+    if (fresh.length) fail('odonate wing pigment solid at 1 bit: ' + fresh.length + ' new ' + ODO_SOLID + 'x' + ODO_SOLID + ' black blocks, the first at ' + fresh[0].join(',') + ' device px');
+  },
   // the common name never repeats a stem (#29): no two of its words equal ignoring case, nor one the start of another
   // when the shorter has 4+ letters ("Dark Darkling", "Blue-tailed Bluet"); tests/names.js repeatedStem
   nameStems(meta, svg, fail) {
@@ -2800,6 +2895,28 @@ const POST = {
     const missing = fams.filter(f => !odoHab.fam[f]).concat(ODO_PATTERNS.filter(m => !odoHab.mark[m]));
     if (missing.length) fail('odonate families / patterns never drawn in ' + n + ' plates: ' + missing.join(', '));
     for (const p of ['basket', 'tucked']) if ((odoHab.pose[p] || 0) < ODO_HAB.poseShare * n) fail('odonate leg pose ' + p + ' on ' + (odoHab.pose[p] || 0) + ' of ' + n + ' plates (min ' + ODO_HAB.poseShare * 100 + '%)');
+  },
+  // the report for CHECKS.odoInk: pigmented odonate device plates rasterised and the most solid blocks the pigment added
+  odoInk() {
+    console.log('odonate pigment at 1 bit: ' + odoInkRun.n + ' pigmented device plates, most new solid ' + ODO_SOLID + 'x' + ODO_SOLID + ' blocks ' + odoInkRun.worst + (odoInkRun.worst ? ' (seed ' + odoInkRun.seed + ')' : ''));
+  },
+  // odoRest over the run: once it has ODO_MIN damselflies, the closed pose's share and every family that closes
+  odoRest(fail) {
+    const n = odoRestRun.plates, sh = n ? odoRestRun.closed / n : 0;
+    console.log('damselfly resting pose: closed on ' + odoRestRun.closed + ' of ' + n + ' plates ' + JSON.stringify(odoRestRun.fams));
+    if (n < ODO_MIN) return;
+    if (sh < ODO_REST.share[0] || sh > ODO_REST.share[1]) fail('damselfly closed resting pose on ' + Math.round(sh * 100) + '% of plates (want ' + ODO_REST.share.map(v => v * 100).join('-') + '%)');
+    const missing = ODO_REST.fams.filter(f => !odoRestRun.fams[f]);
+    if (missing.length) fail('no closed resting pose in ' + n + ' damselflies for ' + missing.join(', '));
+  },
+  // odoPigment over the run: once a suborder has ODO_PIG.min plates, every pigment kind its families carry has been drawn
+  odoPigment(fail) {
+    console.log('odonate wing pigment: ' + ['dragonfly', 'damselfly'].map(t => t + ' ' + (odoPigRun.plates[t] || 0) + ' plates, clear ' + (odoPigRun.clear[t] || 0) + ', ' + JSON.stringify(odoPigRun.kinds[t] || {})).join('; ') +
+      '; closest hatch lines ' + (odoPigRun.pitch === Infinity ? 'none' : odoPigRun.pitch.toFixed(2) + ' px (seed ' + odoPigRun.seed + ')'));
+    for (const [t, fams] of Object.entries(ODO_FAMS)) {
+      const n = odoPigRun.plates[t] || 0, want = [...new Set(fams.flatMap(f => ODO_PIG.kinds[f]))], missing = want.filter(k => !(odoPigRun.kinds[t] || {})[k]);
+      if (n >= ODO_PIG.min && missing.length) fail(t + ' wing pigment never drawn in ' + n + ' plates: ' + missing.join(', '));
+    }
   },
   // the report for CHECKS.lepInk: plates rasterised per variant and the darkest window seen (with its line-art share); a run
   // long enough to hold both variants fails without one (never by silence)
@@ -3163,6 +3280,9 @@ const RUN_STATE = {
   odoSeen: obj(odoSeen, MERGE.tree),
   odoRun: obj(odoRun, MERGE.all(MERGE.min('cell', 'cellSeed'), MERGE.max('overlap', 'overlapSeed'))),
   odoHab: obj(odoHab, MERGE.tree),
+  odoPigRun: obj(odoPigRun, MERGE.all(MERGE.fields({ plates: MERGE.tree, kinds: MERGE.tree, clear: MERGE.tree }), MERGE.min('pitch', 'seed'))),
+  odoRestRun: obj(odoRestRun, MERGE.tree),
+  odoInkRun: obj(odoInkRun, best('max', 'worst', 'seed')),
   headSeen: obj(headSeen, MERGE.tree),
   lepInk: obj(lepInk, MERGE.each(best('max', 'max', 'seed', 'art'))),
   lepRun: { get: () => lepRun, set: v => { lepRun = v; }, merge: MERGE.sum },
