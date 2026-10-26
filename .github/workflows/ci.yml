@@ -15,6 +15,11 @@
 # whole job under 5 min. 300 seeds (~2 min locally) still cover every order and both lepidoptera variants
 # many times over; run the full 3000 locally before calling an engine change done.
 #
+# check.js runs its seed shards in worker processes (#77); --jobs 4 because the public-repo ubuntu-latest runner has
+# 4 vCPUs (the default, cores - 2, would leave half of a dedicated runner idle). The parity job runs on its own runner,
+# in parallel: check.js --jobs 1 vs --jobs 3 on seeds 1-150 must print the same report (tests/parity.js), which is what
+# catches a new run accumulator left out of check.js's RUN_STATE merge table. Its prologue is the gates job's.
+#
 # fonts-dejavu-core: the gate rasterises the caption through sharp's librsvg, which needs a system font to
 # lay out <text>; without one the caption contributes no ink. Installed before npm ci so the sharp binary
 # never sees a fontless fontconfig cache.
@@ -34,7 +39,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      # The prologue (checkout, node, font, npm ci) is step for step daily.yml's; change both together.
+      # The prologue (checkout, node, font, npm ci) is step for step daily.yml's and the parity job's; change all three together.
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -48,10 +53,31 @@ jobs:
       - run: npm ci
 
       - name: Invariant check (300 seeds)
-        run: node tests/check.js 300
+        run: node tests/check.js 300 --jobs 4
 
       - name: E-ink survival gate
         run: npm test
 
       - name: Page test (headless Chrome, preinstalled on ubuntu-latest)
         run: node tests/pages.js
+
+  parity:
+    name: check.js parallel = serial (seeds 1-150)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      # The gates job's prologue, step for step; change all three together.
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install a font for the caption (Georgia is not on the runner)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-dejavu-core
+
+      - run: npm ci
+
+      - name: Parity (--jobs 1 vs --jobs 3)
+        run: npm run check:parity
