@@ -2121,7 +2121,7 @@ const GENE_WING_ADJ = {
   basal: ['Dark-based', 'Black-based'], wash: ['Amber-winged', 'Saffron-winged', 'Golden-winged'], nodal: ['Spot-winged', 'Four-spot'],
   band: ['Band-winged', 'Bar-winged'], tips: ['Dusky-tipped', 'Tip-spotted'], full: ['Dark-winged', 'Black-winged', 'Ebony', 'Smoky-winged'],
 };
-const WING_COLOUR_ADJ = new Set(['Amber-winged', 'Saffron-winged', 'Golden-winged']);   // the wash's colour words: no claim
+const WING_COLOUR_ADJ = new Set(GENE_WING_ADJ.wash);   // the wash's words are colour words: no claim
 const WING_NOUN_KIND = { Rubyspot: 'basal' };
 const GENE_WING_P = 0.5;   // share of pigmented plates whose adjective names the pigment (else the marking's, antenna's or a free word)
 const COMMON_ADJ = ['Marsh', 'Heath', 'Dusky', 'Golden', 'Pied', 'Mottled', 'Rusty', 'Fen', 'Downland', 'Woodland', 'Brindled', 'Clouded', 'Bronze',
@@ -2179,7 +2179,7 @@ function insectName(seed, type, variant, fam, genes) {
   const c = names.common, famNouns = (fam && c.famNouns) || {};
   const g = genes || {}, wing = g.wing || [];
   const famList = famNouns[fam] || c.nouns, nounOk = n => !WING_NOUN_KIND[n] || wing.includes(WING_NOUN_KIND[n]);   // #82 a noun claiming a pigment its plate draws
-  const nouns = famList.some(nounOk) ? famList.filter(nounOk) : famList, base = (fam && c.famBase && c.famBase[fam]) || c.base;
+  const nouns = famList.filter(nounOk), base = (fam && c.famBase && c.famBase[fam]) || c.base;
   const otherNouns = new Set(Object.keys(famNouns).filter(f => f !== fam).flatMap(f => famNouns[f]));   // another family's noun is no adjective here
   const antT = order.ant, antKinds = Object.assign({}, antT.base, antT[fam] || {}).kinds;
   const antTot = Object.values(antKinds).reduce((x, w) => x + w, 0);

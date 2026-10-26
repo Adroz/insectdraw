@@ -144,7 +144,7 @@ contract for changes.
   `ANT_CLAIMS`, never into a general adjective list (check.js `nameFamilies`, `nameFamily`, `nameGenes`). The drawn wing
   names it too (#82): an odonate's pigment kinds give the adjective on `GENE_WING_P` of the pigmented plates
   (`GENE_WING_ADJ`; `WING_NOUN_KIND` for a noun such as Rubyspot), and a wing pattern word (`tests/names.js`
-  `WING_CLAIMS`: banded, spotted, dark-tipped, dark-based ...) names only a plate that draws that pattern. Colour words
+  `WING_CLAIMS`: Band-winged, Spot-winged, Dusky-tipped, Dark-based ..., disjoint from the abdomen's `MARK_CLAIMS`) names only a plate that draws that pattern. Colour words
   (`WING_COLOUR`: Amber-winged, Yellow-winged, Red-veined ...) claim nothing and stay free on any plate; a pattern word an
   order carries for a pattern its wing never draws is left free there and listed in `WING_UNDRAWN` (check.js `nameWings`).
 - Per-seed variation is the whole point. Each winged body plan rolls a "wing genes" object

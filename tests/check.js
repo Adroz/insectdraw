@@ -24,7 +24,7 @@ const { loadEngine, engineContract } = require('./engine');
 const os = require('os');
 const { fork } = require('child_process');
 const raster = require('./raster');
-const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX, wingKinds, wingProblems, pigmentWords, PIG_WORD_MIN, tableKey } = require('./names');
+const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX, wingKinds, wingProblems, pigmentWords, namesPigment, PIG_WORD_MIN, tableKey } = require('./names');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
@@ -2819,7 +2819,7 @@ const CHECKS = {
   nameWings(meta, svg, fail) {
     const kinds = wingKinds(meta), common = meta.name.common;
     for (const p of wingProblems(common, tableKey(E.ORDERS, meta.type, meta.variant), kinds)) fail('common name claims an undrawn wing: ' + p + ' ("' + common + '")');
-    if (kinds.length) { pigNames.n++; if (pigmentWords(kinds).some(w => hasPhrase(common, w))) pigNames.named++; }
+    if (kinds.length) { pigNames.n++; if (namesPigment(common, kinds)) pigNames.named++; }
   },
 };
 

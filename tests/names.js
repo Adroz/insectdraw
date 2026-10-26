@@ -6,8 +6,8 @@
 // Prints every epithet stem x gender the engine can produce, checks them against FORMS below, then scans seeds 1..N
 // (default 3000) for a common name that repeats a stem, one that disagrees with the plate's marking or antenna genes
 // (#28), one that claims a wing pattern its plate does not draw (#82), and lists every common name more than one plate
-// shares. Exits 1 on any mismatch, repeat or disagreement, when under PIG_WORD_MIN of the pigmented odonates free to name
-// their wing carry a pigment word (#82), or when DUP_MAX or more of the plates share an earlier plate's name. The same
+// shares. Exits 1 on any mismatch, repeat or disagreement, when under PIG_WORD_MIN of the pigmented odonates carry a
+// pigment word (#82), or when DUP_MAX or more of the plates share an earlier plate's name. The same
 // checks run inside tests/check.js as `epithets` (PRE), `nameStems`, `nameGenes` and `nameWings` (per seed, nameGenes and
 // nameWings also in POST for the duplicates and the pigment share), which import their rules from here, so the gate and
 // this script cannot disagree.
@@ -134,7 +134,7 @@ function geneProblems(common, mark, antenna, antDistinct, wingOwn = []) {
   for (const m in MARK_CLAIMS) if (m !== mark) for (const w of MARK_CLAIMS[m]) if (hasPhrase(common, w)) out.push('"' + w + '" on a ' + mark + ' abdomen');
   for (const k in ANT_CLAIMS) if (k !== antenna) for (const w of ANT_CLAIMS[k]) if (hasPhrase(common, w)) out.push('"' + w + '" on ' + antenna + ' antennae');
   const own = [...(MARK_CLAIMS[mark] || []), ...(antDistinct ? ANT_CLAIMS[antenna] || [] : [])];
-  if (own.length && ![...own, ...wingOwn].some(w => hasPhrase(common, w))) out.push('no gene word (' + own.join(' / ') + ') for a ' + mark + ' abdomen' + (antDistinct && ANT_CLAIMS[antenna] ? ' with ' + antenna + ' antennae' : ''));
+  if (own.length && ![...own, ...wingOwn].some(w => hasPhrase(common, w))) out.push('no gene word (' + [...own, ...wingOwn].join(' / ') + ') for a ' + mark + ' abdomen' + (antDistinct && ANT_CLAIMS[antenna] ? ' with ' + antenna + ' antennae' : ''));
   return out;
 }
 // Whether a plate's antenna kind is a gene word to give: its family's antenna table (the order's ORDERS entry `ant`, base
@@ -149,8 +149,9 @@ function antRare(ORDERS, type, fam, kind) {
 // (no wing draws them yet). A common name may carry one only when the plate draws that pattern, so a clear-winged chaser
 // is never "Band-winged". Colour words (WING_COLOUR) are no claim: the viewer imagines the colour on a 1-bit plate, so they
 // stay free on any plate (Nik, #82). Written from English usage (the Band-winged Dragonlet, the Four-spotted Chaser, the
-// Ebony Jewelwing, the rubyspots' red wing bases), not copied from the engine: the engine's pigment words must be a subset
-// of these (tests/check.js nameWings).
+// Ebony Jewelwing, the rubyspots' red wing bases), not copied from the engine. The engine's pattern words (GENE_WING_ADJ,
+// unexported) must be a subset of these: tests/check.js nameWings sees only the names it draws, so a pattern word added
+// to the engine alone shows as a lower pigment share (PIG_WORD_MIN), not as a failure.
 const WING_CLAIMS = {
   basal: ['Dark-based', 'Black-based', 'Rubyspot'],
   nodal: ['Spot-winged', 'Four-spot'],
@@ -159,8 +160,10 @@ const WING_CLAIMS = {
   full: ['Dark-winged', 'Black-winged', 'Ebony', 'Smoky-winged'],
   spotted: ['Spotted-winged'], stripe: ['Stripe-winged'], picture: ['Picture-winged'], costa: ['Dark-edged'], apex: ['Orange-tip'],
 };
-// Colour words for the wing: no claim, free on any plate; the engine may still pick one for a wash (the amber costal field)
-const WING_COLOUR = ['Amber-winged', 'Saffron-winged', 'Golden-winged', 'Yellow-winged', 'Red-veined', 'Blue-winged'];
+// Colour words for the wing: no claim, free on any plate. WING_WASH, the ones that name a wash (the amber costal field):
+// the engine picks one for a wash, and a free one on a wash plate names it too; Red-veined and Blue-winged do not.
+const WING_WASH = ['Amber-winged', 'Saffron-winged', 'Golden-winged', 'Yellow-winged'];
+const WING_COLOUR = [...WING_WASH, 'Red-veined', 'Blue-winged'];
 // Pattern words an order's names carry for a pattern its wing never draws, left free (Nik, #82: "either draw it or leave
 // the word free and note it"): the grasshopper's hindwing band (#72 deferred it) and tegmen stripe, the antlion's spotted
 // wing, the bee-fly's dark costal half, the picture-winged fly's pattern (no fly family is drawn patterned) and the
@@ -182,8 +185,10 @@ function wingProblems(common, table, kinds) {
   }
   return out;
 }
-// The words that name a plate's drawn pigment: the claim words of every kind it draws, and the colour words on a wash
-const pigmentWords = kinds => [...kinds.flatMap(k => WING_CLAIMS[k] || []), ...(kinds.includes('wash') ? WING_COLOUR : [])];
+// The words that name a plate's drawn pigment: the claim words of every kind it draws, and the wash's colour words
+const pigmentWords = kinds => [...kinds.flatMap(k => WING_CLAIMS[k] || []), ...(kinds.includes('wash') ? WING_WASH : [])];
+// Whether a common name names its plate's drawn pigment (the PIG_WORD_MIN tally of names.js and check.js nameWings)
+const namesPigment = (common, kinds) => pigmentWords(kinds).some(w => hasPhrase(common, w));
 // #82 (b): at least PIG_WORD_MIN of the pigmented odonate plates carry a pigment word. A pigment word is a gene word
 // (geneProblems' wing words): it may take the adjective a marking word would, so the share is of every pigmented plate.
 const PIG_WORD_MIN = 0.4;
@@ -196,7 +201,7 @@ const DUP_MAX = 0.1;   // the ticket's ceiling over seeds 1-3000 (21% at main 37
 const tableKey = (ORDERS, type, variant) => (variant && ORDERS[type].variantNames && ORDERS[type].variantNames[variant] ? variant : type);
 
 module.exports = { FORMS, epithetProblems, repeatedStem, MARK_CLAIMS, ANT_CLAIMS, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX,
-  WING_CLAIMS, WING_COLOUR, WING_UNDRAWN, wingKinds, wingProblems, pigmentWords, PIG_WORD_MIN, tableKey };
+  WING_CLAIMS, WING_WASH, WING_COLOUR, WING_UNDRAWN, wingKinds, wingProblems, pigmentWords, namesPigment, PIG_WORD_MIN, tableKey };
 
 if (require.main === module) {
   const { loadEngine } = require('./engine');
@@ -221,7 +226,7 @@ if (require.main === module) {
     for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(E.ORDERS, meta.type, meta.bodyGenes.fam, meta.antenna), pw)) genes.push(seed + ' ' + meta.type + ': ' + p + ' ("' + meta.name.common + '")');
     // #82: the name agrees with the drawn wing; a pigmented odonate names its pigment on a share of plates
     for (const p of wingProblems(meta.name.common, tableKey(E.ORDERS, meta.type, meta.variant), kinds)) wings.push(seed + ' ' + meta.type + ': ' + p + ' ("' + meta.name.common + '")');
-    if (kinds.length) { pig.n++; if (pw.some(w => hasPhrase(meta.name.common, w))) pig.named++; }
+    if (kinds.length) { pig.n++; if (namesPigment(meta.name.common, kinds)) pig.named++; }
     commons.push(meta.name.common);
     (seen.get(meta.name.common) || seen.set(meta.name.common, []).get(meta.name.common)).push(seed);
   }
