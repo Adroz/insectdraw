@@ -418,9 +418,9 @@ rules for all of them:
    | type | min 1-60 | min 61-120 | min 121-180 | min 181-240 | sheet9 1-60 | sheet9 61-120 | median 1-60 |
    |---|---|---|---|---|---|---|---|
    | dragonfly | 6.39 -> 9.60 | 6.46 -> 6.97 | 7.13 -> 6.67 | 6.14 -> 9.07 | 12.59 -> 15.47 | 11.69 -> 13.70 | 30.85 -> 33.41 |
-   | damselfly | 5.91 -> 10.10 | 7.16 -> 7.31 | 7.30 -> 10.07 | 6.24 -> 9.62 | 11.09 -> 16.86 | 11.13 -> 17.39 | 28.41 -> 43.46 |
+   | damselfly | 5.91 -> 10.10 | 7.16 -> 8.09 | 7.30 -> 10.07 | 6.24 -> 9.62 | 11.09 -> 17.28 | 11.13 -> 16.96 | 28.41 -> 43.72 |
 
-   The minimum is one pair (dragonfly 61-120: 80,95 at 6.97, the next pair 10.01; damselfly 68,85 at 7.31, the next 9.46).
+   The minimum is one pair (dragonfly 61-120: 80,95 at 6.97, the next pair 10.01; damselfly 80,118 at 8.09, two closed demoiselles, the next 9.24).
    What still repeats on the dragonfly is the wing set: when the rolled pair overlaps, the separation step sweeps the
    hindwing to `ODO_HIND_MAX` and the forewing forward until they meet only at the roots, so about a third of the plates
    draw the same set (forewing near -13, hindwing 22), and two plates there with light pigment (a gomphid's or corduliid's
