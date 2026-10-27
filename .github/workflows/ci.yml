@@ -9,7 +9,7 @@
 #   npm test                  the raster survival gate (tests/eink.js): 39 device plates rasterised with
 #                             sharp through the panel's exact pipeline, per-layer survival against the floors.
 #   node tests/pages.js       the three pages in headless Chrome.
-#   npm run check:parity      (its own job) check.js sharded = serial, see below.
+#   npm run check:parity      check.js sharded = serial, see below.
 #
 # 300 seeds, not the 3000 of `npm run check`: each seed now also draws the device plate twice (pass 1 for
 # the scale, pass 2 with the floors, then once more for the determinism assertion), so 3000 seeds take
@@ -18,9 +18,10 @@
 # many times over; run the full 3000 locally before calling an engine change done.
 #
 # check.js runs its seed shards in worker processes (#77); --jobs 4 because the public-repo ubuntu-latest runner has
-# 4 vCPUs (the default, cores - 2, would leave half of a dedicated runner idle). The parity job runs on its own runner,
-# in parallel: check.js --jobs 1 vs --jobs 3 on seeds 1-150 must print the same report (tests/parity.js), which is what
-# catches a new run accumulator left out of check.js's RUN_STATE merge table. Its prologue is the gates job's.
+# 4 vCPUs (the default, cores - 2, would leave half of a dedicated runner idle). The parity step: check.js --jobs 1 vs
+# --jobs 3 on seeds 1-150 must print the same report (tests/parity.js), which is what catches a new run accumulator left
+# out of check.js's RUN_STATE merge table. It ran as its own job while check.js was slow; since the function-scope
+# loader (#86) each of the two took about 80 s on the runner, so it is a step of the one job again.
 #
 # fonts-dejavu-core: the gate rasterises the caption through sharp's librsvg, which needs a system font to
 # lay out <text>; without one the caption contributes no ink. Installed before npm ci so the sharp binary
@@ -41,7 +42,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      # The prologue (checkout, node, font, npm ci) is step for step daily.yml's and the parity job's; change all three together.
+      # The prologue (checkout, node, font, npm ci) is step for step daily.yml's; change both together.
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
@@ -63,23 +64,6 @@ jobs:
       - name: Page test (headless Chrome, preinstalled on ubuntu-latest)
         run: node tests/pages.js
 
-  parity:
-    name: check.js parallel = serial (seeds 1-150)
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      # The gates job's prologue, step for step; change all three together.
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-
-      - name: Install a font for the caption (Georgia is not on the runner)
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends fonts-dejavu-core
-
-      - run: npm ci
-
       - name: Parity (--jobs 1 vs --jobs 3)
         run: npm run check:parity
+

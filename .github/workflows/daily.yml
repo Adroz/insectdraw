@@ -51,7 +51,7 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      # The prologue (checkout, node, font, npm ci) is step for step ci.yml's (both its jobs); change all three together.
+      # The prologue (checkout, node, font, npm ci) is step for step ci.yml's; change both together.
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
