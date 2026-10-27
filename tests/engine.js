@@ -1,6 +1,6 @@
 // Shared engine loader for the node scripts (tests, scripts/render-daily.js): reads index.html, extracts the
-// engine script (<script id="engine">…</script>) and runs it under vm, returning its module.exports. The
-// engine itself stays dependency-free; only the node side goes through this file. The contract every
+// engine script (<script id="engine">…</script>) and runs it under vm, in a function scope (see loadEngine), returning
+// its module.exports. The engine itself stays dependency-free; only the node side goes through this file. The contract every
 // consumer relies on is written in README.md ("Engine contract") and asserted here by engineContract(),
 // which tests/check.js runs first.
 'use strict';
@@ -18,10 +18,18 @@ function loadEngine(htmlPath) {
   const html = fs.readFileSync(file, 'utf8');
   const m = html.match(ENGINE_RE);
   if (!m) throw new Error('engine script not found in ' + file);
-  const ctx = { module: { exports: {} }, console };
-  vm.createContext(ctx);
-  vm.runInContext(m[1], ctx, { filename: file });
-  return ctx.module.exports;
+  // The block runs as the body of a function compiled in a fresh vm context, so its top-level declarations are function
+  // locals rather than properties of the contextified global, where every lookup goes through node's interceptor (#86:
+  // about 4x the plate time). Math, the builtin the engine reads in its hot loops, is passed in as a parameter for the
+  // same reason (it is about 1000 of the block's builtin reads; passing Object, Array, Infinity, Map and Set too measured
+  // within noise); it is the context's own Math, the one the block saw when it ran as a script. The engine still reaches
+  // every other global through the bare context, so a browser global touched at load still throws here. The parameter
+  // names mean the block cannot declare a top-level `module`, `console` or `Math` (a SyntaxError here, loud not silent).
+  new vm.Script(m[1], { filename: file });   // parse it as a page parses it first: a top-level `return` is legal in a function body only
+  const ctx = vm.createContext({}), module = { exports: {} };
+  const run = vm.compileFunction(m[1], ['module', 'console', 'Math'], { parsingContext: ctx, filename: file });
+  run(module, console, vm.runInContext('Math', ctx));
+  return module.exports;
 }
 
 // The engine contract, as a list of violations (empty when the file honours it):
@@ -65,4 +73,4 @@ function engineContract(htmlPath) {
   return problems;
 }
 
-module.exports = { loadEngine, engineContract, EXPORTS };
+module.exports = { loadEngine, engineContract, EXPORTS, ENGINE_RE };
