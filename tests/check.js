@@ -226,7 +226,14 @@ const BEE = { abd: 1.05, tibia: 1.5, head: 0.8, ocelli: 0.6, scape: [0.27, 0.4] 
 // `share` of a run's bee plates show it (the ticket: 7 of 9), once the run has BEE_MIN bee plates
 const BEE_BASKET = { vis: 0.5, share: 7 / 9 };
 const basketRun = { n: 0, shown: 0, worst: [] };   // over the run, for POST.beeBasket: bee plates, those showing the basket, the least visible
-const beeSeen = { hymFamilies: 0, beeAbdomen: 0, beeLegs: 0, beeCorbicula: 0, beeBasket: 0, beeHead: 0, beeOcelli: 0, beeLattice: 0, beeScape: 0 };   // plates each #12 check asserted on, for POST.beeSeen
+// #83 the corbicula search no longer costs a bee plate seconds: no bee plate takes longer than `k` times the median
+// non-bee plate to generate (the ticket's target is 2x, which the worst bee plate in 1-3000 meets; 3 leaves room for
+// timing noise, where an unchecked basket search ran 5-20x). The seed loop times every plate (plateMs); POST.beeTime
+// re-times, in this process and back to back, each bee plate over the bound and the `ref` non-bee plates nearest the
+// run's median, best of `tries` each, so a slow shard, a GC pause or a busy machine cannot fail a plate on its own
+const BEE_TIME = { k: 3, ref: 5, tries: 3, minOther: 20 };
+const plateMs = { bee: [], other: [] };   // [seed, ms] of every plate in the run, generation only, for POST.beeTime
+const beeSeen = { hymFamilies: 0, beeAbdomen: 0, beeLegs: 0, beeCorbicula: 0, beeBasket: 0, beeBasketLabel: 0, beeHead: 0, beeOcelli: 0, beeLattice: 0, beeScape: 0 };   // plates each #12 check asserted on, for POST.beeSeen
 let beeSeenPlates = 0;   // bee plates in the run, counted by the seed loop whichever checks are selected
 const BEE_MIN = 20;   // bee plates a run needs before a #12 check that never ran fails rather than being reported (~8% of plates are bees; no lattice bee in 20 has odds 0.4^20)
 // #19, from the references (neu-nothochrysa: 2-5 rungs in the R1-Rs strip; M beside Rs for ~45% of the span, then forked,
@@ -1094,6 +1101,17 @@ const CHECKS = {
     basketRun.n++;
     if (vis >= BEE_BASKET.vis) basketRun.shown++;
     else basketRun.worst.push(seed + ' (' + vis.toFixed(2) + ')');
+  },
+  // #83 meta.legRoll.basket says what the basket rule did, honestly: 'shown' (the repair held it), 'dropped' only when it
+  // is the basket rule that failed (no pose showed the basket, and without the rule #8's wing rule settled the legs, so
+  // legRoll.wingWhy is null), 'unplaced' when #8's rule alone found no pose either (the basket was never what failed)
+  beeBasketLabel(meta, svg, fail) {
+    if (meta.type !== 'bee') return;
+    beeSeen.beeBasketLabel++;
+    const lr = meta.legRoll || {}, b = lr.basket;
+    if (!['shown', 'dropped', 'unplaced'].includes(b)) return fail('bee legRoll.basket ' + JSON.stringify(b) + ' (want shown, dropped or unplaced)');
+    if (b !== 'unplaced' && lr.wingWhy) fail('bee legRoll.basket ' + b + ' but #8 found no pose (wingWhy ' + lr.wingWhy + '; want unplaced)');
+    if (b === 'unplaced' && !lr.wingWhy) fail('bee legRoll.basket unplaced but #8 settled the legs (want dropped or shown)');
   },
   // a head nearly as wide as the thorax
   beeHead(meta, svg, fail) {
@@ -2994,6 +3012,20 @@ const POST = {
     console.log('#65 bee corbicula shown (>= ' + BEE_BASKET.vis + ' of the hind tibia clear of the wings and body, behind a wing):', shown, 'of', n, 'bee plates' +
       (n < BEE_MIN ? '; too few bee plates (' + n + ' < ' + BEE_MIN + ') to require the share' : '') + (basketRun.worst.length ? '; hidden e.g. ' + basketRun.worst.slice(0, 6).join(', ') : ''));
   },
+  // #83 the report for BEE_TIME: every bee plate over k times the median non-bee plate is re-timed here against the
+  // non-bee plates nearest that median (best of `tries` each, back to back), and fails when it is still over the bound
+  beeTime(fail) {
+    const other = plateMs.other.map(r => r[1]);
+    if (!plateMs.bee.length || other.length < BEE_TIME.minOther) { console.log('#83 bee plate time: too few plates to time (' + plateMs.bee.length + ' bee, ' + other.length + ' non-bee)'); return; }
+    const med = median(other), over = plateMs.bee.filter(r => r[1] > BEE_TIME.k * med);
+    if (over.length) {
+      const retime = (seed, opts) => { let m = Infinity; for (let t = 0; t < BEE_TIME.tries; t++) { const t0 = process.hrtime.bigint(); E.generateInsectDetailed(seed, opts); m = Math.min(m, Number(process.hrtime.bigint() - t0) / 1e6); } return m; };
+      const ref = median(plateMs.other.slice().sort((a, b) => Math.abs(a[1] - med) - Math.abs(b[1] - med) || a[0] - b[0]).slice(0, BEE_TIME.ref).map(r => retime(r[0])));
+      const slow = over.map(r => [r[0], retime(r[0])]).filter(r => r[1] > BEE_TIME.k * ref);
+      if (slow.length) fail(slow.length + ' bee plate(s) take over ' + BEE_TIME.k + 'x the median non-bee plate (' + ref.toFixed(0) + ' ms): ' + slow.sort((a, b) => b[1] - a[1]).slice(0, 6).map(r => r[0] + ' (' + (r[1] / ref).toFixed(1) + 'x)').join(', '), 'bee');
+    }
+    console.log('#83 bee plate time: ' + plateMs.bee.length + ' bee plates against the median of ' + other.length + ' non-bee plates (bound ' + BEE_TIME.k + 'x)');
+  },
   // the #19 checks assert only on lacewing plates: once the run has NEU_MIN of them every selected one must have run
   neuSeen(fail) {
     const n = neuSeenPlates, idle = Object.keys(neuSeen).filter(k => ran.has(k) && !neuSeen[k]);
@@ -3219,7 +3251,7 @@ function parseArgs(argv) {
   return { from, to, only, jobs, worker };
 }
 const selected = (table, only) => Object.keys(table).filter(k => !only || only.includes(k));
-const POST_FOR = { neuFamilies: ['neuFamily'], beeBasket: ['beeBasket'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), orthShares: ['orthTegmen', 'orthWingSet', 'orthHindLeg'], cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), headSeen: Object.keys(headSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
+const POST_FOR = { neuFamilies: ['neuFamily'], beeBasket: ['beeBasket'], beeTime: ['beeBasket', 'beeBasketLabel'], beeSeen: Object.keys(beeSeen), neuSeen: Object.keys(neuSeen), orthSeen: Object.keys(orthSeen), orthShares: ['orthTegmen', 'orthWingSet', 'orthHindLeg'], cicSeen: Object.keys(cicSeen), ephSeen: Object.keys(ephSeen), colSeen: Object.keys(colSeen), headSeen: Object.keys(headSeen), cicShares: ['cicWingSet', 'cicWingShape', 'cicHabitus', 'cicMarks'], dipShares: ['dipWingSet', 'dipHabitus'], lepShares: ['lepWingSet', 'lepLegs'], craneShares: ['cranePose', 'craneHabitus', 'craneWingSet'], ephShares: ['ephFamily', 'ephHindSize', 'ephTails', 'ephWingSet'], colGenes: COL_GENE_CHECKS, sweptReport: ['sweptForelegs'] };   // a POST entry that also runs when a check it audits is selected
 const ran = new Set();   // the CHECKS this run selected, so a POST audit asks only about those
 const onceFail = name => (msg, type) => failures.push({ seed: 0, type: type || name, msg });   // fail for a PRE / POST entry
 
@@ -3281,6 +3313,7 @@ const RUN_STATE = {
   craneRun: obj(craneRun, MERGE.tree),
   beeSeen: obj(beeSeen, MERGE.tree),
   basketRun: obj(basketRun, MERGE.tree),
+  plateMs: obj(plateMs, MERGE.tree),
   beeSeenPlates: { get: () => beeSeenPlates, set: v => { beeSeenPlates = v; }, merge: MERGE.sum },
   neuSeen: obj(neuSeen, MERGE.tree),
   neuSeenPlates: { get: () => neuSeenPlates, set: v => { neuSeenPlates = v; }, merge: MERGE.sum },
@@ -3320,7 +3353,9 @@ const RUN_STATE_SKIP = ['ran', 'workers'];   // module-scope but not accumulated
 // the seed loop over seeds from..to: one plate per seed, the run counters, then every selected check
 async function seedLoop(from, to, checks) {
   for (let seed = from; seed <= to; seed++) {
+    const t0 = process.hrtime.bigint();
     const { svg, meta } = E.generateInsectDetailed(seed);
+    (meta.type === 'bee' ? plateMs.bee : plateMs.other).push([seed, Number(process.hrtime.bigint() - t0) / 1e6]);
     const key = meta.variant || meta.type;
     typeCount[key] = (typeCount[key] || 0) + 1;
     if (meta.type === 'bee') beeSeenPlates++;

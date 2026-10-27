@@ -197,7 +197,8 @@ function pointInPoly(p, poly) {
   return inside;
 }
 // half width of a body profile sampled every 2 px ([y, hw], as meta.thorax.profile / meta.abdomen.profile hold it) at y:
-// 0 outside it, where "outside" past the last sample tolerates tol. tests/check.js reads the body the same way.
+// 0 outside it, where "outside" past the last sample tolerates tol. tests/check.js reads the body the same way, and
+// drawLegs' basketGrid (#83) marks this function's edge (its bins, steps and ends): change both together.
 function profHw(prof, y, tol = 0) {
   if (!prof.length || y < prof[0][0]) return 0;
   const last = prof[prof.length - 1];
@@ -246,9 +247,19 @@ function bodyPart(yTop, length, maxHw, anchors, tension) {
   for (let i = right.length - 1; i >= 0; i--) if (right[i][0] > 0.01) pts.push([-right[i][0], right[i][1]]);
   const bz = catmullRomToBezier(pts, true, tension);
   const samples = sampleBezier(bz, 10);
+  // #83 the outline's segments bucketed by the 1 px rows they span, built on first use: hwAt walks only the segments
+  // that can hold y, so it takes the same maximum over the same segments
+  let rows = null, y0 = 0;
   function hwAt(y) {
+    if (!rows) {
+      rows = []; y0 = Math.min(...samples.map(p => p[1]));
+      for (let i = 0; i + 1 < samples.length; i++) {
+        const a = samples[i], b = samples[i + 1];
+        for (let r = Math.floor(Math.min(a[1], b[1]) - y0), r1 = Math.floor(Math.max(a[1], b[1]) - y0); r <= r1; r++) (rows[r] ||= []).push(i);
+      }
+    }
     let best = 0;
-    for (let i = 0; i + 1 < samples.length; i++) {
+    for (const i of rows[Math.floor(y - y0)] || []) {
       const a = samples[i], b = samples[i + 1];
       if ((a[1] <= y && y <= b[1]) || (b[1] <= y && y <= a[1])) {
         const x = b[1] === a[1] ? Math.max(a[0], b[0]) : a[0] + (b[0] - a[0]) * (y - a[1]) / (b[1] - a[1]);
@@ -605,6 +616,10 @@ const LEG_REPAIR = (() => {
 const LEG_RAISE_TOL = 8;
 // BASKET_VIS (#65): the share of a corbicula's tibia a repaired bee hind leg keeps clear of the wings and the body and behind a wing
 const BASKET_VIS = 0.5;
+// BASKET_CELL (#83): the cell size (px) of the grid the basket's point rule is cached on (drawLegs basketGrid); a cell
+// within BASKET_MARGIN px of a wing edge or the body's edge is tested exactly. The grid is built once BASKET_GRID tibias
+// have been asked of one wing set (fewer are tested point by point)
+const BASKET_CELL = 0.5, BASKET_MARGIN = 0.01, BASKET_GRID = 300;
 const LEG_KEEP = 6, LEG_DFS = [[48, 400, Infinity], [48, Infinity, Infinity]], LEG_PAIR_BUDGET = 40000;
 // After a leg or wing hit the antenna pose is straightened (R-D): per reason, the known-good fallback pose and the bound
 // the re-roll walks toward (straight ahead is -90). A plume or bristle with no clear pose at full length is shortened
@@ -904,15 +919,22 @@ function legEls(attach, spec, meta) {
   if (meta) meta.push({ x: attach[0], y: attach[1], tip: tr_.tip, fem, tib });
   return els;
 }
-// The joint polyline legEls would draw, without drawing it: attach, coxa, trochanter, femur tip (index 3), tibia tip,
-// every tarsomere, claw tip. Used to validate a pose against the body before anything is emitted, and exposed on
-// meta.legs so tests can sample it.
-function legJoints(attach, spec) {
-  const dirs = spec.dirs, lens = spec.lens, pts = [attach];
+// legJoints' first five points: attach, coxa, trochanter, femur tip (the knee), tibia tip (#83: the basket search
+// tests a bee's tibia before it builds the rest of the leg)
+function legTibia(attach, dirs, lens) {
+  const pts = [attach];
   let p = add(attach, mul(dirv(dirs[0]), lens[0] * 0.8)); pts.push(p);
   p = add(p, mul(dirv(lerp(dirs[0], dirs[1], 0.5)), lens[0] * 0.5)); pts.push(p);
   p = add(p, mul(dirv(dirs[1]), lens[1])); pts.push(p);
   p = add(p, mul(dirv(dirs[2]), lens[2])); pts.push(p);
+  return pts;
+}
+// The joint polyline legEls would draw, without drawing it: attach, coxa, trochanter, femur tip (index 3), tibia tip,
+// every tarsomere, claw tip. Used to validate a pose against the body before anything is emitted, and exposed on
+// meta.legs so tests can sample it.
+function legJoints(attach, spec) {
+  const dirs = spec.dirs, lens = spec.lens, pts = legTibia(attach, dirs, lens);
+  let p = pts[4];
   const n = spec.tarsomeres || 5, fr = { 3: [0.45, 0.3, 0.25], 4: [0.36, 0.24, 0.21, 0.19], 5: [0.34, 0.2, 0.17, 0.15, 0.14] }[n];
   let a = dirs[3];
   if (spec.basitarsus) {
@@ -4471,7 +4493,12 @@ function drawTegulae(C) {
 }
 
 // ---------- legs ----------
+// #83 the engine-wide helpers the leg rules call in their inner loops, bound locally in drawLegs (with Math): under
+// node's vm, where the tests and checks run the engine, every engine-wide name is a lookup on the contextified global,
+// slow enough to be most of a long leg repair's time (a bee's basket search); the same functions, so the same plates
+const LEG_HELPERS = { lerpP, vlen, sub, add, dirv, profHw, pointInPoly, segDist, legJoints, legTibia, legEls };
 function drawLegs(C) {
+  const Math = globalThis.Math, { lerpP, vlen, sub, add, dirv, profHw, pointInPoly, segDist, legJoints, legTibia, legEls } = LEG_HELPERS;
   const { type, order, L, meta, P, B, thorax, abdomen } = C;
   {
     // leg thickness follows body size, scaled by the entry's legThick (slender-legged orders < 1; default 1)
@@ -4540,10 +4567,39 @@ function drawLegs(C) {
     // test in tests/check.js see the same body; m: by at least m px
     const underBody = (p, m = 0) => Math.abs(p[0]) < Math.max(profHw(meta.thorax.profile, p[1], 0.11), profHw(meta.abdomen.profile, p[1])) - m;
     let wingBoxes = null, boxesFor = null;
+    // wingBoxes: per outline its box and (#83) its edges bucketed by the 1 px rows (rows[r]: edge i to i - 1, the pairs
+    // pointInPoly walks) and columns (cols[c]: edge i to i + 1, behindWing's) they span, so a point test walks only the
+    // edges that can cross its row or column: the same edges, in a different order, so the same answers
+    const bucket = (poly, ax, lo, prev) => {
+      const out = [], n = poly.length;
+      for (let i = 0; i < n; i++) {
+        const a = poly[i], b = poly[prev ? (i + n - 1) % n : (i + 1) % n];
+        for (let r = Math.floor(Math.min(a[ax], b[ax]) - lo), r1 = Math.floor(Math.max(a[ax], b[ax]) - lo); r <= r1; r++) (out[r] ||= []).push(i);
+      }
+      return out;
+    };
+    const boxWings = wings => {
+      if (boxesFor === wings) return;
+      boxesFor = wings;
+      wingBoxes = wings.map(poly => {
+        let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+        for (const q of poly) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); }
+        return { poly, x0, x1, y0, y1, rows: bucket(poly, 1, y0, true), cols: bucket(poly, 0, x0, false) };
+      });
+    };
+    const inWing = (p, w) => {   // pointInPoly(p, w.poly), over the edges of p's row (its crossing test, kept the same)
+      const poly = w.poly, n = poly.length, row = w.rows[Math.floor(p[1] - w.y0)];
+      let inside = false;
+      if (row) for (const i of row) {
+        const a = poly[i], b = poly[(i + n - 1) % n];
+        if ((a[1] > p[1]) !== (b[1] > p[1]) && p[0] < (b[0] - a[0]) * (p[1] - a[1]) / (b[1] - a[1]) + a[0]) inside = !inside;
+      }
+      return inside;
+    };
     // W in a wing, B under the body, V visible (wingBoxes: the outlines wingWhy was last given)
-    const state = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] >= w.y0 && p[1] <= w.y1 && pointInPoly(p, w.poly)) ? 'W' : underBody(p) ? 'B' : 'V';
+    const state = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] >= w.y0 && p[1] <= w.y1 && inWing(p, w)) ? 'W' : underBody(p) ? 'B' : 'V';
     const wingWhy = (joints, specs, wings, idx) => {
-      if (boxesFor !== wings) { boxesFor = wings; wingBoxes = wings.map(poly => { let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity; for (const q of poly) { x0 = Math.min(x0, q[0]); x1 = Math.max(x1, q[0]); y0 = Math.min(y0, q[1]); y1 = Math.max(y1, q[1]); } return { poly, x0, x1, y0, y1 }; }); }
+      boxWings(wings);
       const discHas = (p, r, a, b = a) => {   // the disc of radius r round p (its centre and 16 points on its rim) holds a state passing a and one passing b
         let ha = false, hb = false;
         for (let q = -1; q < 16; q++) { const s = state(q < 0 ? p : [p[0] + r * DISC16[q][0], p[1] + r * DISC16[q][1]]); if (a(s)) ha = true; if (b(s)) hb = true; if (ha && hb) return true; }
@@ -4579,18 +4635,91 @@ function drawLegs(C) {
     // the costa beside the mid leg. It is a wing-aware rule (placeLegs) held while basketOn: a plate whose repair finds no
     // pose that shows the basket drops it (emit) and is settled under #8's rule alone.
     let basketOn = B.legs.some(g => g.corbicula);
-    const behindWing = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] > w.y0 && w.poly.some((a, i) => {
-      const b = w.poly[(i + 1) % w.poly.length];
+    const behindWing = p => wingBoxes.some(w => p[0] >= w.x0 && p[0] <= w.x1 && p[1] > w.y0 && (w.cols[Math.floor(p[0] - w.x0)] || []).some(i => {   // over the edges of p's column (boxWings)
+      const a = w.poly[i], b = w.poly[(i + 1) % w.poly.length];
       return (a[0] > p[0]) !== (b[0] > p[0]) && a[1] + (b[1] - a[1]) * (p[0] - a[0]) / (b[0] - a[0]) < p[1];
     }));
-    const basketVis = j => {
-      const a = j[3], b = j[4], n = Math.max(2, Math.ceil(vlen(sub(b, a))));
+    const shownExact = p => state(p) === 'V' && behindWing(p);
+    // #83 the same point rule cached on a grid of BASKET_CELL px cells, built per wing set (wingBoxes) and filled as
+    // asked: the rule changes only across a wing edge, a body profile edge or one of its ends, or (behind a wing) the
+    // line straight down from a turn of a wing outline where it doubles back in x (a crossing above starts or ends there).
+    // So a cell none of those reaches (within BASKET_MARGIN) holds one value throughout, found once per region
+    // (basketFill), and a point in any other cell, or below the grid, is tested exactly: the answers are the exact
+    // rule's, only cheaper. Left or right of every wing, or ahead of all of them, no point is behind a wing.
+    let bGrid = null, asks = 0, asksFor = null;   // bGrid: the grid for wingBoxes; asks: tibias asked of these wings (asksFor)
+    const basketGrid = () => {
+      if (bGrid && bGrid.boxes === wingBoxes) return bGrid;
+      const c = BASKET_CELL, tp = meta.thorax.profile, ap = meta.abdomen.profile;
+      let x0 = Infinity, x1 = -Infinity, y0 = Infinity, y1 = -Infinity;
+      for (const w of wingBoxes) { x0 = Math.min(x0, w.x0); x1 = Math.max(x1, w.x1); y0 = Math.min(y0, w.y0); y1 = Math.max(y1, w.y1); }
+      for (const prof of [tp, ap]) if (prof.length) y1 = Math.max(y1, prof[prof.length - 1][0] + 1);
+      const nx = Math.floor((x1 - x0) / c) + 1, ny = Math.floor((y1 - y0) / c) + 1, cell = new Uint8Array(nx * ny);   // per cell: 0 not yet known, 1 shown, 2 not, 3 tested point by point
+      const box = (x, y, m) => {   // every cell the square of half width m round (x, y) reaches
+        const i0 = Math.max(0, Math.floor((x - m - x0) / c)), i1 = Math.min(nx - 1, Math.floor((x + m - x0) / c));
+        const k0 = Math.max(0, Math.floor((y - m - y0) / c)), k1 = Math.min(ny - 1, Math.floor((y + m - y0) / c));
+        for (let k = k0; k <= k1; k++) for (let i = i0; i <= i1; i++) cell[k * nx + i] = 3;
+      };
+      const mark = (ax, ay, bx, by, m) => {   // every cell within m of the segment a-b: squares round points c / 4 apart along it
+        const n = Math.max(1, Math.ceil(Math.hypot(bx - ax, by - ay) / (c / 4)));
+        for (let q = 0; q <= n; q++) box(ax + (bx - ax) * q / n, ay + (by - ay) * q / n, m + c / 8);
+      };
+      for (const w of wingBoxes) for (let i = 0, n = w.poly.length; i < n; i++) {
+        const u = w.poly[(i + n - 1) % n], a = w.poly[i], b = w.poly[(i + 1) % n];
+        mark(a[0], a[1], b[0], b[1], BASKET_MARGIN);
+        if ((u[0] - a[0]) * (b[0] - a[0]) >= 0) mark(a[0], a[1], a[0], y1, BASKET_MARGIN);
+      }
+      // the body's edge as underBody reads it: profHw is linear within each 2 px bin from the first sample (bin k on the
+      // line through samples k and k + 1, the last bin running on to the last sample), steps between bins, and ends at the
+      // first sample and (past tol) the last; each side
+      for (const [prof, tol] of [[tp, 0.11], [ap, 0]]) if (prof.length > 1) {
+        const p0 = prof[0][0], m = prof.length - 2, l = prof[m + 1], edge = [[0, p0]];
+        for (let k = 0; k <= m; k++) {
+          const a = prof[k], b = prof[k + 1], at = y => a[1] + (b[1] - a[1]) * (b[0] === a[0] ? 0 : (y - a[0]) / (b[0] - a[0]));
+          const ya = p0 + 2 * k, yb = k < m ? ya + 2 : Math.max(ya + 2, l[0]);
+          edge.push([at(ya), ya], [at(yb), yb]);
+        }
+        edge.push([l[1], l[0]], [l[1], l[0] + tol], [0, l[0] + tol]);
+        for (const s of [1, -1]) for (let k = 0; k + 1 < edge.length; k++) mark(s * edge[k][0], edge[k][1], s * edge[k + 1][0], edge[k + 1][1], BASKET_MARGIN);
+      }
+      return (bGrid = { boxes: wingBoxes, x0, x1, y0, nx, ny, cell });
+    };
+    // a cell not yet known takes its centre's value, and so does every cell joined to it by unmarked cells (one value
+    // throughout, as no boundary runs between them): one exact test per region of the grid
+    const basketFill = (at, i, k) => {
+      const { nx, cell } = bGrid, v = shownExact([bGrid.x0 + (i + 0.5) * BASKET_CELL, bGrid.y0 + (k + 0.5) * BASKET_CELL]) ? 1 : 2, todo = [at];
+      cell[at] = v;
+      while (todo.length) {
+        const q = todo.pop(), qi = q % nx;
+        for (const r of [qi > 0 ? q - 1 : -1, qi + 1 < nx ? q + 1 : -1, q - nx, q + nx]) if (r >= 0 && r < cell.length && !cell[r]) { cell[r] = v; todo.push(r); }
+      }
+      return v;
+    };
+    // the tibia (knee j[3] to tip j[4]) shows its basket: BASKET_VIS of its samples (lerpP's points) pass, counted only
+    // as far as decides it
+    const basketShows = j => basketTibia(j[3][0], j[3][1], j[4][0], j[4][1]);
+    const basketTibia = (a0, a1, b0, b1) => {   // the tibia from knee (a0, a1) to tip (b0, b1)
+      if (!wingBoxes.length) return false;
+      const d0 = b0 - a0, d1 = b1 - a1, n = Math.max(2, Math.ceil(Math.hypot(d0, d1)));   // vlen(sub(b, a))
+      if (asksFor !== wingBoxes) { asksFor = wingBoxes; asks = 0; }
+      // a short search tests every sample exactly: the grid would cost it more than it saves
+      const G = ++asks > BASKET_GRID ? basketGrid() : null, c = BASKET_CELL;
+      const shown = (x, y) => {
+        if (!G) return shownExact([x, y]);
+        if (x < G.x0 || x > G.x1 || y < G.y0) return false;
+        const i = Math.floor((x - G.x0) / c), k = Math.floor((y - G.y0) / c), at = k * G.nx + i;
+        const u = k >= G.ny ? 3 : G.cell[at] || basketFill(at, i, k);
+        return u === 3 ? shownExact([x, y]) : u === 1;
+      };
       let v = 0;
-      for (let q = 0; q <= n; q++) { const p = lerpP(a, b, q / n); if (state(p) === 'V' && behindWing(p)) v++; }
-      return v / (n + 1);
+      for (let q = 0; q <= n; q++) {
+        const t = q / n;
+        if (shown(a0 + d0 * t, a1 + d1 * t)) { if (v++, v / (n + 1) >= BASKET_VIS) return true; }   // lerpP's point
+        else if ((v + n - q) / (n + 1) < BASKET_VIS) return false;   // even if every later sample passed
+      }
+      return v / (n + 1) >= BASKET_VIS;
     };
     // basketWhy reads wingBoxes, so it runs only after wingWhy (legsOk's last rule) has set them for these wings
-    const basketWhy = (joints, idx) => idx.some(i => B.legs[i].corbicula && basketVis(joints[i]) < BASKET_VIS) ? 'basket' : null;
+    const basketWhy = (joints, idx) => idx.some(i => B.legs[i].corbicula && !basketShows(joints[i])) ? 'basket' : null;
     // the pose rules for the pairs in idx (placeLegs repairs pair by pair), the wing rule last as the dearest
     const ALL = [0, 1, 2];
     const exempt = () => isOdo && pose === 'basket';   // the odonate prey basket is exempt from the head rules (tiny beside its wide head); the tucked pose folds against the head, so it keeps clear of the sockets (#48)
@@ -4681,7 +4810,10 @@ function drawLegs(C) {
     // drawn: first among each pair's first pose, then its first LEG_KEEP, then placed depth first (LEG_DFS). With none
     // the pose stays as rolled (legRoll.wingWhy says why, and tests/check.js legWings fails it).
     const PAIR = ['front', 'mid', 'hind'];
-    const repair = wings => {
+    // seen (#83): whether each pose a pair was held to alone passed #8's rules, by pair, base and offset, kept from a first
+    // repair for a second over the same wings. The basket rule drops between them, but a corbicula pose reaches legsOk
+    // only once it has shown the basket (grow), and then legsOk's verdict is #8's alone
+    const repair = (wings, seen = new Map()) => {
       const mid = r => (r[0] + r[1]) / 2;
       const famDirs = R => { const F = mid(R.F), tib = R.tib ? mid(R.tib) : F + mid(R.fold); return [F - 7, F, tib, tib + mid(R.T)]; };
       const lists = [0, 1, 2].map(i => {
@@ -4690,12 +4822,32 @@ function drawLegs(C) {
       });
       const grow = (L, want) => {   // add passing poses to L until it holds want or its search is spent
         const at = attachOf(B.legs[L.i]).p, S = [], J = [];
+        // #83 a corbicula pair's pose is first held to the basket alone, which is cheap beside the other rules: legsOk
+        // would reject it anyway, so the passing poses are the same, but a plate where no pose shows the basket spends
+        // its search here: on the tibia alone (legTibia), before the rest of the pose is built (basketTibia reads
+        // wingBoxes, so they are set for these wings first; the legs' lengths do not turn with the pose)
+        // (a clamped fore coxa, #21, has makeSpec rewrite its dirs, so it never takes this path)
+        const basketFirst = basketOn && B.legs[L.i].corbicula && !(fc && L.i === 0), lens = basketFirst ? makeSpec(L.i, L.bases[0], lenK).lens : null;
+        if (basketFirst) boxWings(wings);
+        const knees = L.knees ||= new Map(), tibDirs = L.tibDirs ||= new Map();
         while (L.poses.length < want && !L.done) {
           if (L.k >= LEG_REPAIR.length) { L.bi++; L.k = 0; if (L.bi >= L.bases.length) { L.done = true; break; } }
-          const o = LEG_REPAIR[L.k++], b = L.bases[L.bi];
-          S[L.i] = makeSpec(L.i, [b[0] + o[0] + o[2], b[1] + o[0], b[2] + o[1], b[3] + o[1]], lenK, Math.max(0, o[2]));   // a clamped fore coxa (#21) takes only the coxa offset, and only backward
-          J[L.i] = legJoints(at, S[L.i]);
-          if (!legsOk(J, S, wings, [L.i], o[3] + L.bi > 0)) L.poses.push({ spec: S[L.i], joints: J[L.i], cost: o[3] + L.bi * 1000, label: (L.bi ? 'base ' + L.bi + ' ' : '') + o.slice(0, o[2] ? 3 : 2).join('/') });
+          const o = LEG_REPAIR[L.k++], b = L.bases[L.bi], dirs = [b[0] + o[0] + o[2], b[1] + o[0], b[2] + o[1], b[3] + o[1]];
+          if (basketFirst) {   // legTibia's knee and tibia tip: the knee kept per base and femur / coxa turn (it does not move with the tibia), the tibia's direction per base and tibia turn
+            const kneeKey = L.bi + ' ' + o[0] + ' ' + o[2], dirKey = L.bi + ' ' + o[1];
+            let knee = knees.get(kneeKey), tib = tibDirs.get(dirKey);
+            if (!knee) knees.set(kneeKey, knee = legTibia(at, dirs, lens)[3]);
+            if (!tib) tibDirs.set(dirKey, tib = dirv(dirs[2]));
+            if (!basketTibia(knee[0], knee[1], knee[0] + tib[0] * lens[2], knee[1] + tib[1] * lens[2])) continue;
+          }
+          const key = L.i + ' ' + L.bi + ' ' + L.k;
+          let pass = seen.get(key);
+          if (pass === undefined) {
+            S[L.i] = makeSpec(L.i, dirs, lenK, Math.max(0, o[2]));   // a clamped fore coxa (#21) takes only the coxa offset, and only backward
+            J[L.i] = legJoints(at, S[L.i]);
+            seen.set(key, pass = !legsOk(J, S, wings, [L.i], o[3] + L.bi > 0) && { spec: S[L.i], joints: J[L.i] });
+          }
+          if (pass) L.poses.push({ spec: pass.spec, joints: pass.joints, cost: o[3] + L.bi * 1000, label: (L.bi ? 'base ' + L.bi + ' ' : '') + o.slice(0, o[2] ? 3 : 2).join('/') });
         }
       };
       // two poses of different pairs that may stand together (femur tips in order, no crossing; each has passed legsOk on
@@ -4748,9 +4900,16 @@ function drawLegs(C) {
     // fit, wings): as rolled, else with every angle reversed, else no skew.
     const emit = wings => {
       const wingFirst = legsOk(joints, specs, wings);
-      let repaired = wingFirst ? repair(wings) : [];
-      let basket = basketOn ? 'shown' : null;   // #65: 'shown', or 'dropped' when no pose the repair reaches shows the basket
-      if (basketOn && repaired[0] === 'none') { basketOn = false; basket = 'dropped'; repaired = legsOk(joints, specs, wings) ? repair(wings) : []; }
+      const seen = new Map();
+      let repaired = wingFirst ? repair(wings, seen) : [];
+      // #65: 'shown', or 'dropped' when no pose the repair reaches shows the basket and #8's rule alone then settles the
+      // legs; #83: 'unplaced' when #8's rule alone finds no pose either, so the basket was not what failed
+      let basket = basketOn ? 'shown' : null;
+      if (basketOn && repaired[0] === 'none') {
+        basketOn = false;
+        repaired = legsOk(joints, specs, wings) ? repair(wings, seen) : [];
+        basket = repaired[0] === 'none' ? 'unplaced' : 'dropped';
+      }
       const pivots = B.legs.map(g => attachOf(g).p);
       const rotAbout = (p, c, deg) => add(c, rot(sub(p, c), deg * D2R));
       let skewK = 1;   // 1 as rolled, -1 the other way round, 0 none: the realised skew stays in 2-6 degrees or is dropped
