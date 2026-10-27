@@ -24,7 +24,7 @@ const { loadEngine, engineContract } = require('./engine');
 const os = require('os');
 const { fork } = require('child_process');
 const raster = require('./raster');
-const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX } = require('./names');
+const { epithetProblems, repeatedStem, FAM_NOUN_SPEC, hasPhrase, geneProblems, antRare, duplicateShare, DUP_MAX, wingKinds, wingProblems, pigmentWords, namesPigment, PIG_WORD_MIN, tableKey } = require('./names');
 const E = loadEngine();
 
 const MESH = new Set(['dragonfly', 'damselfly', 'mayfly', 'grasshopper']);   // orders whose wing sig counts mesh cells
@@ -363,6 +363,7 @@ const distToPl = (p, pl) => { let d = Infinity; for (let i = 0; i + 1 < pl.lengt
 // #28 names: the names table a plate's common name comes from (the variant's, else the order's), and the run's common names
 const namesTable = (type, variant) => { const o = E.ORDERS[type]; return (variant && o.variantNames && o.variantNames[variant]) || o.names; };
 const commons = [];
+const pigNames = { n: 0, named: 0 };   // #82 pigmented odonate plates, and those whose common name names the pigment
 const hymSeen = {};   // Hymenoptera family -> plates hymCells saw, so POST.hymCells can tell a family that never appears (a rename) from a short run
 // #17, from the references (odo-damsel-ris1921: a coenagrionid, two antenodals and the quadrilateral from the arculus;
 // Calopterygidae carry an antenodal ladder) and the common names of each family, stated here rather than read from the engine
@@ -2828,8 +2829,15 @@ const CHECKS = {
   // whenever the plate has one to give (tests/names.js geneProblems: a marking other than plain, a rare antenna kind)
   nameGenes(meta, svg, fail) {
     commons.push(meta.name.common);
-    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(E.ORDERS, meta.type, meta.bodyGenes.fam, meta.antenna)))
+    for (const p of geneProblems(meta.name.common, meta.bodyGenes.abd.mark, meta.antenna, antRare(E.ORDERS, meta.type, meta.bodyGenes.fam, meta.antenna), pigmentWords(wingKinds(meta))))
       fail('common name disagrees with the genes: ' + p + ' ("' + meta.name.common + '")');
+  },
+  // the common name agrees with the drawn wing (#82): no wing pattern word (tests/names.js WING_CLAIMS) the plate does not
+  // draw, unless its names table leaves the word free (WING_UNDRAWN); colour words claim nothing. Tallies the pigment share.
+  nameWings(meta, svg, fail) {
+    const kinds = wingKinds(meta), common = meta.name.common;
+    for (const p of wingProblems(common, tableKey(E.ORDERS, meta.type, meta.variant), kinds)) fail('common name claims an undrawn wing: ' + p + ' ("' + common + '")');
+    if (kinds.length) { pigNames.n++; if (namesPigment(common, kinds)) pigNames.named++; }
   },
 };
 
@@ -2859,6 +2867,13 @@ const sigRule = (sigs, what, distinctFloor, fail) => {
   }
 };
 const POST = {
+  // #82 (b): pigmented odonates name their pigment on at least PIG_WORD_MIN of their plates
+  nameWings(fail) {
+    if (!pigNames.n) return;
+    const share = pigNames.named / pigNames.n;
+    if (share < PIG_WORD_MIN) fail('pigmented odonates named for their wing: ' + pigNames.named + ' of ' + pigNames.n + ' (' + (share * 100).toFixed(1) + '%, min ' + PIG_WORD_MIN * 100 + '%)');
+    console.log('odonate pigment words: ' + pigNames.named + ' of ' + pigNames.n + ' pigmented plates (' + (share * 100).toFixed(1) + '%)');
+  },
   // duplicate common names (#28): under DUP_MAX of the run's plates share a common name with an earlier plate
   nameGenes(fail) {
     const share = duplicateShare(commons);
@@ -3282,6 +3297,7 @@ const best = (minmax, key, ...carry) => MERGE.all(MERGE.fields({ n: MERGE.sum })
 const RUN_STATE = {
   failures: obj(failures, MERGE.concat),
   commons: obj(commons, MERGE.concat),
+  pigNames: obj(pigNames, MERGE.tree),
   typeCount: obj(typeCount, MERGE.tree),
   wingSigs: obj(wingSigs, MERGE.tree),
   bodySigs: obj(bodySigs, MERGE.tree),

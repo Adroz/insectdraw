@@ -93,6 +93,15 @@ pigment adds no solid 5x5 block of black that the wing alone does not already ha
 cost the hatch two choices: the whole-wing tone is 1.3x the pitch, and the wash stops at 0.35-0.75 of the span, short of
 the stigma, where the costal field converges (on a narrow wing it ran solid there).
 
+**Names** (#82): the pigment names the plate on half the pigmented plates (`GENE_WING_P`), a word for one of the kinds
+drawn, after field-guide usage: basal *Dark-based* / *Black-based* (and the calopterygid noun *Rubyspot*, Hetaerina's red
+bases, kept to plates with a basal patch); wash *Amber-winged* / *Saffron-winged* / *Golden-winged* (Sympetrum
+costiferum, Libellula auripennis; colour words, free on any plate); nodal *Spot-winged* / *Four-spot* (L. quadrimaculata's
+nodal spots; *Four-spotted* stays the abdomen's spotted word); band *Band-winged* / *Bar-winged* (Erythrodiplax umbrata,
+the Band-winged Dragonlet); tips *Dusky-tipped* / *Tip-spotted*; full *Dark-winged* / *Black-winged* / *Ebony* /
+*Smoky-winged* (Calopteryx maculata, the Ebony Jewelwing). The pattern words never name a plate that does not draw the
+kind (`tests/names.js` `WING_CLAIMS`, check.js `nameWings`).
+
 **Resting pose** (`B.rest`, the damselfly entry's `rest`): most damselflies rest with the wings closed back over the
 abdomen; the spreadwings hold them half open (but *Sympecma* closes them). The pose comes from the wing set's own two
 draws (the forewing draw under the family's odds closes the wings and is rescaled onto the closed sweep), so it adds no
