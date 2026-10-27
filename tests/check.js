@@ -3004,9 +3004,9 @@ const POST = {
     if (!plateMs.bee.length || other.length < BEE_TIME.minOther) { console.log('#83 bee plate time: too few plates to time (' + plateMs.bee.length + ' bee, ' + other.length + ' non-bee)'); return; }
     const med = median(other), over = plateMs.bee.filter(r => r[1] > BEE_TIME.k * med);
     if (over.length) {
-      const best = (seed, opts) => { let m = Infinity; for (let t = 0; t < BEE_TIME.tries; t++) { const t0 = process.hrtime.bigint(); E.generateInsectDetailed(seed, opts); m = Math.min(m, Number(process.hrtime.bigint() - t0) / 1e6); } return m; };
-      const ref = median(plateMs.other.slice().sort((a, b) => Math.abs(a[1] - med) - Math.abs(b[1] - med) || a[0] - b[0]).slice(0, BEE_TIME.ref).map(r => best(r[0])));
-      const slow = over.map(r => [r[0], best(r[0])]).filter(r => r[1] > BEE_TIME.k * ref);
+      const retime = (seed, opts) => { let m = Infinity; for (let t = 0; t < BEE_TIME.tries; t++) { const t0 = process.hrtime.bigint(); E.generateInsectDetailed(seed, opts); m = Math.min(m, Number(process.hrtime.bigint() - t0) / 1e6); } return m; };
+      const ref = median(plateMs.other.slice().sort((a, b) => Math.abs(a[1] - med) - Math.abs(b[1] - med) || a[0] - b[0]).slice(0, BEE_TIME.ref).map(r => retime(r[0])));
+      const slow = over.map(r => [r[0], retime(r[0])]).filter(r => r[1] > BEE_TIME.k * ref);
       if (slow.length) fail(slow.length + ' bee plate(s) take over ' + BEE_TIME.k + 'x the median non-bee plate (' + ref.toFixed(0) + ' ms): ' + slow.sort((a, b) => b[1] - a[1]).slice(0, 6).map(r => r[0] + ' (' + (r[1] / ref).toFixed(1) + 'x)').join(', '), 'bee');
     }
     console.log('#83 bee plate time: ' + plateMs.bee.length + ' bee plates against the median of ' + other.length + ' non-bee plates (bound ' + BEE_TIME.k + 'x)');
