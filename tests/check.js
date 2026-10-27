@@ -227,11 +227,14 @@ const BEE = { abd: 1.05, tibia: 1.5, head: 0.8, ocelli: 0.6, scape: [0.27, 0.4] 
 const BEE_BASKET = { vis: 0.5, share: 7 / 9 };
 const basketRun = { n: 0, shown: 0, worst: [] };   // over the run, for POST.beeBasket: bee plates, those showing the basket, the least visible
 // #83 the corbicula search no longer costs a bee plate seconds: no bee plate takes longer than `k` times the median
-// non-bee plate to generate (the ticket's target is 2x, which the worst bee plate in 1-3000 meets; 3 leaves room for
-// timing noise, where an unchecked basket search ran 5-20x). The seed loop times every plate (plateMs); POST.beeTime
+// non-bee plate to generate. Under #83's loader the bound was 3x (worst bee plate about 2x, an unchecked basket search
+// 5-20x); #86's function-scope loader made the median plate about 7x faster but a bee's leg search only about 3x (that
+// time is real work, not global lookups), so the ratios grew: the worst bee plates in 1-3000 (2993, forced bee 18) now run
+// about 5x and the unchecked search of the engine before #83 runs 30-90x (1849 93x, forced bee 117 70x). 10 sits between
+// with room for noise on both sides. The seed loop times every plate (plateMs); POST.beeTime
 // re-times, in this process and back to back, each bee plate over the bound and the `ref` non-bee plates nearest the
 // run's median, best of `tries` each, so a slow shard, a GC pause or a busy machine cannot fail a plate on its own
-const BEE_TIME = { k: 3, ref: 5, tries: 3, minOther: 20 };
+const BEE_TIME = { k: 10, ref: 5, tries: 3, minOther: 20 };
 const plateMs = { bee: [], other: [] };   // [seed, ms] of every plate in the run, generation only, for POST.beeTime
 const beeSeen = { hymFamilies: 0, beeAbdomen: 0, beeLegs: 0, beeCorbicula: 0, beeBasket: 0, beeBasketLabel: 0, beeHead: 0, beeOcelli: 0, beeLattice: 0, beeScape: 0 };   // plates each #12 check asserted on, for POST.beeSeen
 let beeSeenPlates = 0;   // bee plates in the run, counted by the seed loop whichever checks are selected
@@ -713,6 +716,31 @@ const PRE = {
   // the agreed export list; a consumer that scrapes by tag and one that scrapes by module.exports must get the same code
   engine(fail) {
     for (const msg of engineContract()) fail('engine contract: ' + msg);
+  },
+  // #86 the contract check still catches what it guards now that loadEngine runs the block in a function scope: each case
+  // is the real engine block with one breach spliced in, written to a temp copy of index.html, and must be reported. The
+  // global is reached by a computed name so only the run under vm (not the source scan) can catch it; a top-level
+  // `return` is legal in a function body but a SyntaxError in a page's <script>, so the loader must still reject it as running the block as a script does
+  contractGuard(fail) {
+    const fs = require('fs'), os = require('os'), path = require('path');
+    const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
+    const block = html.match(/<script id="engine">([\s\S]*?)<\/script>/)[1];
+    const cases = [
+      ['a browser global reached at load', b => b.replace(/\n\/\/ ---------- PRNG/, "\nglobalThis['loc' + 'ation'].href;\n// ---------- PRNG"), /throws when run under vm/],
+      ['a missing export', b => b.replace(/, CAPTION_H \}/, ' }'), /exports differ from the contract/],
+      ['a top-level return', b => b.replace(/\n\/\/ ---------- PRNG/, "\nif (typeof module === 'undefined') return;\n// ---------- PRNG"), /throws when run under vm: Illegal return statement/],
+    ];
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'insectdraw-contract-'));
+    try {
+      for (const [name, breach, want] of cases) {
+        const bad = breach(block);
+        if (bad === block) { fail('engine contract guard: the ' + name + ' case no longer applies to the engine block'); continue; }
+        const file = path.join(dir, 'index.html');
+        fs.writeFileSync(file, html.replace(block, () => bad));
+        const got = engineContract(file);
+        if (!got.some(m => want.test(m))) fail('engine contract guard: ' + name + ' is not reported (got: ' + (got.join('; ') || 'no problems') + ')');
+      }
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   },
   // The order registry (#4): ORDERS is the one table every per-order fact lives in, keyed by type in pick order (TYPES
   // is its key list, so the first rng draw indexes the registry). Every entry carries what the sections read: the
