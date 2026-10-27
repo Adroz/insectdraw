@@ -4493,12 +4493,7 @@ function drawTegulae(C) {
 }
 
 // ---------- legs ----------
-// #83 the engine-wide helpers the leg rules call in their inner loops, bound locally in drawLegs (with Math): under
-// node's vm, where the tests and checks run the engine, every engine-wide name is a lookup on the contextified global,
-// slow enough to be most of a long leg repair's time (a bee's basket search); the same functions, so the same plates
-const LEG_HELPERS = { lerpP, vlen, sub, add, dirv, profHw, pointInPoly, segDist, legJoints, legTibia, legEls };
 function drawLegs(C) {
-  const Math = globalThis.Math, { lerpP, vlen, sub, add, dirv, profHw, pointInPoly, segDist, legJoints, legTibia, legEls } = LEG_HELPERS;
   const { type, order, L, meta, P, B, thorax, abdomen } = C;
   {
     // leg thickness follows body size, scaled by the entry's legThick (slender-legged orders < 1; default 1)
