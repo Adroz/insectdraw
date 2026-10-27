@@ -20,9 +20,11 @@ function loadEngine(htmlPath) {
   if (!m) throw new Error('engine script not found in ' + file);
   // The block runs as the body of a function compiled in a fresh vm context, so its top-level declarations are function
   // locals rather than properties of the contextified global, where every lookup goes through node's interceptor (#86:
-  // about 4x the plate time). Math, the one builtin the engine reads in its hot loops, is passed in as a parameter for the
-  // same reason; it is the context's own Math, the one the block saw when it ran as a script. The engine still reaches
-  // every other global through the bare context, so a browser global touched at load still throws here.
+  // about 4x the plate time). Math, the builtin the engine reads in its hot loops, is passed in as a parameter for the
+  // same reason (it is about 1000 of the block's builtin reads; passing Object, Array, Infinity, Map and Set too measured
+  // within noise); it is the context's own Math, the one the block saw when it ran as a script. The engine still reaches
+  // every other global through the bare context, so a browser global touched at load still throws here. The parameter
+  // names mean the block cannot declare a top-level `module`, `console` or `Math` (a SyntaxError here, loud not silent).
   new vm.Script(m[1], { filename: file });   // parse it as a page parses it first: a top-level `return` is legal in a function body only
   const ctx = vm.createContext({}), module = { exports: {} };
   const run = vm.compileFunction(m[1], ['module', 'console', 'Math'], { parsingContext: ctx, filename: file });
@@ -71,4 +73,4 @@ function engineContract(htmlPath) {
   return problems;
 }
 
-module.exports = { loadEngine, engineContract, EXPORTS };
+module.exports = { loadEngine, engineContract, EXPORTS, ENGINE_RE };

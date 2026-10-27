@@ -398,7 +398,7 @@ How each consumer loads it:
 | --- | --- |
 | `index.html` | the block runs inline; the page's own UI script is a second `<script>` after it |
 | `compare.html`, `parts.html`, `tests/sheet.html` | `fetch` `index.html` (`../index.html` from `tests/`), match the tag, inject the text as a script (so they need HTTP) |
-| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `perceptual.js`, `names.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm` as the body of a function (so its top-level names are locals, not lookups on the vm's global; #86), returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
+| `tests/check.js`, `sheet.js`, `eink.js`, `daily.js`, `snapshot.js`, `perceptual.js`, `names.js`, `scripts/render-daily.js` | `require('./engine').loadEngine()` (`tests/engine.js`): reads the file, matches the tag, runs it under `vm` as the body of a function `(module, console, Math)` (so its top-level names are locals, not lookups on the vm's global; #86; the block therefore declares no top-level `module`, `console` or `Math`), returns `module.exports`; `loadEngine(path)` loads another copy, which `tests/snapshot.js` uses to compare engines |
 | crowpanel-ha `services/insectdraw-render` | the Dockerfile curls `index.html` from `main` at build time and writes the script block containing `module.exports` to `insectdraw-engine.js`, which `server.js` requires |
 
 `tests/engine.js` also exports `engineContract(path)`, the list of violations (empty on a good file), and

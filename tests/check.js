@@ -20,7 +20,7 @@
 // report a serial run prints (tests/parity.js holds that). --jobs 1 is the serial run in this process. A new module-scope
 // accumulator a check or the seed loop writes is one line in RUN_STATE, saying how two shards' values combine.
 'use strict';
-const { loadEngine, engineContract } = require('./engine');
+const { loadEngine, engineContract, ENGINE_RE } = require('./engine');
 const os = require('os');
 const { fork } = require('child_process');
 const raster = require('./raster');
@@ -722,13 +722,13 @@ const PRE = {
   // global is reached by a computed name so only the run under vm (not the source scan) can catch it; a top-level
   // `return` is legal in a function body but a SyntaxError in a page's <script>, so the loader must still reject it as running the block as a script does
   contractGuard(fail) {
-    const fs = require('fs'), os = require('os'), path = require('path');
+    const fs = require('fs'), path = require('path');
     const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
-    const block = html.match(/<script id="engine">([\s\S]*?)<\/script>/)[1];
+    const block = html.match(ENGINE_RE)[1];
     const cases = [
-      ['a browser global reached at load', b => b.replace(/\n\/\/ ---------- PRNG/, "\nglobalThis['loc' + 'ation'].href;\n// ---------- PRNG"), /throws when run under vm/],
+      ['a browser global reached at load', b => b.replace(/\n\/\/ ---------- PRNG/, "\nglobalThis['loc' + 'ation'].href;\n// ---------- PRNG"), /throws when run under vm: .*'href'/],
       ['a missing export', b => b.replace(/, CAPTION_H \}/, ' }'), /exports differ from the contract/],
-      ['a top-level return', b => b.replace(/\n\/\/ ---------- PRNG/, "\nif (typeof module === 'undefined') return;\n// ---------- PRNG"), /throws when run under vm: Illegal return statement/],
+      ['a top-level return', b => b.replace(/\n\/\/ ---------- PRNG/, "\nif (typeof module === 'undefined') return;\n// ---------- PRNG"), /throws when run under vm: .*\breturn\b/i],
     ];
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'insectdraw-contract-'));
     try {
